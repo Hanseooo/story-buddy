@@ -42,7 +42,7 @@ export const DOC_CHAPTERS: DocChapter[] = [
       {
         path: "docs/capstone/research_direction_and_goals.md",
         answers: "What are the objectives, and what does the study not claim?",
-        lastChanged: "2026-11-21",
+        lastChanged: "2026-11-22",
       },
     ],
   },
@@ -54,6 +54,11 @@ export const DOC_CHAPTERS: DocChapter[] = [
       {
         path: "docs/capstone/methodology.md",
         answers: "How was the system built, and how is each objective evaluated?",
+        lastChanged: "2026-11-22",
+      },
+      {
+        path: "docs/capstone/sdlc-record.md",
+        answers: "Which loop did each merged pull request belong to, and was each loop's gate met?",
         lastChanged: "2026-11-22",
       },
       {
@@ -79,7 +84,7 @@ export const DOC_CHAPTERS: DocChapter[] = [
       {
         path: "docs/capstone/design_decisions_and_risks.md",
         answers: "Which methodological weaknesses were found, and what is each one's decision status?",
-        lastChanged: "2026-11-21",
+        lastChanged: "2026-11-22",
       },
     ],
   },

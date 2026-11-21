@@ -53,7 +53,7 @@ intelligent. The place a schedule dies is integration, not algorithms. Every sub
 slice through the whole stack rather than a horizontal layer.
 
 **Exit criteria, not calendar.** Each phase advances on evidence, not on a date. Gates are recorded in
-`docs/product/ROADMAP.md` and are pass/fail.
+`docs/product/ROADMAP.md` and are pass/fail. Where a gate was missed, skipped or relaxed, §1.3 says so.
 
 ### 1.2 Spiral Model quadrant mapping
 
@@ -65,14 +65,29 @@ directly to the four core quadrants of Boehm's Spiral Model:
 3. **Develop & verify:** Building the vertical slice (Phase 0 walking skeleton, Phase 1 pipeline) and verifying against pre-declared criteria.
 4. **Plan next iteration:** Using the evidence from the exit gates to adjust the subsequent phase's architecture.
 
-### 1.3 The phases and their gates
+### 1.3 The loops as they ran, and their gates
 
-| Phase | Iteration loop / Spiral stage | Purpose | Gate to leave it |
-|---|---|---|---|
-| **0** & **0.5** | **Loop 1: Risk resolution** | Scaffolding and open-weight spike to resolve the substrate risk cheaply | A real slideshow renders. Reference conditioning retains identity on ≥ 80% of items **and** exceeds unconditioned by ≥ 30 points. ✅ Phase 0 done. ✅ Phase 0.5 closed 2026-07-29 — see `PHASE_05_RESULTS.md`. |
-| **1** | **Loop 2: Core pipeline** | The consistency loop is real, on clean stories | A story produces a consistent book; a case exists where the judge caught a drifted image and the retry fixed it. ✅ **Complete (2026-08-02)** — all ten Phase-1 specs built, from the `StoryMemory` contract through `compose`. |
-| **2** & **2.5** | **Loop 3: Integration & tuning** | Safe for a real child, survives messy input. An honestly evaluated specialized judge | The Filipino/Taglish moderation probe passes in **both** directions. A results table exists and the held-out set was read exactly once. **Phase 2 in progress (2026-08-04):** the moderation stack, input-gate hardening, and the kid-facing flow (book persistence, the ADR-029 reveal, failure semantics, reader/wait states) are built; auth + classroom RLS, teacher review and data deletion remain; narration remains cut (ADR-058); PDF download was restored on 2026-10-21 (ADR-071, implementation/release status in `docs/specs/export-pdf.md`). |
-| **3** | **Loop 4: Evaluation** | Expert validation (Obj 3), judge classification (Obj 4), and ISO/IEC 25010 software quality (Obj 5) | Expert questionnaire answers collected and analysed; the judge held-out classification table read exactly once; ISO/IEC 25010 questionnaire administered |
+Six loops, as of PR #134 (2026-11-21). The source is `docs/capstone/sdlc-record.md`, which lists every
+merged pull request with its merge commit and the loop it belongs to; its test checks each row against git.
+A pull request belongs to the loop whose risk it addresses, so loops overlap in time: Phase 2 work ran
+alongside the judge fine-tune, and the first evaluation tooling merged during Phase 2.
+
+| Loop | Phase | Risk it addressed | Gate | Gate result |
+|---|---|---|---|---|
+| 1 | 0 & 0.5 | Can an open image model hold a stylized, invented, non-human character across scenes? | Reference conditioning retains identity on ≥ 80% of items and exceeds unconditioned by ≥ 30 points. | Split. Run 3 passed absolute (80%), failed separation (+25 vs ≥30); the failed gate is carried as a stated limitation. |
+| 2 | 1 | Does the consistency loop work on clean stories? | A clean multi-scene, multi-character story produces a coherent, character-consistent storybook, and you can point to a case where the VLM-judge caught an off-model image and the targeted retry fixed it. | Recorded as complete on 2026-08-02, when all ten Phase-1 specs were built. No run showing the exit case is named in the repository. |
+| 3 | 2 | Is it safe for a real child in a real classroom, and does it survive messy input? | Entry: probe 4 (Filipino/Taglish moderation), no MISS in either direction. | Not run. Phase 2 was built without its entry gate. |
+| 4 | 2.5 | Does fine-tuning make the Consistency Judge better? | The results table exists and is honest, and the held-out set was read exactly once. | Partial. Paid evaluation stopped on 2026-10-07; on the held-out set the untuned model scored higher F1 than every fine-tuned seed. |
+| 5 | After the technical defense | Do the panel's suggestions work without weakening child safety? | Items that touch ADR-011, ADR-017, ADR-029 or the teacher-review spec ship behind an off-by-default setting pending an ethics re-review. | Shipped off by default, then turned on by default on 2026-11-21 so they can be tested. The real-child gates (ethics re-review, moderation audit 01) still apply. |
+| 6 | 3 | Does the system hold up under the study's three evaluations? | One full expert-validation session (Objective 3) and one full ISO/IEC 25010 session (Objective 5) end-to-end, and a clean metrics table. | Open. The repository records no completed session yet, and the functional verification matrix was dropped (D-28). |
+
+Phase 2's built scope as of PR #134: auth and classroom RLS (PR #15), the teacher dashboard and review
+gate (PR #16), classroom sharing (PR #17), and PDF download of teacher-approved books, restored on
+2026-10-21 (ADR-071, PR #128). Narration remains cut (ADR-058).
+
+**Where the work left the plan.** Loop 1 missed its separation gate and says so (below). Loop 3 began
+without its entry gate: probe 4 has not run. Loop 2's pipeline work continued after its gate, and loop 4's
+held-out result is partial. The full list is `sdlc-record.md` §3.
 
 Phase 0.5's kill criterion is the sharpest instance of the method. **It ran on 2026-07-29 and split its
 two gates**: reference conditioning retained identity on **80%** of pipeline-ON items (absolute gate met)
@@ -113,10 +128,10 @@ If asked whether pre-registration is "just Waterfall": pre-registration constrai
   nondeterministic routing.
 - **The testing bright line.** Deterministic tests mock every model call; fuzzy quality — "is the character
   consistent?" — is measured only in an offline evaluation harness against real models. The two never mix. A
-  generated-content assertion in a deterministic suite is a flaky test, not a measurement. *Continuous
-  integration is planned, not yet standing:* the repository has no CI configuration at the time of writing, so
-  the deterministic suite is run locally and the "must stay green" rule is an intended practice rather than an
-  enforced one.
+  generated-content assertion in a deterministic suite is a flaky test, not a measurement. Continuous
+  integration has existed since 2026-07-29 (`2e57d10`). As of PR #134, `.github/workflows/ci.yml` runs the
+  frontend's lint, build and tests and the backend's lint and tests on every pull request to `main` and
+  every push to it.
 - **Frozen decisions.** Architectural decisions are recorded in `docs/product/ADRs.md` and are not revised
   silently; changing one requires appending a new record stating context, decision, consequences, and
   alternatives.

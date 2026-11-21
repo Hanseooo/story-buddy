@@ -40,8 +40,8 @@ Methodology chapter matches the repo.
 
 Applies: SH-02, SH-03
 
-- **AC-06** It states the research design and the Spiral phases (source `methodology.md` §1,
-  `PHASE_05_RESULTS.md`), with the Phase 0.5 gate result as recorded.
+- **AC-06** It states the research design and links to `/research/sdlc` (US-29), which holds the
+  Spiral loops and the Phase 0.5 gate result as recorded (moved there by issue #138).
 - **AC-07** Setting (D-04): the stories came from Vicente Hizon, Sr. Elementary School, collected
   through their teachers.
 - **AC-08** Implementation site (D-16): both options are shown as undecided.
@@ -139,3 +139,21 @@ Applies: SH-01, SH-02, SH-03
 - **AC-22** Safety measures as configured: the moderation layers and where each runs, teacher
   approval, the teacher hold (ADR-080), teacher notes (ADR-081) and the magic pencil limits
   (ADR-082). Sources: `ethics_and_safety.md` after its update (US-24), and `config.py`.
+
+## US-29 Development loops (SDLC) — `/research/sdlc`
+
+As a groupmate writing the Research Design section, I want the development loops as they ran,
+each traced to merged pull requests, so that Figure 3 and Table 1 claim only what the record shows
+(issue #138).
+
+Applies: SH-02, SH-03
+
+- **AC-23** Six loops, from `docs/capstone/sdlc-record.md` §2: risk, merged PR count and span, gate,
+  and gate result. A missed, skipped or relaxed gate is shown as such, never as a pass.
+- **AC-24** Every merged PR up to #134 is in the record with its merge commit, git date and title.
+  A test checks each row against git and fails on a missing PR.
+- **AC-25** `methodology.md` §1.3 states the same six loops, and a test keeps the two in step.
+- **AC-26** Figure 3 is `docs/diagrams/drawio/sdlc_spiral.drawio.svg`, exported as a PNG with the
+  other figures.
+- **AC-27** The page lists where the work left the plan (record §3) and the Phase 0.5 result as
+  recorded.

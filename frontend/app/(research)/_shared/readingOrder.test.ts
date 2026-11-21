@@ -19,7 +19,7 @@ const SPEC_ROWS = [...spec.matchAll(/^\| (Methodology|Results|Reference) \| ([^|
 describe("research page list", () => {
   // SH-04 / US-01 AC-01, AC-02: one list, in the order of index 4.1.
   it("holds the pages of index section 4.1, in that order, with their groups", () => {
-    expect(SPEC_ROWS).toHaveLength(11);
+    expect(SPEC_ROWS).toHaveLength(12);
     expect(RESEARCH_PAGES.map(({ group, title, href }) => ({ group, title, href }))).toEqual(SPEC_ROWS);
   });
 
@@ -31,9 +31,9 @@ describe("research page list", () => {
     }
   });
 
-  it("puts Runs outside the reading order and keeps the other ten in it", () => {
+  it("puts Runs outside the reading order and keeps the other eleven in it", () => {
     expect(READING_ORDER.map((p) => p.href)).toEqual(SPEC_ROWS.filter((r) => r.href !== "/research/metrics").map((r) => r.href));
-    expect(READING_ORDER).toHaveLength(10);
+    expect(READING_ORDER).toHaveLength(11);
   });
 
   // US-01 AC-03: every hub entry has one line and names the paper sections it feeds. Each name is in the audit's paper map.
@@ -52,12 +52,12 @@ describe("research page list", () => {
 describe("neighbours", () => {
   it("gives the first page no Previous and the last page no Next", () => {
     expect(neighbours("/research/pipeline")).toEqual({ previous: null, next: READING_ORDER[1] });
-    expect(neighbours("/research/docs")).toEqual({ previous: READING_ORDER[8], next: null });
+    expect(neighbours("/research/docs")).toEqual({ previous: READING_ORDER[9], next: null });
   });
 
   it("names the neighbours of a middle page by the order, not by the alphabet", () => {
     const { previous, next } = neighbours("/research/dataset");
-    expect(previous?.href).toBe("/research/methodology");
+    expect(previous?.href).toBe("/research/sdlc");
     expect(next?.href).toBe("/research/instruments");
     expect(neighbours("/research/objectives").next?.href).toBe("/research/results");
     expect(neighbours("/research/limitations").next?.href).toBe("/research/docs");

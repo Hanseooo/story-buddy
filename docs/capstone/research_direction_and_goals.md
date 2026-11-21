@@ -322,9 +322,9 @@ Riskiest assumptions first. Build track and research track run in parallel and m
 | 0 | Scaffolding & walking skeleton | ✅ done |
 | **0.5** | **Open-weight spike — can the image model hold a non-human character?** | **⚠️ Run 2026-07-29. Split result: absolute gate met (80%), separation gate missed (+25 vs ≥30). Probe 3 passed; probes 2 and 4 outstanding.** |
 | 1 | Core pipeline + prompted consistency judge | ✅ **complete (2026-08-02)** — all ten specs built; opened on a stated limitation, not a clean pass |
-| 2 | Moderation, classroom auth, sharing | **in progress (2026-08-04)** — moderation stack, input-gate hardening and the kid-facing flow built; auth/RLS, teacher review and data deletion open; narration cut (ADR-058); PDF download restored 2026-10-21 (ADR-071, release status in `docs/specs/export-pdf.md`). Release still gated on probe 4 |
-| 2.5 | Judge fine-tuning + classification evaluation (Objective 4) | blocked on Ethics Stage 1 → corpus → a Phase 1 run |
-| 3 | Expert validation (Objective 3) + ISO/IEC 25010 (Objective 5) | blocked on corpus |
+| 2 | Moderation, classroom auth, sharing | built without its entry gate: probe 4 has not run. Built scope as of PR #134 is in `methodology.md` §1.3 |
+| 2.5 | Judge fine-tuning + classification evaluation (Objective 4) | partial: paid evaluation stopped on 2026-10-07; on the held-out set the untuned model scored higher F1 than every fine-tuned seed |
+| 3 | Expert validation (Objective 3) + ISO/IEC 25010 (Objective 5) | open: the repository records no completed session yet |
 
 **Phase 0.5 is a kill criterion, and it has now run (2026-07-29).** It did not kill the project and it did
 not clear it either. Reference conditioning held the invented non-human character (Quill) on **80%** of

@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
-import ScrollTable from "../../../_shared/components/ScrollTable";
 import Source from "../../../_shared/components/Source";
-import { CORPUS, DESIGN, PHASE_05, PHASES, RESPONDENTS, SETTING, SITES, SOURCES, SPIRAL } from "./data";
+import { CORPUS, DESIGN, RESPONDENTS, SETTING, SITES, SOURCES, SPIRAL } from "./data";
 import OnThisPage from "../../../_shared/components/OnThisPage";
 
 export const metadata = {
@@ -12,8 +11,6 @@ export const metadata = {
 const FOCUS = "focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3";
 const CARD = "rounded-3xl bg-surface p-5 neo-border neo-shadow-sm sm:p-6";
 const H2 = "font-display text-2xl font-extrabold tracking-tight md:text-3xl";
-const TH = "px-3 py-2 text-left text-xs font-semibold uppercase tracking-widest text-foreground/60";
-const TD = "px-3 py-2 align-top";
 const PROSE = "max-w-[70ch] text-foreground/80";
 const CHIP = "inline-block rounded-full bg-secondary/30 px-2.5 py-0.5 text-xs font-bold whitespace-nowrap text-foreground";
 
@@ -29,7 +26,6 @@ const TERMS = [
 
 const SECTIONS = [
   { id: "design", label: "Research design" },
-  { id: "phases", label: "Spiral phases" },
   { id: "setting", label: "Setting" },
   { id: "site", label: "Implementation site" },
   { id: "corpus", label: "Corpus" },
@@ -61,42 +57,16 @@ export default function MethodologyPage() {
           ))}
         </ul>
         <p className={PROSE}>{`The development process follows ${SPIRAL.definition}`}</p>
+        <p>
+          <Link
+            href="/research/sdlc"
+            className={`inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary/20 bg-surface px-3 text-sm font-bold text-primary hover:bg-primary/5 ${FOCUS}`}
+          >
+            Development loops and their gates
+            <ArrowRight weight="bold" className="size-4" aria-hidden />
+          </Link>
+        </p>
         <Source path={SOURCES.methodology} where="the opening paragraphs and §1.1" />
-      </section>
-
-      <section aria-labelledby="phases" className="space-y-4">
-        <h2 id="phases" className={H2}>Spiral phases and their gates</h2>
-        <p className={PROSE}>Each phase moves on when its gate is met, not on a date.</p>
-        <ScrollTable label="Spiral phases, their purpose and their gate">
-          <thead className="bg-muted/40">
-            <tr>
-              <th scope="col" className={TH}>Phase</th>
-              <th scope="col" className={TH}>Spiral stage</th>
-              <th scope="col" className={TH}>Purpose</th>
-              <th scope="col" className={TH}>Gate</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-foreground/10">
-            {PHASES.map((p) => (
-              <tr key={p.phase}>
-                <th scope="row" className={`${TD} text-left font-bold whitespace-nowrap`}>{p.phase}</th>
-                <td className={TD}>{p.loop}</td>
-                <td className={TD}>{p.purpose}</td>
-                <td className={TD}>{p.gate ?? <span aria-label="No gate listed here">—</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </ScrollTable>
-        <div className={`${CARD} space-y-2`}>
-          <p className="font-bold">Phase 0.5 result, as recorded</p>
-          <p className={PROSE}>{PHASE_05.recorded}</p>
-          <p className={PROSE}>
-            In plain words: drawing from a reference kept the character on 80% of items, which met the first gate. It beat drawing without
-            a reference by 25 points, short of the 30 required, so the second gate was missed.
-          </p>
-        </div>
-        <Source path={SOURCES.phase05} where="the status line" />
-        <Source path={SOURCES.methodology} where="§1.3, the phase table" />
       </section>
 
       <section aria-labelledby="setting" className="space-y-4">

@@ -287,3 +287,7 @@ moot post-pivot). Solve none of them yet. The plan is the deliverable.
 > the reader/wait-state surfaces) are built. Open: `auth-and-classroom` (the classroom RLS gap),
 > `teacher-dashboard`, ~~`narration`~~ *(cut — ADR-058)*, `export-pdf` *(restored 2026-10-21 — ADR-071/072; teacher-approved classroom books, on demand, no stored PDF)*, `rate-limiting`, `data-deletion`. Probe 4
 > (Filipino/Taglish moderation) is still un-run and remains a Phase-2 *release* gate.
+>
+> *Superseded as of PR #134 (2026-11-21):* auth and classroom RLS (PR #15) and the teacher dashboard
+> (PR #16) have since merged, and probe 4 has still not run. The current status of every loop is
+> `methodology.md` §1.3.

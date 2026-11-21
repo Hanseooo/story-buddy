@@ -20,6 +20,7 @@ Spec: [`docs/specs/research-page-refresh.md`](../../docs/specs/research-page-ref
 | 14 | [/research/architecture and /research/ethics pages](issues/14-architecture-and-ethics-pages.md) | 01, 02, 09, 11 |
 | 15 | [Research hub, header, Previous/Next and objectives page](issues/15-hub-header-objectives.md) | 01, 07, 11, 12, 13, 14 |
 | 16 | [Docs hub grouped by paper chapter](issues/16-docs-hub-by-chapter.md) | 02, 03 |
+| 17 | [SDLC section: development loops page, record and Figure 3](issues/17-sdlc-section.md) | 13, 16 |
 
 First frontier: 01, 02, 03, 04, 05, 09, 10.
 

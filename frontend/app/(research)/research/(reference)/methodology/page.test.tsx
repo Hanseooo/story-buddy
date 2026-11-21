@@ -3,14 +3,14 @@ import { describe, expect, it } from "vitest";
 import MethodologyPage from "./page";
 
 describe("/research/methodology", () => {
-  it("states the design and the Spiral phases with the Phase 0.5 result as recorded", () => {
+  it("states the design and links to the development loops instead of repeating them", () => {
     render(<MethodologyPage />);
 
     expect(screen.getByRole("heading", { level: 1, name: "Methodology at a glance" })).toBeInTheDocument();
-    const table = screen.getByRole("table", { name: /spiral phases/i });
-    expect(within(table).getAllByRole("row")).toHaveLength(5);
-    expect(within(table).getByRole("row", { name: /Loop 4: Evaluation/ })).toBeInTheDocument();
-    expect(screen.getByText(/Run 3 passed absolute \(80%\), failed separation \(\+25 vs ≥30\)/)).toBeInTheDocument();
+    const design = screen.getByRole("region", { name: "Research design" });
+    expect(within(design).getByText(/Boehm's Spiral Model/)).toBeInTheDocument();
+    expect(within(design).getByRole("link", { name: /development loops and their gates/i })).toHaveAttribute("href", "/research/sdlc");
+    expect(screen.queryByRole("table", { name: /spiral/i })).not.toBeInTheDocument();
   });
 
   it("names the source school", () => {

@@ -2,7 +2,6 @@
 // dropped. data.test.ts checks each one.
 export const SOURCES = {
   methodology: "docs/capstone/methodology.md",
-  phase05: "docs/product/PHASE_05_RESULTS.md",
   groupGuide: "docs/capstone/group-guide.md",
   ethics: "docs/capstone/ethics_and_safety.md",
   expert: "docs/capstone/expert-evaluation-questionnaire.md",
@@ -23,42 +22,6 @@ export const DESIGN = {
 
 export const SPIRAL = {
   definition: "Boehm's Spiral Model — a risk-driven, iterative SDLC with stage-gated phases.",
-} as const;
-
-// The methodology's phase table. Phase 3's gate cell names "content-analysed" answers, which O-04 leaves open,
-// so the page leaves that one gate out.
-export const PHASES = [
-  {
-    phase: "0 & 0.5",
-    loop: "Loop 1: Risk resolution",
-    purpose: "Scaffolding and open-weight spike to resolve the substrate risk cheaply",
-    gate: "A real slideshow renders. Reference conditioning retains identity on ≥ 80% of items and exceeds unconditioned by ≥ 30 points.",
-  },
-  {
-    phase: "1",
-    loop: "Loop 2: Core pipeline",
-    purpose: "The consistency loop is real, on clean stories",
-    gate: "A story produces a consistent book; a case exists where the judge caught a drifted image and the retry fixed it.",
-  },
-  {
-    phase: "2 & 2.5",
-    loop: "Loop 3: Integration & tuning",
-    purpose: "Safe for a real child, survives messy input. An honestly evaluated specialized judge",
-    gate: "The Filipino/Taglish moderation probe passes in both directions. A results table exists and the held-out set was read exactly once.",
-  },
-  {
-    phase: "3",
-    loop: "Loop 4: Evaluation",
-    purpose: "Expert validation (Obj 3), judge classification (Obj 4), and ISO/IEC 25010 software quality (Obj 5)",
-    gate: null,
-  },
-] as const;
-
-export const PHASE_05 = {
-  recorded:
-    "Run 3 passed absolute (80%), failed separation (+25 vs ≥30); escalation declined, Qwen-Image-Edit stays primary per the ADR-001 amendment, and the failed gate is carried as a stated limitation.",
-  methodology:
-    "reference conditioning retained identity on 80% of pipeline-ON items (absolute gate met) but exceeded pipeline-OFF by only +25 points against a pre-committed ≥30 (separation gate missed).",
 } as const;
 
 export const SETTING = {

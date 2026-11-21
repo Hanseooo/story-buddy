@@ -10,7 +10,6 @@ const read = (file: string) => readFileSync(path.join(REPO_ROOT, file), "utf8").
 const states = (text: string, sentence: string) => expect(text.includes(sentence), sentence).toBe(true);
 
 const methodology = read(data.SOURCES.methodology);
-const phase05 = read(data.SOURCES.phase05);
 const ethics = read(data.SOURCES.ethics);
 const guide = read(data.SOURCES.groupGuide);
 const expert = read(data.SOURCES.expert);
@@ -21,20 +20,6 @@ describe("methodology page data", () => {
     for (const part of data.DESIGN.parts) states(methodology, part);
     for (const procedure of data.DESIGN.procedures) states(methodology, procedure);
     states(methodology, data.SPIRAL.definition);
-  });
-
-  it("takes each spiral phase and its gate from the methodology table", () => {
-    expect(data.PHASES).toHaveLength(4);
-    for (const p of data.PHASES) {
-      states(methodology, `| ${p.phase} | ${p.loop} | ${p.purpose} |`);
-      if (p.gate) states(methodology, p.gate);
-    }
-  });
-
-  it("records the Phase 0.5 gate result as both documents state it", () => {
-    states(phase05, data.PHASE_05.recorded);
-    states(methodology, data.PHASE_05.methodology);
-    expect(data.PHASE_05.recorded).toContain("failed separation (+25 vs ≥30)");
   });
 
   it("names the source school and the teacher's consent form", () => {

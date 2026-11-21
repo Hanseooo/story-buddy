@@ -30,6 +30,13 @@
       "exportedOn": "2026-11-21"
     },
     {
+      "png": "sdlc_spiral.png",
+      "kind": "diagram",
+      "source": "docs/diagrams/drawio/sdlc_spiral.drawio.svg",
+      "sourceSha256": "2721e25538ad358c9ff46bb477054ab46f56f7178e9373997c15f10c1f7ec3f1",
+      "exportedOn": "2026-11-21"
+    },
+    {
       "png": "student_journey.png",
       "kind": "diagram",
       "source": "docs/diagrams/drawio/student_journey.drawio.svg",

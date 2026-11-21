@@ -33,6 +33,14 @@ export const RESEARCH_PAGES: ResearchPage[] = [
   },
   {
     group: "Methodology",
+    title: "Development loops (SDLC)",
+    href: "/research/sdlc",
+    line: "The six development loops, the risk each addressed, its gate and whether the gate was met, traced to merged pull requests.",
+    paper: ["Figure 3 Spiral", "Table 1"],
+    inOrder: true,
+  },
+  {
+    group: "Methodology",
     title: "Dataset",
     href: "/research/dataset",
     line: "What a pair is, how pairs were labelled, and how they were split.",

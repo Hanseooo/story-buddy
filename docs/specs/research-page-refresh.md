@@ -18,7 +18,7 @@ This file holds the scope, the shared rules (`SH-`), decisions (`D-`), edge case
 | [01-hub-and-navigation.md](research-page-refresh/01-hub-and-navigation.md) | US-01–US-03 | `/research` hub, header, previous/next, objectives page |
 | [02-dataset.md](research-page-refresh/02-dataset.md) | US-04–US-09, US-27 | `/research/dataset` |
 | [03-results-and-limitations.md](research-page-refresh/03-results-and-limitations.md) | US-10–US-14 | `/research/results`, `/research/limitations` |
-| [04-chapter-pages.md](research-page-refresh/04-chapter-pages.md) | US-15–US-19 | the new pipeline, methodology, instruments, architecture and ethics pages |
+| [04-chapter-pages.md](research-page-refresh/04-chapter-pages.md) | US-15–US-19, US-29 | the new pipeline, methodology, SDLC, instruments, architecture and ethics pages |
 | [05-diagrams-and-exports.md](research-page-refresh/05-diagrams-and-exports.md) | US-20–US-23 | `docs/diagrams/`, PNG export, run-viewer graph |
 | [06-source-docs.md](research-page-refresh/06-source-docs.md) | US-24–US-26, US-28 | repo docs the pages quote, docs hub, ADR-083 |
 | [07-verification.md](research-page-refresh/07-verification.md) | — | test seams, checks, evidence required to call it done |
@@ -197,6 +197,7 @@ Reading order. The hub groups pages, and Previous/Next follow this order:
 |---|---|---|---|---|
 | Methodology | Conceptual framework and pipeline | `/research/pipeline` | new | US-15 |
 | Methodology | Methodology at a glance | `/research/methodology` | new | US-16 |
+| Methodology | Development loops (SDLC) | `/research/sdlc` | new | US-29 |
 | Methodology | Dataset | `/research/dataset` | exists | US-04–US-09 |
 | Methodology | Evaluation instruments | `/research/instruments` | new | US-17 |
 | Methodology | System architecture and specifications | `/research/architecture` | new | US-18 |
