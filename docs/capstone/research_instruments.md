@@ -13,8 +13,7 @@
 > there. Where this section and `methodology.md` disagree, `methodology.md` is authoritative and this is a
 > defect. Items marked ⚠️ require adviser sign-off before administration.
 >
-> **This section is also where the two things `methodology.md` §6.2 defers are finalized:** the three named
-> expert validators, and the five content-analysis criteria their interview form covers.
+> **Objective 3 panel and form:** see the banner above (D-05, D-21). Names are not recorded in docs.
 
 ---
 
@@ -27,8 +26,9 @@ instruments are therefore described and reported separately, and the division of
 explicitly at the end of this section.
 
 The first leg is **expert validation** — the acceptability of the generated digital picture books in terms of
-presentation quality and classroom suitability, determined by purposively selected expert validators through a
-written, open-ended interview form, analysed by content analysis (Objective 3). The second leg is **judge
+presentation quality and classroom suitability, determined by three experts through a
+seven-question, open-ended questionnaire, analysed by content analysis or thematic analysis (to be decided,
+O-04) (Objective 3). The second leg is **judge
 classification** — the character-consistency classification performance of the fine-tuned vision-language
 consistency judge against human-established reference labels, reported with standard classification metrics
 (Objective 4). The third leg is the **system-evaluation questionnaire** — the perceived quality of the
@@ -38,23 +38,15 @@ delivered software artifact against ISO/IEC 25010 (Objective 5).
 
 The acceptability of the generated digital picture books — in terms of presentation quality and classroom
 suitability — is determined through **expert validation**: a **written, open-ended interview form**
-administered to a small, purposively selected panel of validators from the Arts and Education colleges. Each
-brings a distinct lens, mapped explicitly onto the criteria they are best placed to judge: the
-**Dean/Professor of the Arts College** and **one Arts student/intern** judge the visual and artistic
-presentation of the delivered books, while **one Education student/intern** judges educational suitability.
-Books are presented with provenance stripped: opaque filenames and shuffled order.
+administered to three experts: **two BEEd professors and one Arts professor** (D-05). Each signs the informed
+consent form first, reviews the original child-written story and its generated book, and fills in one
+questionnaire per book, with its Story ID. The form has **seven open-ended questions** (text in
+`expert-evaluation-questionnaire.md`, D-21). There is no ordinal scale and no numeric score — the instrument
+collects written responses, not ratings.
 
-The interview form asks each validator to respond, in their own words, against **five pre-set criteria**:
-**narrative coherence, story faithfulness, visual presentation, visual style consistency, and suitability for
-classroom use.** There is no ordinal scale and no numeric score — the instrument collects written responses,
-not ratings.
-
-**Analysis: content analysis.** Each written response is coded against the five pre-set categories, and within
-each category coded as **positive feedback, negative feedback, or a suggestion for improvement**. Codes are
-tallied per criterion, producing a qualitative-but-systematic account of what validators judged to be working,
-not working, and improvable, criterion by criterion. This is a coding procedure suited to a three-person
-validator panel, where a numeric scale and its accompanying statistics (Content Validity Index,
-Krippendorff's α) are not statistically meaningful.
+**Analysis: content analysis or thematic analysis (to be decided, O-04).** The written answers are coded by
+one of these two methods, which suit a three-person panel where a numeric scale and its accompanying
+statistics (Content Validity Index, Krippendorff's α) are not statistically meaningful.
 
 This instrument carries the acceptability claim of Objective 3. It is a qualitative acceptability measure, not
 a causal one — there is no control or comparison arm.
@@ -183,7 +175,7 @@ advance:
 
 | Question | Instrument | What it can support |
 |---|---|---|
-| Are the generated books acceptable in presentation quality and classroom suitability? | Expert validation interview (A) | **Qualitative acceptability**, coded per criterion via content analysis (Objective 3) |
+| Are the generated books acceptable in presentation quality and classroom suitability? | Expert validation interview (A) | **Qualitative acceptability**, from seven open-ended answers (Objective 3) |
 | Does the fine-tuned judge classify character consistency to a usable standard? | Judge classification (Objective 4) | **Classification performance** against human-established reference labels — precision, recall, F1 (F1 primary); optionally compared against zero-shot and prompted baselines |
 | Is the delivered software any good? | ISO/IEC 25010 questionnaire (D) | **Perceived software quality** — explicitly *not* output quality or classification performance (Objective 5) |
 

@@ -53,13 +53,13 @@ Objectives 1–2 are engineering — the pipeline exists and produces books; the
 PRD §5 and the ADRs, not re-litigated here. **Objectives 3, 4, and 5 are the three evaluation legs**, and
 everything past this point in this document is in service of one of them.
 
-Objective 3's "story faithfulness" and "narrative coherence" criteria are where the drift risk above gets
-judged; Objective 4 is where the mechanism that is supposed to catch it in-flight — the consistency
+Objective 3's expert questionnaire is where the drift risk above gets
+judged, because each expert reads the original story beside the generated book; Objective 4 is where the mechanism that is supposed to catch it in-flight — the consistency
 judge — gets measured against human labels in its own right, independent of the books it helped produce.
 
 ## 3. What we claim, and what we must not
 
-**Claim:** that the generated outputs are rated acceptable by expert validators on the five criteria
+**Claim:** that the generated outputs are judged acceptable by the three experts
 (Objective 3); that the fine-tuned consistency judge classifies character consistency against human
 reference labels with reportable precision, recall, and F1 (Objective 4); and that the software is rated
 acceptable on ISO/IEC 25010 (Objective 5).
@@ -95,7 +95,7 @@ That is the SDG-4 hook, and it is a design property, not a hope.
 
 | Objective | Question | Method | Respondents |
 |---|---|---|---|
-| 3 — acceptability | Are the generated picture books acceptable for presentation quality and classroom use? | Written open-ended interview form (the expert questionnaire) + content analysis, five criteria (§5) | Expert validators: Dean/Professor of the Arts College, one Arts student/intern, one Education student/intern |
+| 3 — acceptability | Are the generated picture books acceptable for presentation quality and classroom use? | Seven-question written open-ended questionnaire (the expert questionnaire); content or thematic analysis, to be decided (§5) | Expert evaluators: two BEEd professors, one Arts professor |
 | 4 — judge classification | How well does the fine-tuned judge classify character consistency against human reference labels? | Precision / recall / F1 (F1 primary) on the character-disjoint held-out set; optional comparison vs zero-shot base + existing prompted baseline (§6) | None — model evaluated against researcher-established reference labels |
 | 5 — software quality | Is StoryBuddy's software quality acceptable on ISO/IEC 25010? | 5-point Likert questionnaire, five characteristics, weighted mean + SD (§6) | Designated software-quality evaluators (separate from the expert validators) |
 
@@ -129,22 +129,16 @@ lives in ADR-004 and is repeated here so it is never improvised.
 
 ## 5. Objective 3 — Expert validation
 
-- **Respondents.** Purposively selected expert validators from the Arts and Education colleges: the
-  **Dean/Professor of the Arts College**, one **Arts student/intern**, and one **Education student/intern**.
-  Arts-sector validators judge visual/artistic presentation; the Education-sector validator judges
-  educational suitability.
-- **Instrument.** A **written, open-ended interview form** (**the expert questionnaire**) — not a scored ordinal
-  rubric.
-- **Analysis.** **Content analysis.** Pre-set categories from the five criteria below; each written
-  response is coded **positive feedback / negative feedback / suggestion for improvement** and tallied per
-  criterion.
-- **Five criteria:** narrative coherence, story faithfulness, visual presentation, visual style
-  consistency, suitability for classroom use.
+- **Respondents.** Three experts: **two BEEd professors and one Arts professor** (D-05). Each signs the
+  informed consent form first.
+- **Instrument.** A **written, open-ended questionnaire** of seven questions (**the expert questionnaire**,
+  `docs/capstone/expert-evaluation-questionnaire.md`, D-21) — not a scored ordinal rubric. Each expert reviews
+  the original story and its generated book, and fills in one questionnaire per book, with its Story ID.
+- **Analysis.** **Content analysis or thematic analysis**, to be decided (O-04).
 
 This replaces the earlier feature-level scored rubric (1–5 ordinal ratings, CVI, Krippendorff's α), which
-is dropped. There is no reader-recall or comprehension instrument riding alongside it — Objective 3's
-"story faithfulness" and "narrative coherence" criteria are where fidelity is judged, by the expert
-validators, not by a naive-reader recall session.
+is dropped. There is no reader-recall or comprehension instrument riding alongside it — fidelity is judged
+by the experts, who review the original story and the book together, not by a naive-reader recall session.
 
 ---
 
@@ -194,7 +188,7 @@ Three respondent groups, three roles — none of them overlap:
 | Group | Role | Contributes to |
 |---|---|---|
 | Grade 5–6 learners | Write **original stories only** — no validation/evaluation role | Corpus (§8) |
-| Expert validators (Dean/Professor of Arts College, Arts student, Education student) | Written open-ended interview + content analysis | Objective 3 |
+| Expert evaluators (2 BEEd professors, 1 Arts professor) | Written seven-question open-ended questionnaire | Objective 3 |
 | Designated software-quality evaluators (IT practitioners, teachers) | ISO/IEC 25010 questionnaire | Objective 5 |
 
 Learners are anonymized and assigned unique IDs at intake (§9); they never see, rate, or comment on any
@@ -323,8 +317,7 @@ heavier, not lighter.
 Grade 5–6 learners. Their only role is writing their own story — no validation or evaluation role in
 Objectives 3–5.
 
-**Expert validators (Objective 3, §5).** Purposively selected: the Dean/Professor of the Arts College, one
-Arts student/intern, one Education student/intern — recruited through **Holy Cross of Davao College
+**Expert evaluators (Objective 3, §5).** Two BEEd professors and one Arts professor — recruited through **Holy Cross of Davao College
 (HCDC)**, Davao City, where system development and evaluation take place.
 
 **Software-quality evaluators (Objective 5, §6).** Designated separately from the expert validators, drawn
@@ -341,7 +334,7 @@ ethics footprint. That is a bigger thesis than this one.
 objectives, not chosen for convenience, and each boundary is load-bearing:
 
 - They **write independently** → the story is unambiguously the child's. Scaffold a Grade 2 student and
-  Objective 3's story-faithfulness criterion is meaningless: whose story did we illustrate?
+  Objective 3's comparison of the original story with its book is meaningless: whose story did we illustrate?
 - They **read fluently** → they can author at length, and the books produced from their stories are
   substantive enough for expert validators to judge coherence and faithfulness against.
   *(This boundary originally rested on in-app peer comprehension, which is cut — §7, ADR-021. It survives
@@ -360,7 +353,7 @@ moderation thresholds, and failure copy are all calibrated to a band.
 
 | Metric | What it measures | Source |
 |---|---|---|
-| Expert validation (Objective 3) | Positive / negative / suggestion tallies per criterion (narrative coherence, story faithfulness, visual presentation, visual style consistency, classroom suitability) | Content analysis of the expert questionnaire responses |
+| Expert validation (Objective 3) | Coded answers to the seven open-ended questions | Content or thematic analysis of the expert questionnaire responses (to be decided, O-04) |
 | Judge classification (Objective 4) | Precision, recall, F1 (F1 primary) vs human reference labels, character-identity-level split | Held-out test set; optional comparison vs zero-shot base + prompted baseline |
 | Software quality (Objective 5) | Weighted mean + SD per ISO/IEC 25010 characteristic (Functional Suitability, Performance Efficiency, Usability, Reliability, Security), interpreted against Table 4 bands | The ISO/IEC 25010 questionnaire, designated software-quality evaluators |
 | Generation Time | Submission → completed storybook | Instrumentation (Langfuse) |
@@ -386,7 +379,7 @@ For Objective 4, pre-registration is what makes the reported F1 trustworthy: the
 reported test-retest (intra-rater) agreement, and the held-out set is **read once**, against an
 analysis plan fixed in advance — so the reported precision/recall/F1 figures are the ones committed to, whatever they turn out to
 be. The optional base/prompted comparison, if reported, follows the same discipline. The same rigor governs
-Objective 3: the five criteria and the content-analysis coding scheme are fixed before data collection, so
+Objective 3: the seven questions and the analysis method are fixed before data collection, so
 a weak result is a finding, not a fudge.
 
 Almost no capstone does this. It is the cheapest defensive move available.

@@ -17,10 +17,9 @@ The updated capstone manuscript is now authoritative for the study design (ADR-0
 - **The RQ5 naive-reader/child-comprehension recall study is dropped entirely** — no reader-recall leg, no
   Tier-1/Tier-2 respondent tiers, no Fun Toolkit (Smileyometer, Again-Again), no child engagement
   instruments. Respondents are now: **Grade 5–6 learners** (write stories only, no evaluation role),
-  **expert validators** (Dean/Professor of the Arts College, one Arts student/intern, one Education
-  student/intern), and separate **designated software-quality evaluators** (ISO/IEC 25010).
-- **Objective 3 (expert validation) uses a written, open-ended interview form + content analysis**
-  (positive / negative / suggestion per criterion, five criteria), not the earlier feature-level scored
+  **expert evaluators** (two BEEd professors, one Arts professor), and separate **designated software-quality evaluators** (ISO/IEC 25010).
+- **Objective 3 (expert validation) uses a seven-question, written, open-ended questionnaire**
+  (content analysis or thematic analysis, to be decided, O-04), not the earlier feature-level scored
   rubric (CVI / Krippendorff's α).
 - **Objective 4 (judge classification) is a formal, reported objective**: precision / recall / F1 (F1
   primary) against human reference labels, character-identity-level split, with an **optional** secondary
@@ -320,11 +319,10 @@ the *warrant* for why acceptability matters; it is not a finding of this study.
 ### Evaluation design (see ADR-008)
 
 **Three legs, one per evaluation objective — no reader-comprehension leg.**
-- **Objective 3 — expert validation.** Purposively selected expert validators — the Dean/Professor of the
-  Arts College, one Arts student/intern, one Education student/intern — respond to a **written,
-  open-ended interview form** (the expert questionnaire). Responses are analysed by **content analysis**: each is
-  coded **positive / negative / suggestion** per criterion, across five criteria (narrative coherence,
-  story faithfulness, visual presentation, visual style consistency, classroom suitability). This replaces
+- **Objective 3 — expert validation.** Three experts — two BEEd professors and one Arts professor — each review the original
+  story and its generated book, and respond to a **written, open-ended questionnaire** of seven questions,
+  one per book (the expert questionnaire). Responses are analysed by **content analysis or thematic
+  analysis** (to be decided, O-04). This replaces
   the earlier feature-level scored rubric (CVI / Krippendorff's α).
 - **Objective 4 — judge classification.** The fine-tuned `Qwen3.5-9B` (QLoRA, postregistration amended) judge predicts
   Same/Different Character on the character-disjoint held-out set; scored against human reference labels
@@ -365,7 +363,7 @@ collect their responses on paper and by form, not in-app. Rationale and rejected
 | Group | Role | Contributes to |
 |---|---|---|
 | Grade 5–6 learners | Write original stories only — no evaluation role | Corpus |
-| Expert validators (Dean/Professor Arts College, Arts student, Education student) | Written open-ended interview + content analysis | Objective 3 |
+| Expert evaluators (2 BEEd professors, 1 Arts professor) | Written seven-question open-ended questionnaire | Objective 3 |
 | Designated software-quality evaluators (IT practitioners, teachers) | ISO/IEC 25010 questionnaire | Objective 5 |
 
 Full detail (recruitment, instruments, ethics staging): `docs/product/RESEARCH_PROTOCOL.md` §4–§10.
@@ -374,7 +372,7 @@ Full detail (recruitment, instruments, ethics staging): `docs/product/RESEARCH_P
 | Metric | What it measures | Source |
 |---|---|---|
 | Functional verification (Objectives 1–2) | Per-category success rate, `Successful ÷ Total × 100` | Dropped (D-28): not built; evidence is the built pipeline, its tests and the 42 books |
-| Expert validation (Objective 3) | Positive / negative / suggestion tallies per criterion | Content analysis, the expert questionnaire |
+| Expert validation (Objective 3) | Coded answers to the seven open-ended questions | Content or thematic analysis (to be decided, O-04) |
 | Judge classification (Objective 4) | Precision, recall, F1 (F1 primary) vs human reference labels | Held-out test set; optional comparison vs zero-shot base + prompted baseline |
 | Software quality (Objective 5) | Weighted mean + SD per ISO/IEC 25010 characteristic | the ISO/IEC 25010 questionnaire |
 | Generation Time | Submission → completed storybook | Instrumentation (§16) |

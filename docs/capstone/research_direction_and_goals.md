@@ -135,19 +135,12 @@ properties of Scene Segmentation.
 
 ### 3.1 Objective 3 — expert validation (the method)
 
-The generated books are evaluated **directly**, by expert validators purposively selected from the Arts and
-Education colleges:
-
-- the **Dean/Professor of the Arts College**,
-- one **Arts student/intern**, and
-- one **Education student/intern**.
-
-The **Arts-sector validators** judge the visual and artistic presentation; the **Education-sector validator**
-judges educational suitability and appropriateness. The instrument is a **written, open-ended interview form**
-(the expert questionnaire). Responses are analysed by **content analysis**: pre-set categories are defined from the five
-criteria — **narrative coherence, story faithfulness, visual presentation, visual style consistency, and
-suitability for classroom use** — and each written response is coded **positive / negative / suggestion** and
-tallied per criterion to summarise the level of acceptability. Software usability is *not* judged by this
+The generated books are evaluated **directly**, by three experts: **two BEEd professors and one Arts
+professor** (D-05). Each signs the informed consent form first, reviews the original child-written story and
+its generated book, and fills in one questionnaire per book, with its Story ID. The instrument is a
+**written, open-ended questionnaire** of seven questions (text in `expert-evaluation-questionnaire.md`,
+D-21). The answers are analysed by **content analysis or thematic analysis**. The method is not yet chosen
+(O-04). Software usability is *not* judged by this
 panel; it is measured separately by the ISO/IEC 25010 questionnaire (Objective 5).
 
 ### 3.2 Objective 4 — Consistency Judge classification performance (the method)
@@ -167,8 +160,8 @@ labels. Full machinery in `docs/specs/judge-finetune.md` and ADR-018.
 > **The expert-validation outcome is never scored using the judge.**
 
 The judge drives regeneration inside the pipeline. Using that same judge as the acceptability outcome would be
-circular — the system grading its own homework. The Objective-3 acceptability outcome is the **expert
-validators' content-analysed judgments**; the ISO/IEC 25010 outcome (Objective 5) is a separate questionnaire.
+circular — the system grading its own homework. The Objective-3 acceptability outcome is the **experts'
+written answers**; the ISO/IEC 25010 outcome (Objective 5) is a separate questionnaire.
 The judge's own accuracy is the separate Objective-4 question, measured on a human-labeled, character-disjoint
 held-out set it never trained on. This is the sharpest question a panel will ask, and the answer is fixed in
 ADR-004 so it is never improvised.
@@ -203,8 +196,8 @@ Three groups, treated separately because they address different aspects of the s
 
 - **Grade 5–6 learners** — provide the child-written stories (15 → 10 primary + 5 backup). Story submission
   only; no evaluation role.
-- **Expert validators** — the Dean/Professor of the Arts College + one Arts student/intern + one Education
-  student/intern, purposively selected (§3.1). They validate the generated picture books.
+- **Expert evaluators** — two BEEd professors and one Arts professor (§3.1). They review each original story
+  and its generated picture book.
 - **Software-quality evaluators** — a separate designated group who complete the ISO/IEC 25010 questionnaire
   (§3, Objective 5).
 
@@ -237,8 +230,8 @@ subject to institutional and ethics clearances.
 run.** For Objective 4 this fixes the reporting before the held-out set is read once: the judge's precision,
 recall, and F1 against human labels are reported whatever they turn out to be, and the deployment gate that
 decides whether the fine-tuned judge replaces the prompted incumbent is declared in advance rather than chosen
-after seeing the numbers. The same discipline governs the expert validation: the criteria and the
-content-analysis coding frame are fixed before data, so a weak result is a finding, not a fudge.
+after seeing the numbers. The same discipline governs the expert validation: the seven questions and the
+analysis method are fixed before data, so a weak result is a finding, not a fudge.
 
 Almost no capstone does this. It is the cheapest defensive move available.
 
@@ -363,7 +356,7 @@ is a weekend. Everything before it is months.
 | **Introduction** | §1.1 (motivation, cited to prior work) → §1.2 (the gap) → §1.3 (the research problem) → §7 (contributions). Lead with the child and the folder; land on identity drift. |
 | **Related Work** | Situate against the crowded character-consistency field (ConsiStory, StoryDiffusion, The Chosen One, DreamBench++), then §1.2's true gap: existing benchmarks are photographic or method-preference studies, and **none provides human pairwise identity judgments over stylized, invented, non-human characters** (`docs/specs/judge-finetune.md` §5.1 in the repository, incl. the rejected-alternatives table). Cite only arXiv IDs you have re-verified (see `design_decisions_and_risks.md`, R6). |
 | **Methods** | **Drafted in full: `docs/capstone/methodology.md`** — development methodology (quantitative-developmental; Boehm's Spiral Model), system under test, data collection, datasets, training and validation, instruments, analysis plan, ethics, threats to validity. |
-| **Results** | Phase 0.5 probe results · expert-validation content-analysis summary (Objective 3) · Consistency-Judge precision/recall/F1 on the held-out set (Objective 4) · ISO/IEC 25010 weighted means + SD (Objective 5) |
+| **Results** | Phase 0.5 probe results · expert questionnaire analysis (Objective 3) · Consistency-Judge precision/recall/F1 on the held-out set (Objective 4) · ISO/IEC 25010 weighted means + SD (Objective 5) |
 | **Discussion** | §5 — what the numbers support, and the claims we refuse to make. Phase 0.5's non-human boundary belongs here if the substrate fails. |
 | **Limitations** | §5's table, §6's delimitation, and the fact that the corpus is one grade band in one country. |
 
