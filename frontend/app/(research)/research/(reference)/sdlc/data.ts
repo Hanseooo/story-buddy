@@ -19,8 +19,17 @@ export const FIGURE = {
   alt: "The six development loops drawn as a spiral through the four Spiral quadrants, each loop numbered and marked with its gate result.",
 } as const;
 
+// The paper's Figure 3: the same spiral in greyscale, each loop's phase and risk, no gate results (Table 1 has them).
+export const FIGURE_PAPER = {
+  id: "sdlc-spiral-paper",
+  png: "/research/diagrams/sdlc_spiral_simple.png",
+  source: "docs/diagrams/drawio/sdlc_spiral_simple.drawio.svg",
+  asOf: AS_OF,
+  alt: "The paper's Figure 3: the six development loops as a greyscale spiral through the four Spiral quadrants, each loop numbered with its phase and risk.",
+} as const;
+
 /** How the gate result reads, in one word. The page shows it as a label next to the result. */
-export type Outcome = "recorded" | "split" | "not run" | "partial" | "relaxed" | "open";
+export type Outcome = "split" | "not run" | "partial" | "relaxed" | "open";
 
 export type Loop = {
   loop: number;
@@ -58,9 +67,9 @@ export const LOOPS: Loop[] = [
     first: "2026-07-29",
     last: "2026-10-13",
     gate: "A clean multi-scene, multi-character story produces a coherent, character-consistent storybook, and you can point to a case where the VLM-judge caught an off-model image and the targeted retry fixed it.",
-    result: "Recorded as complete on 2026-08-02, when all ten Phase-1 specs were built. No run showing the exit case is named in the repository.",
+    result: "Partial. The loop runs end to end, but the judge's accuracy fell short: in the October audit it passed 29 of 77 defective pages, and in no audited redraw did it catch an off-model character and accept the fix. That weakness became loop 4's risk.",
     prList: "#1–#11, #30, #35, #38, #40, #41, #43, #124–#127",
-    outcome: "recorded",
+    outcome: "partial",
   },
   {
     loop: 3,
@@ -70,7 +79,7 @@ export const LOOPS: Loop[] = [
     first: "2026-08-02",
     last: "2026-10-23",
     gate: "Entry: probe 4 (Filipino/Taglish moderation), no MISS in either direction.",
-    result: "Not run. Phase 2 was built without its entry gate.",
+    result: "Not run. Phase 2 was built without its entry gate, for lack of time. No child has used the system, so the risk it guards has not arisen; it stays a gate before children use it.",
     prList: "#12–#18, #20–#22, #34, #36, #37, #39, #42, #80, #122, #123, #128, #129",
     outcome: "not run",
   },
@@ -120,11 +129,13 @@ export const DEVIATIONS = [
   },
   {
     title: "Loop 3 started without its entry gate.",
-    detail: "Probe 4 has not run. The moderation stack shipped in PR #12 on 2026-08-02 without it.",
+    detail:
+      "Probe 4 has not run. The moderation stack shipped in PR #12 on 2026-08-02 without it. It was skipped for time (owner, 2026-11-22), and children only donate stories in the study (ethics Stage 1, `methodology.md` §3.2), so no child has met the unchecked filter.",
   },
   {
     title: "Loop 2 kept going after its gate.",
-    detail: "10 consistency PRs merged after Phase 1 was recorded complete, the last on 2026-10-13.",
+    detail:
+      "10 consistency PRs merged after Phase 1 was recorded complete, the last on 2026-10-13. The pipeline's output is not deterministic, so running it on more stories kept turning up edge cases, each fixed in its own PR.",
   },
   {
     title: "Loop 4's exit criterion is not met.",

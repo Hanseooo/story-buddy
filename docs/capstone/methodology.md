@@ -75,8 +75,8 @@ alongside the judge fine-tune, and the first evaluation tooling merged during Ph
 | Loop | Phase | Risk it addressed | Gate | Gate result |
 |---|---|---|---|---|
 | 1 | 0 & 0.5 | Can an open image model hold a stylized, invented, non-human character across scenes? | Reference conditioning retains identity on ≥ 80% of items and exceeds unconditioned by ≥ 30 points. | Split. Run 3 passed absolute (80%), failed separation (+25 vs ≥30); the failed gate is carried as a stated limitation. |
-| 2 | 1 | Does the consistency loop work on clean stories? | A clean multi-scene, multi-character story produces a coherent, character-consistent storybook, and you can point to a case where the VLM-judge caught an off-model image and the targeted retry fixed it. | Recorded as complete on 2026-08-02, when all ten Phase-1 specs were built. No run showing the exit case is named in the repository. |
-| 3 | 2 | Is it safe for a real child in a real classroom, and does it survive messy input? | Entry: probe 4 (Filipino/Taglish moderation), no MISS in either direction. | Not run. Phase 2 was built without its entry gate. |
+| 2 | 1 | Does the consistency loop work on clean stories? | A clean multi-scene, multi-character story produces a coherent, character-consistent storybook, and you can point to a case where the VLM-judge caught an off-model image and the targeted retry fixed it. | Partial. The loop runs end to end, but the judge's accuracy fell short: in the October audit it passed 29 of 77 defective pages, and in no audited redraw did it catch an off-model character and accept the fix. That weakness became loop 4's risk. |
+| 3 | 2 | Is it safe for a real child in a real classroom, and does it survive messy input? | Entry: probe 4 (Filipino/Taglish moderation), no MISS in either direction. | Not run. Phase 2 was built without its entry gate, for lack of time. No child has used the system, so the risk it guards has not arisen; it stays a gate before children use it. |
 | 4 | 2.5 | Does fine-tuning make the Consistency Judge better? | The results table exists and is honest, and the held-out set was read exactly once. | Partial. Paid evaluation stopped on 2026-10-07; on the held-out set the untuned model scored higher F1 than every fine-tuned seed. |
 | 5 | After the technical defense | Do the panel's suggestions work without weakening child safety? | Items that touch ADR-011, ADR-017, ADR-029 or the teacher-review spec ship behind an off-by-default setting pending an ethics re-review. | Shipped off by default, then turned on by default on 2026-11-21 so they can be tested. The real-child gates (ethics re-review, moderation audit 01) still apply. |
 | 6 | 3 | Does the system hold up under the study's three evaluations? | One full expert-validation session (Objective 3) and one full ISO/IEC 25010 session (Objective 5) end-to-end, and a clean metrics table. | Open. The repository records no completed session yet, and the functional verification matrix was dropped (D-28). |
@@ -86,8 +86,9 @@ gate (PR #16), classroom sharing (PR #17), and PDF download of teacher-approved 
 2026-10-21 (ADR-071, PR #128). Narration remains cut (ADR-058).
 
 **Where the work left the plan.** Loop 1 missed its separation gate and says so (below). Loop 3 began
-without its entry gate: probe 4 has not run. Loop 2's pipeline work continued after its gate, and loop 4's
-held-out result is partial. The full list is `sdlc-record.md` §3.
+without its entry gate: probe 4 has not run. Loop 2's gate is partial: the judge's misses became loop 4's risk, and
+pipeline fixes continued after the gate because the output is not deterministic. Loop 4's held-out result is
+partial. The full list is `sdlc-record.md` §3.
 
 Phase 0.5's kill criterion is the sharpest instance of the method. **It ran on 2026-07-29 and split its
 two gates**: reference conditioning retained identity on **80%** of pipeline-ON items (absolute gate met)
@@ -282,7 +283,9 @@ Two story sources have separate research roles. Researcher-authored synthetic st
 train and validation only. Donated child writing supplies the held-out test and Objective-3 book stimuli;
 using it only at evaluation preserves the study's external-validity test.
 
-- **Population:** Grade 5–6 (ages 10–12), Philippines. English, with Taglish code-switching tolerated.
+- **Population:** Grade 5–6 (ages 10–12), Philippines. English (ADR-084, 2026-11-22). Some donated stories were
+  not in English and were translated into English by the research team before generation; which ones, and
+  whether a second person checked them, were not recorded.
 - **Size:** **fifteen (15) original stories collected**; **twelve (12) were generated into books** and three
   stay quarantined on purpose, because 12 clear the held-out floor (`docs/specs/obj4-readiness-audit.md` §7;
   `research-changelog.md` row 2026-09-16 to 17).
@@ -568,6 +571,7 @@ Detail: `docs/capstone/ethics_and_safety.md` and `docs/product/adr/ADR-011-moder
 | **Perceived quality mistaken for efficacy** | §6.4. The ISO/IEC 25010 result is never presented as an answer to Objective 3 or 4. |
 | **No causal or comparative claim** | By design: no control/comparison group. The study does not claim superiority over other picture-book generation methods, and makes **no learning-gain claim** — creativity, literacy, writing ability, and long-term outcomes are outside scope. |
 | **Generalizability** | One grade band, one country, one language regime, one source school. A delimitation derived from the study's scope, not an apology. |
+| **Translated stories** | Some donated stories were translated into English by the team (ADR-084); the count and any second-person check were not recorded. | Faithfulness in Objective 3 is judged against the English text the pipeline received, and the paper says so. |
 
 **No formal power analysis precedes Phase 0.5**, because the effect size of reference conditioning in this
 regime is unpublished — that is precisely the gap the study addresses. Phase 0.5 supplies the first

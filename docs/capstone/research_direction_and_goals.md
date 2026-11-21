@@ -173,7 +173,8 @@ ADR-004 so it is never improvised.
 ### 4.1 Corpus
 
 Test stories must be **real child writing**, not builder-authored clean prose — which would measure best-case
-only. Grade 5–6, English with Taglish code-switching tolerated.
+only. Grade 5–6, English. A donated story not written in English is translated into English by the research
+team before use, and the translations are disclosed (ADR-084, 2026-11-22).
 
 **Fifteen (15) original stories** are collected from qualified Grade 5–6 learners; after screening against the
 inclusion/exclusion criteria, **ten (10) eligible stories comprise the primary corpus and five (5) are
@@ -262,7 +263,7 @@ faithful is the authentic-audience artifact the motivating literature calls for.
 
 ## 6. Scope and boundaries
 
-**Grade 5–6 (ages 10–12), Philippines, English with Taglish tolerated.** Each boundary is derived from the
+**Grade 5–6 (ages 10–12), Philippines, English (ADR-084, 2026-11-22; previously English with Taglish tolerated).** Each boundary is derived from the
 study's needs, not chosen for convenience:
 
 - They **write independently** → the story is unambiguously the child's. Scaffold a Grade 2 student and it is
@@ -283,7 +284,7 @@ and teacher-gated, display-only classroom sharing wrap the pipeline.
 
 **Permanently excluded:** public sharing. All sharing is classroom-scoped and teacher-gated.
 
-**Deferred:** multi-child collaboration · kid-uploaded reference images · languages beyond English/Taglish ·
+**Deferred:** multi-child collaboration · kid-uploaded reference images · languages other than English, Filipino and Taglish included (ADR-084) ·
 on-device generation · more than three art styles.
 
 **Open-weight mandate.** No proprietary vendor models. This is what makes the equity claim a design property

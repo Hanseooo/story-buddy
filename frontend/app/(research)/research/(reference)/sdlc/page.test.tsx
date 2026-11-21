@@ -7,9 +7,19 @@ describe("/research/sdlc", () => {
     render(<SdlcPage />);
 
     expect(screen.getByRole("heading", { level: 1, name: "Development loops (SDLC)" })).toBeInTheDocument();
-    const figure = screen.getByRole("figure", { name: /six development loops drawn as a spiral/i });
-    expect(within(figure).getByText(/Figure 3/)).toBeInTheDocument();
+    const figure = screen.getByRole("figure", { name: /each loop numbered and marked with its gate result/i });
+    expect(within(figure).getByText(/Figure 3, detailed/)).toBeInTheDocument();
     expect(within(figure).getByRole("img")).toHaveAttribute("src", "/research/diagrams/sdlc_spiral.png");
+  });
+
+  it("shows the paper's version of Figure 3 below the detailed one", () => {
+    render(<SdlcPage />);
+
+    const [detailed, paper] = screen.getAllByRole("figure");
+    expect(detailed).toHaveAccessibleName(/marked with its gate result/);
+    expect(paper).toHaveAccessibleName(/The paper's Figure 3/);
+    expect(within(paper).getByText(/Figure 3, for the paper/)).toBeInTheDocument();
+    expect(within(paper).getByRole("img")).toHaveAttribute("src", "/research/diagrams/sdlc_spiral_simple.png");
   });
 
   it("gives Table 1 one row per loop, each with its gate result in words", () => {

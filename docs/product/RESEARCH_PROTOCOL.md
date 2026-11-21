@@ -200,7 +200,8 @@ model against researcher-established reference labels (two researchers annotate 
 ## 8. Corpus
 
 Test stories must be **real or realistic child writing**, not builder-authored clean prose (which measures
-best-case only). Grade 5–6, English with Taglish code-switching tolerated.
+best-case only). Grade 5–6, English. A donated story not written in English is translated into English by the
+research team before use, and the translations are disclosed (ADR-084, 2026-11-22).
 
 **Target: 15 stories collected, split into 10 primary corpus + 5 backup.** Collected from qualified
 **Grade 5 & 6 learners** at ~~**Matina Aplaya Elementary School**~~ **Vicente Hizon, Sr. Elementary School** (corrected 2026-11-21, D-04 of `docs/specs/research-page-refresh.md`). Learners submit **original stories only**
@@ -329,7 +330,7 @@ ethics footprint. That is a bigger thesis than this one.
 
 ## 11. Scope and delimitation
 
-**Grade 5–6 (ages 10–12), Philippines, English with Taglish tolerated.** This is derived from the
+**Grade 5–6 (ages 10–12), Philippines, English (ADR-084, 2026-11-22; previously English with Taglish tolerated).** This is derived from the
 objectives, not chosen for convenience, and each boundary is load-bearing:
 
 - They **write independently** → the story is unambiguously the child's. Scaffold a Grade 2 student and

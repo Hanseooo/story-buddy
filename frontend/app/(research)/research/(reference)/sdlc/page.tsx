@@ -2,7 +2,7 @@ import ChartFigure from "../../../_shared/components/ChartFigure";
 import OnThisPage from "../../../_shared/components/OnThisPage";
 import ScrollTable from "../../../_shared/components/ScrollTable";
 import Source from "../../../_shared/components/Source";
-import { DEVIATIONS, FIGURE, LOOPS, MODEL, PHASE_05, SOURCES, type Outcome } from "./data";
+import { DEVIATIONS, FIGURE, FIGURE_PAPER, LOOPS, MODEL, PHASE_05, SOURCES, type Outcome } from "./data";
 
 export const metadata = {
   title: "Development loops (SDLC)",
@@ -18,7 +18,6 @@ const CHIP = "inline-block rounded-full px-2.5 py-0.5 text-xs font-bold whitespa
 
 // The label is the outcome in words; the colour only repeats it.
 const OUTCOME: Record<Outcome, { label: string; tone: string }> = {
-  recorded: { label: "Recorded, no run shown", tone: "bg-primary/15" },
   split: { label: "Split", tone: "bg-secondary/40" },
   "not run": { label: "Not run", tone: "bg-destructive/20" },
   partial: { label: "Partial", tone: "bg-secondary/40" },
@@ -92,7 +91,12 @@ export default function SdlcPage() {
           png={FIGURE.png}
           source={FIGURE.source}
           sourceNoun="the editable diagram"
-          caption={<strong className="text-foreground">Figure 3: the six development loops and their gate results.</strong>}
+          caption={
+            <strong className="text-foreground">
+              Figure 3, detailed: the six development loops and their gate results. For this page; the paper uses the
+              version below.
+            </strong>
+          }
         >
           <div
             role="region"
@@ -102,6 +106,30 @@ export default function SdlcPage() {
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={FIGURE.png} alt={FIGURE.alt} className="h-auto w-full min-w-[40rem] md:min-w-0" />
+          </div>
+        </ChartFigure>
+        <ChartFigure
+          id={FIGURE_PAPER.id}
+          wide
+          alt={FIGURE_PAPER.alt}
+          asOf={FIGURE_PAPER.asOf}
+          png={FIGURE_PAPER.png}
+          source={FIGURE_PAPER.source}
+          sourceNoun="the editable diagram"
+          caption={
+            <strong className="text-foreground">
+              Figure 3, for the paper: the same loops in greyscale, without gate results. Table 1 gives the results.
+            </strong>
+          }
+        >
+          <div
+            role="region"
+            aria-label={`${FIGURE_PAPER.alt} It scrolls sideways on a narrow screen.`}
+            tabIndex={0}
+            className={`overflow-x-auto rounded-2xl border border-primary/10 bg-white ${FOCUS}`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={FIGURE_PAPER.png} alt={FIGURE_PAPER.alt} className="h-auto w-full min-w-[40rem] md:min-w-0" />
           </div>
         </ChartFigure>
       </section>

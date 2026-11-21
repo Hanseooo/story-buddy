@@ -153,7 +153,9 @@ Applies: SH-02, SH-03
 - **AC-24** Every merged PR up to #134 is in the record with its merge commit, git date and title.
   A test checks each row against git and fails on a missing PR.
 - **AC-25** `methodology.md` §1.3 states the same six loops, and a test keeps the two in step.
-- **AC-26** Figure 3 is `docs/diagrams/drawio/sdlc_spiral.drawio.svg`, exported as a PNG with the
-  other figures.
+- **AC-26** Figure 3 is `docs/diagrams/drawio/sdlc_spiral_simple.drawio.svg` (greyscale, phase and risk
+  per loop, no gate results), shown below a detailed version with gate results,
+  `docs/diagrams/drawio/sdlc_spiral.drawio.svg`. Both are exported as PNGs with the other figures
+  (owner, 2026-11-22: the paper uses the simple one).
 - **AC-27** The page lists where the work left the plan (record §3) and the Phase 0.5 result as
   recorded.

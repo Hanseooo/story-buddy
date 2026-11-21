@@ -33,7 +33,14 @@
       "png": "sdlc_spiral.png",
       "kind": "diagram",
       "source": "docs/diagrams/drawio/sdlc_spiral.drawio.svg",
-      "sourceSha256": "2721e25538ad358c9ff46bb477054ab46f56f7178e9373997c15f10c1f7ec3f1",
+      "sourceSha256": "d40b3cfae87c5378aacea91d274abd0fe3b181445e82771388fc052b9cec4750",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "sdlc_spiral_simple.png",
+      "kind": "diagram",
+      "source": "docs/diagrams/drawio/sdlc_spiral_simple.drawio.svg",
+      "sourceSha256": "35caea4085678d74f7f8d471248f3a1cae916f656332ad4b31c906d25ca72049",
       "exportedOn": "2026-11-21"
     },
     {

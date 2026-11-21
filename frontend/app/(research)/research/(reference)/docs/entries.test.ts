@@ -49,6 +49,7 @@ const REFRESH = [
   "docs/capstone/iso-25010-questionnaire.md",
   "docs/capstone/hardware_and_hosting.md",
   "docs/product/adr/ADR-083-research-pages-hub-chapter-routes-and-png-diagram-export.md",
+  "docs/product/adr/ADR-084-the-study-corpus-is-english-only.md",
   "docs/diagrams/drawio/system_architecture.drawio.svg",
   "docs/diagrams/drawio/ipo_model.drawio.svg",
   "docs/diagrams/drawio/dataset_build_and_annotation_flow.drawio.svg",
