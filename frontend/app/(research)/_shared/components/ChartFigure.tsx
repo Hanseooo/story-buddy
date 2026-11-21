@@ -13,6 +13,7 @@ export default function ChartFigure({
   png,
   source,
   caption,
+  sourceNoun = "the chart data",
   children,
 }: {
   id: string;
@@ -21,6 +22,7 @@ export default function ChartFigure({
   png: string;
   source: string;
   caption: React.ReactNode;
+  sourceNoun?: string;
   children: React.ReactNode;
 }) {
   const file = png.slice(png.lastIndexOf("/") + 1);
@@ -44,7 +46,7 @@ export default function ChartFigure({
         <a href={githubUrl(source)} target="_blank" rel="noopener noreferrer" className={LINK}>
           <span className="font-mono">{source.slice(source.lastIndexOf("/") + 1)}</span>
           <ArrowSquareOut weight="bold" className="size-3.5 shrink-0" aria-hidden />
-          <span className="sr-only">, the chart data (opens on GitHub in a new tab)</span>
+          <span className="sr-only">{`, ${sourceNoun} (opens on GitHub in a new tab)`}</span>
         </a>
       </p>
     </figure>
