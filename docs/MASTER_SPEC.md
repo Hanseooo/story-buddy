@@ -60,9 +60,9 @@ pair materialization, annotation reconciliation, manifest export, and training c
 `frontend/app/(research)/` owns the researcher annotation and adjudication routes (ADR-026).
 
 **Not built yet** (listed so it is not invented elsewhere): `backend/eval/` — Phase 3 offline eval scripts,
-starting with `functional_verification.py` (Tool A). *(`.github/workflows/ci.yml` is built; see §6.)*
+starting with `functional_verification.py` (dropped, D-28; not built). *(`.github/workflows/ci.yml` is built; see §6.)*
 
-**The research track gets two screens and one table, and no more.** No metrics dashboard (Tool A is a script
+**The research track gets two screens and one table, and no more.** No metrics dashboard (the dropped verification script was to be a script
 — §4's "offline scripts + tracing exports"), no run-trace viewer (that is Langfuse, ADR-030), and no separate
 researcher application. Objectives 3 and 5 are collected on paper and by form, not in-app. ADR-026.
 
@@ -341,7 +341,7 @@ mark done. Behavior change later → update the spec in the same change (CLAUDE.
 | 1 (core) | `story-memory-contract`, `story-analyzer`, `scene-segmentation`, `character-bible`, `style-presets`, `prompt-optimizer`, `image-generator`, `consistency-checker`, `regeneration-controller`, `compose` |
 | 2 (safety/classroom) | `moderation-stack`, `input-gate-hardening` (absorbed `filipino-pii-recognizers` + `length-guard`), `self-refusal-fallback`, `repeated-failure-offramp` (split out of it 2026-08-02 — counts across job submissions, needs a cross-run counter), `auth-identity-and-classroom-schema` (S1), `auth-session-model` (S2), `auth-authorization-surface` (S3), `auth-routes-and-account-ux` (S4) (the former `auth-and-classroom` row, decomposed by docket `docs/specs/auth-and-classroom-docket.md` — all four specced and built 2026-08-05/06; S3's 33-test isolation suite in `backend/tests/test_rls_isolation.py`), `teacher-dashboard`, ✅ `classroom-sharing` *(built 2026-08-09)* (display-only gallery — no `peer-reflection`/`story-map`, both cut per ADR-021), ~~`narration`~~ *(cut — ADR-058)*, `export-pdf` *(restored 2026-10-21 — ADR-071; see its spec for implementation/release status)*, `rate-limiting`, `storybook-deletion` *(draft 2026-08-24; ADR-044 per-book slice)*, `data-deletion` *(account/classroom deletion and abandoned-pause retention)*, `kid-flow-book-persistence` (S1), `kid-flow-pause-lifecycle` (S2), `kid-flow-failure-semantics` (S3), `kid-flow-reader-and-wait-states` (S4), ✅ `visual-continuity` *(S1/S2 replacement)*, ✅ `pose-viewpoint-composition` (S3), ✅ `setting-consistency` (S4), ✅ `spend-and-retry-economics` (S5) *(docket `docs/specs/pipeline-consistency-docket.md` — DONE 2026-08-15; S1 and S2 WAIVED, S3–S5 specced and built)* |
 | 2.5 (fine-tune) | ✅ `judge-finetune` *(written)*, `annotation-surface` (ADR-026) |
-| 3 (eval) | `functional-verification-matrix` (Tool A), `metrics-export` |
+| 3 (eval) | `functional-verification-matrix` (dropped, D-28), `metrics-export` |
 
 `story-memory-contract` is written **first** — it freezes §3 for everything downstream.
 The **failure-reason taxonomy** (`judge-finetune` §4) is shared by `regeneration-controller` and the

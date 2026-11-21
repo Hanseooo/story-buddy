@@ -136,7 +136,7 @@ def compose(state: StoryMemory) -> dict:
       the spending happens; a breaker at the terminal would trip after the money was gone.
 - [x] **CC-5 Observability** — the one per-book record. Per-scene facts already exist in
       `consistency_check`'s line and in `attempts[]`; what did not exist anywhere is a *book*-level
-      row. `functional-verification-matrix` (Tool A) is an offline script over tracing exports and
+      row. `functional-verification-matrix` (dropped, D-28) was an offline script over tracing exports and
       its Picture-Book-Production criterion is scored **per book**
       (`evaluation_instruments_brief.md:91`) — this line is what it reads.
 - [x] **CC-10 Checkpointing / resumability** — pure and effect-free, so re-execution after a lost

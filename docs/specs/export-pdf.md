@@ -126,7 +126,7 @@ before claiming that the hosted application offers export.
   phone's download/open workflow after deployment.
 - An initial full-suite container attempt reported `47 failed, 1456 passed, 87 skipped` because the temporary image lacked Git and
   host fixtures. The normal-checkout suite passes as reported above. Live RLS/provider checks
-  and the offline Tool A instrument were not run. Deployment has not been performed.
+  and the offline functional-verification instrument (since dropped, D-28) were not run. Deployment has not been performed.
 
 ### Timeout correction verification, 2026-10-21
 
@@ -187,7 +187,7 @@ before claiming that the hosted application offers export.
   installed but its native runtime is missing. Linux-only verification does not establish local
   Windows export readiness. Run the backend in its Linux image, or install/configure the supported
   Windows native libraries before claiming that local PDF download works.
-- No live account, live RLS/provider, deployment, physical-device or offline Tool A check was run.
+- No live account, live RLS/provider, deployment, physical-device or offline functional-verification check (since dropped, D-28) was run.
   These local checks do not establish that the hosted application offers export.
 
 ### Denied-download reader refresh, 2026-10-21

@@ -322,7 +322,7 @@ the *warrant* for why acceptability matters; it is not a finding of this study.
 **Three legs, one per evaluation objective — no reader-comprehension leg.**
 - **Objective 3 — expert validation.** Purposively selected expert validators — the Dean/Professor of the
   Arts College, one Arts student/intern, one Education student/intern — respond to a **written,
-  open-ended interview form** (Tool B). Responses are analysed by **content analysis**: each is
+  open-ended interview form** (the expert questionnaire). Responses are analysed by **content analysis**: each is
   coded **positive / negative / suggestion** per criterion, across five criteria (narrative coherence,
   story faithfulness, visual presentation, visual style consistency, classroom suitability). This replaces
   the earlier feature-level scored rubric (CVI / Krippendorff's α).
@@ -333,15 +333,15 @@ the *warrant* for why acceptability matters; it is not a finding of this study.
   figure, not a replacement for it. ADR-018's δ = 3 non-inferiority test remains a **deployment gate**
   (does the fine-tuned judge replace the prompted incumbent in the product), not a reported finding. Full
   machinery in ADR-018 and `docs/specs/judge-finetune.md`.
-- **Objective 5 — software quality.** The ISO/IEC 25010 questionnaire (Tool C) — five applicable
+- **Objective 5 — software quality.** The ISO/IEC 25010 questionnaire — five applicable
   characteristics (Functional Suitability, Performance Efficiency, Usability, Reliability, Security),
   5-point Likert, weighted mean + SD per characteristic, interpreted against Table 4 bands
   (4.20–5.00 Excellent · 3.40–4.19 Very Good · 2.60–3.39 Good · 1.80–2.59 Fair · 1.00–1.79 Poor) —
   administered to **designated software-quality evaluators** (IT practitioners and teachers), separate
   from the expert validators.
 
-**Objectives 1–2 are the built artifact, verified — not judged — by Tool A.** The **Functional Verification
-Matrix** records system-generated pass/fail per functional category (input validation & moderation, story
+**Objectives 1–2 are the built artifact, evidenced by the built pipeline, its tests and the 42 books (D-20, D-28).** The planned **Functional Verification
+Matrix** (dropped 2026-11-21, never built) would have recorded system-generated pass/fail per functional category (input validation & moderation, story
 analysis, scene structuring, visual planning, scene generation & refinement, picture book production) as
 `Successful ÷ Total × 100`. It has **no human respondents**, runs on **fixture stories** — so it carries no
 ethics load and is defensible in October — and is computed by an offline script over tracing exports, not a
@@ -373,10 +373,10 @@ Full detail (recruitment, instruments, ethics staging): `docs/product/RESEARCH_P
 ### Metrics
 | Metric | What it measures | Source |
 |---|---|---|
-| Functional verification (Objectives 1–2) | Per-category success rate, `Successful ÷ Total × 100` | Tool A — offline script over tracing exports, on fixture stories |
-| Expert validation (Objective 3) | Positive / negative / suggestion tallies per criterion | Content analysis, Tool B |
+| Functional verification (Objectives 1–2) | Per-category success rate, `Successful ÷ Total × 100` | Dropped (D-28): not built; evidence is the built pipeline, its tests and the 42 books |
+| Expert validation (Objective 3) | Positive / negative / suggestion tallies per criterion | Content analysis, the expert questionnaire |
 | Judge classification (Objective 4) | Precision, recall, F1 (F1 primary) vs human reference labels | Held-out test set; optional comparison vs zero-shot base + prompted baseline |
-| Software quality (Objective 5) | Weighted mean + SD per ISO/IEC 25010 characteristic | Tool C |
+| Software quality (Objective 5) | Weighted mean + SD per ISO/IEC 25010 characteristic | the ISO/IEC 25010 questionnaire |
 | Generation Time | Submission → completed storybook | Instrumentation (§16) |
 | AI Resource Usage | Avg generation time, image count, regen count, API cost/story | Instrumentation (§16) |
 

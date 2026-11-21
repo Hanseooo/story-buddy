@@ -1,6 +1,8 @@
-# Feature Spec — Functional Verification Matrix (Tool A)
+# Feature Spec — Functional Verification Matrix
 
-**Status:** draft · **Phase:** 3 · **Owner node:** `backend/eval/functional_verification.py` (offline script, not a pipeline node)
+**Status: Dropped 2026-11-21 (D-28).** The matrix was never built and will not be. Objectives 1–2 are evidenced by the built pipeline, its tests and the 42 books (D-20). The body below stays as history.
+
+**Former status:** draft · **Phase:** 3 · **Owner node:** `backend/eval/functional_verification.py` (offline script, not a pipeline node)
 **Derived from:** MASTER_SPEC §4 (eval harness), §5 (CC-5) · **Rationale:** ADR-004 (non-circularity), ADR-026 (no dashboard), ADR-010 (best-of fallback)
 
 > Read `docs/capstone/evaluation_instruments_brief.md` §3 first — this spec is its operational form. It answers

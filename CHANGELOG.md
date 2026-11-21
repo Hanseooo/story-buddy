@@ -503,7 +503,7 @@ instead of repeating it.
   skips and 6 smoke tests deselected. Production Docker build, four-page PDF text/visual review,
   320–1280px browser layouts, 200% desktop zoom layout and keyboard focus order pass.
   The initial full-container attempt lacked Git/host fixtures; the checkout suite passes.
-  Live RLS/provider, physical-phone download/open and offline Tool A checks were not run.
+  Live RLS/provider, physical-phone download/open and offline functional-verification checks (since dropped, D-28) were not run.
   Deployment remains pending. Detailed evidence is in `docs/specs/export-pdf.md`.
   The timeout correction adds a normal-image case and three slow-connection regressions,
   verified failing first. All 85 provider tests pass in the Linux runtime; the classroom-access follow-up passes all 27 PDF tests there.

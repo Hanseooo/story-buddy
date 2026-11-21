@@ -144,7 +144,7 @@ Education colleges:
 
 The **Arts-sector validators** judge the visual and artistic presentation; the **Education-sector validator**
 judges educational suitability and appropriateness. The instrument is a **written, open-ended interview form**
-(Tool B). Responses are analysed by **content analysis**: pre-set categories are defined from the five
+(the expert questionnaire). Responses are analysed by **content analysis**: pre-set categories are defined from the five
 criteria — **narrative coherence, story faithfulness, visual presentation, visual style consistency, and
 suitability for classroom use** — and each written response is coded **positive / negative / suggestion** and
 tallied per criterion to summarise the level of acceptability. Software usability is *not* judged by this

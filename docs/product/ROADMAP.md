@@ -330,7 +330,7 @@ git tag `technical-defense-2026-10`.
 
 ## Phase 3 — Evaluation Instrumentation & Study *(~3–4 weeks; overlaps the ethics window)*
 
-- **Functional verification matrix (Objectives 1–2, Tool A)** — per-stage pass/fail success rates across the
+- **Functional verification matrix (Objectives 1–2; dropped 2026-11-21, D-28, never built)** — per-stage pass/fail success rates across the
   six functional categories, `Successful ÷ Total × 100`, computed by an **offline script over tracing
   exports** (`docs/specs/functional-verification-matrix.md`; no dashboard and no new table — ADR-026).
   A Pass means *the stage emitted valid output*, **never** *the judge approved it* — scoring outputs with the
@@ -338,7 +338,7 @@ git tag `technical-defense-2026-10`.
   and is valid October-defense material.
 - **Expert-validation harness (Objective 3)** — the Dean/Professor of the Arts College, one Arts
   student/intern, and one Education student/intern respond to a written, open-ended interview form
-  (Tool B); responses coded positive / negative / suggestion per criterion (narrative coherence,
+  (the expert questionnaire); responses coded positive / negative / suggestion per criterion (narrative coherence,
   story faithfulness, visual presentation, visual style consistency, classroom suitability) via content
   analysis (ADR-008, RESEARCH_PROTOCOL §5). Stimuli are served by
   `frontend/app/(research)/books/` — provenance stripped, order shuffled per validator, so blinding holds in
@@ -346,7 +346,7 @@ git tag `technical-defense-2026-10`.
   open-ended prose, not a form.
 - **Story corpus** assembled from **Stage-1 story donation** (below): 15 stories collected → 10 primary +
   5 backup, provenance documented.
-- **Software-quality harness (Objective 5)** — ISO/IEC 25010 questionnaire (Tool C), five
+- **Software-quality harness (Objective 5)** — ISO/IEC 25010 questionnaire, five
   characteristics, 5-point Likert, weighted mean + SD, administered to **designated software-quality
   evaluators** (IT practitioners and teachers) — never to the expert validators (RESEARCH_PROTOCOL §6).
 - **Metrics export** — generation time, image/regen counts, cost from tracing. Objective 4's

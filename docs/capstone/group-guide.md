@@ -79,9 +79,9 @@ All of them are open-weight models.
 |---|---|
 | 1 | **Achieved** (owner, 2026-11-21, D-20). The pipeline is built as a LangGraph graph, its automated tests pass, and it produced the 42 books end to end. The per-stage success-rate script once planned for Objectives 1–2 was never built and is dropped (D-28). |
 | 2 | Built. The research corpus holds 42 generated books: 30 from synthetic stories and 12 from donated stories. |
-| 3 | Planned (Tool B, a written open-ended interview form). The repository records no completed session yet. |
+| 3 | Planned (the expert questionnaire: seven open-ended questions, three evaluators). The repository records no completed session yet. |
 | 4 | Training done on three seeds. A **partial** held-out result exists (below). Paid evaluation stopped on 2026-10-07 for budget, and the Gemma baseline failed authentication, so the full registered report is incomplete. Since then the main work has been the page-drawing pipeline. |
-| 5 | Planned (Tool C, the ISO/IEC 25010 questionnaire). The repository records no completed session yet. |
+| 5 | Planned (the ISO/IEC 25010 questionnaire: 23 Likert items, at least 30 respondents). The repository records no completed session yet. |
 
 [`docs/product/ROADMAP.md` Phase 3 and C3-02, `docs/capstone/research_runbook.md` "Held-out resume context"]
 

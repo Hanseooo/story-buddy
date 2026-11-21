@@ -1,5 +1,12 @@
 # Research Instruments and Their Validation
 
+> **Superseded in part, 2026-11-21 (D-05, D-06, D-21, D-27).** Objective 3 is now the expert questionnaire
+> (seven open-ended questions, three evaluators; text in [`expert-evaluation-questionnaire.md`](expert-evaluation-questionnaire.md)).
+> Objective 5 is now 23 Likert items on six characteristics, at least 30 respondents, descriptive statistics
+> only (text in [`iso-25010-questionnaire.md`](iso-25010-questionnaire.md)). The five-criteria interview, the
+> Arts/Education student validators, the five-characteristic scale, the CVI review and the Cronbach's α pilot
+> below are superseded and stay as history. Objective 4 is unchanged.
+>
 > **Manuscript-prose section.** Written in the formal register of the manuscript, intended to be pasted into
 > the Methodology chapter after *Data Collection* and *Data Set*. It is the prose realization of
 > `docs/capstone/methodology.md` §5.2 and §6, and it inherits the separation of instrument families declared

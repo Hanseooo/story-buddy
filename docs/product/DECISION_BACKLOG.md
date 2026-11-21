@@ -512,15 +512,15 @@ for a session until that condition is real. Rows are listed above as normal; thi
 | `self-refusal-fallback` | ⏸ **Deferred** (see row above). Fires only on a *false* refusal; open weights refuse least. | Any of (a)–(d) in the row above. |
 | `repeated-failure-offramp` | ⚠️ **Possibly deletable.** S3 satisfies PRD §11.4 with a client-side counter, so this row now only buys *durability* of the count. | The count must survive a device switch or reach a teacher. Then `jobs.parent_job_id` first (`CLAUDE.md §2`). |
 | `job-failure-reason` | ✅ **Built 2026-08-04** — migration `0006` + the map in `run_job.py`. Row closed; kept here only so the reopen note above is not re-derived. | — |
-| `metrics-export` | ⚠️ **Scope undefined** — it appears only in MASTER_SPEC §7's roster with no description anywhere, and `functional-verification-matrix` (Tool A) already covers Objectives 1–2 as an offline script over tracing exports. Possibly not a deferral but a **deletion**. | Someone names a metric that Tool A + `judge-finetune` do not already produce. If no one can, delete the row. |
+| `metrics-export` | ⚠️ **Scope undefined** — it appears only in MASTER_SPEC §7's roster with no description anywhere, and `functional-verification-matrix` (dropped 2026-11-21, D-28) would have covered Objectives 1–2 as an offline script over tracing exports. Possibly not a deferral but a **deletion**. | Someone names a metric that `judge-finetune` does not already produce. If no one can, delete the row. |
 | ADR-029's `reveal` node | ✅ **Built 2026-08-02** by `kid-flow-pause-lifecycle` (docket S2) — the condition below fired: `pipeline/reveal.py`, migration `0005`, `POST /jobs/{id}/confirm` and S4's reveal surface all landed. Row closed. | — |
 | `rate-limiting` | ⚠️ **Judgement call, flagged not decided.** ADR-025 D4's per-book cost breaker is already live, and ADR-017 means no self-serve signup — every account is teacher-issued, so the abuse surface is a known classroom, not the internet. That is *mitigation*, not absence of risk. | Any public or self-serve path appears, **or** a measured cost overrun. Do **not** defer this silently past a public deployment (`CLAUDE.md §7`). |
 
 **Considered and rejected as deferrals** — recorded so the next session does not re-derive them:
 - ~~**`narration`**~~ — this row set the terms and **they were met on 2026-09-04**. It refused a silent
-  deferral because narration sat inside a measured Tool A category and carried CC-6, and it permitted a cut
-  only "as a deliberate trade, with the Tool A row narrowed in the same change." ADR-058 is that trade: the
-  Tool A row narrowed in the same change (D4), CC-6 narrowed rather than retired (D3), and the accessibility
+  deferral because narration sat inside a measured verification-matrix category and carried CC-6, and it permitted a cut
+  only "as a deliberate trade, with the verification-matrix row narrowed in the same change." ADR-058 is that trade: the
+  verification-matrix row narrowed in the same change (D4), CC-6 narrowed rather than retired (D3), and the accessibility
   cost is recorded in the ADR. Not deferred — **cut**.
 - **`auth-and-classroom`** — MASTER_SPEC §6 already flags the missing RLS as *"a **child-facing** gap, not a
   paperwork one"*. Not deferrable.
@@ -540,14 +540,14 @@ for a session until that condition is real. Rows are listed above as normal; thi
 
 **Phase 3 (eval):**
 - [ ] `metrics-export`
-- [x] `functional-verification-matrix`  ✅ written *(Tool A, Objectives 1–2 — an offline script over tracing
+- [x] `functional-verification-matrix`  ✅ written *(Objectives 1–2; dropped 2026-11-21, D-28 — an offline script over tracing
   exports, no UI and no new table)*
 
 *(Objectives 3 and 5 are **written instruments, not code**: the expert-validation interview (Objective 3) and
 the ISO/IEC 25010 questionnaire (Objective 5) live in `docs/capstone/research_instruments.md` and are
 administered on paper/by form. Objective 4's classification evaluation lives in `judge-finetune` (written);
 its labels now come from `annotation-surface`. **Objectives 1–2 do have a code spec** —
-`functional-verification-matrix` — added 2026-07-28; Tool A was previously absent from every product doc.
+`functional-verification-matrix` — added 2026-07-28; the matrix was previously absent from every product doc.
 The former `tier1-rating-harness`, `comprehension-instrument`, and `tier2-fun-toolkit` specs remain
 **dropped** — the naive-reader comprehension study and the Tier-2 child cohort were removed per ADR-008,
 revised 2026-07-25.)*
@@ -622,7 +622,7 @@ now fully specified.
 1. **`data-deletion`** — non-deferrable (RA 10173 + ethics clearance), but doesn't unblock anything else.
    Owns ADR-029's ⚠️: the `awaiting_confirm` sweep and the `asleep` status value S4 is waiting for.
 2. ~~**`narration`**~~ — remains cut by ADR-058. **`export-pdf`** was restored by ADR-071
-   (2026-10-21), with classroom-peer access under ADR-072: on-demand download of approved classroom books. Future Tool A verification must
+   (2026-10-21), with classroom-peer access under ADR-072: on-demand download of approved classroom books. Future verification (the matrix is dropped, D-28) must
    exercise the export endpoint separately; historical `Compose` results do not verify export.
 3. **`rate-limiting`** — must not silently slip past any public deployment.
 
