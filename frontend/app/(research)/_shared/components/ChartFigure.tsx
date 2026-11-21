@@ -44,10 +44,10 @@ export default function ChartFigure({
       <p className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
         <a href={png} download={file} className={LINK}>
           <DownloadSimple weight="bold" className="size-4 shrink-0" aria-hidden />
-          {`Download ${file}`}
+          <span className="break-all">{`Download ${file}`}</span>
         </a>
         <a href={githubUrl(source)} target="_blank" rel="noopener noreferrer" className={LINK}>
-          <span className="font-mono">{source.slice(source.lastIndexOf("/") + 1)}</span>
+          <span className="break-all font-mono">{source.slice(source.lastIndexOf("/") + 1)}</span>
           <ArrowSquareOut weight="bold" className="size-3.5 shrink-0" aria-hidden />
           <span className="sr-only">{`, ${sourceNoun} (opens on GitHub in a new tab)`}</span>
         </a>

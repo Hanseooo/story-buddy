@@ -18,6 +18,19 @@ describe("ChartFigure", () => {
     expect(screen.getByRole("figure", { name: "A demo figure" }).className).toContain("max-w-3xl");
   });
 
+  // At 390px a long file name must wrap, or the page scrolls sideways (SH-10). Measured on /research/dataset.
+  it("lets the download and source file names wrap", () => {
+    render(
+      <ChartFigure {...props} png="/research/diagrams/dataset_build_and_annotation_flow.png" source="docs/diagrams/drawio/dataset_build_and_annotation_flow.drawio.svg">
+        x
+      </ChartFigure>
+    );
+    const download = screen.getByRole("link", { name: /Download dataset_build_and_annotation_flow\.png/ });
+    const source = screen.getByRole("link", { name: /dataset_build_and_annotation_flow\.drawio\.svg/ });
+    expect(download.querySelector(".break-all")).not.toBeNull();
+    expect(source.querySelector(".break-all")).not.toBeNull();
+  });
+
   it("lets a wide diagram use the full content width", () => {
     render(
       <ChartFigure {...props} wide>
