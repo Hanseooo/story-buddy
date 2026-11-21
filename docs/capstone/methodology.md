@@ -129,8 +129,9 @@ If asked whether pre-registration is "just Waterfall": pre-registration constrai
 - **The testing bright line.** Deterministic tests mock every model call; fuzzy quality — "is the character
   consistent?" — is measured only in an offline evaluation harness against real models. The two never mix. A
   generated-content assertion in a deterministic suite is a flaky test, not a measurement. Continuous
-  integration (`.github/workflows/ci.yml`, since 2026-07-29) runs the frontend's lint, build and tests and
-  the backend's lint and tests on every pull request to `main` and every push to it.
+  integration has existed since 2026-07-29 (`2e57d10`). As of PR #134, `.github/workflows/ci.yml` runs the
+  frontend's lint, build and tests and the backend's lint and tests on every pull request to `main` and
+  every push to it.
 - **Frozen decisions.** Architectural decisions are recorded in `docs/product/ADRs.md` and are not revised
   silently; changing one requires appending a new record stating context, decision, consequences, and
   alternatives.

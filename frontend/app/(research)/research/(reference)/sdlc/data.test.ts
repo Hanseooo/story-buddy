@@ -95,8 +95,18 @@ describe("SDLC page data", () => {
     }
   });
 
+  // The label must say what the sentence says: each outcome's opening words, written by hand.
   it("marks each gate result with the outcome its sentence states", () => {
-    expect(data.LOOPS.map((l) => l.outcome)).toEqual(["split", "met", "not run", "partial", "relaxed", "open"]);
+    const opens: Record<data.Outcome, string> = {
+      split: "Split.",
+      recorded: "Recorded as complete",
+      "not run": "Not run.",
+      partial: "Partial.",
+      relaxed: "Shipped off by default, then turned on",
+      open: "Open.",
+    };
+    for (const l of data.LOOPS) expect(l.result.startsWith(opens[l.outcome]), `loop ${l.loop}: ${l.outcome}`).toBe(true);
+    expect(new Set(data.LOOPS.map((l) => l.outcome)).size).toBe(6);
   });
 
   it("takes each deviation from the record", () => {

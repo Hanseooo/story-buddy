@@ -20,7 +20,7 @@ export const FIGURE = {
 } as const;
 
 /** How the gate result reads, in one word. The page shows it as a label next to the result. */
-export type Outcome = "met" | "split" | "not run" | "partial" | "relaxed" | "open";
+export type Outcome = "recorded" | "split" | "not run" | "partial" | "relaxed" | "open";
 
 export type Loop = {
   loop: number;
@@ -60,7 +60,7 @@ export const LOOPS: Loop[] = [
     gate: "A clean multi-scene, multi-character story produces a coherent, character-consistent storybook, and you can point to a case where the VLM-judge caught an off-model image and the targeted retry fixed it.",
     result: "Recorded as complete on 2026-08-02, when all ten Phase-1 specs were built. No run showing the exit case is named in the repository.",
     prList: "#1–#11, #30, #35, #38, #40, #41, #43, #124–#127",
-    outcome: "met",
+    outcome: "recorded",
   },
   {
     loop: 3,

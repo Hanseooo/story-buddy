@@ -18,7 +18,7 @@ const CHIP = "inline-block rounded-full px-2.5 py-0.5 text-xs font-bold whitespa
 
 // The label is the outcome in words; the colour only repeats it.
 const OUTCOME: Record<Outcome, { label: string; tone: string }> = {
-  met: { label: "Recorded as met", tone: "bg-success/25" },
+  recorded: { label: "Recorded, no run shown", tone: "bg-primary/15" },
   split: { label: "Split", tone: "bg-secondary/40" },
   "not run": { label: "Not run", tone: "bg-destructive/20" },
   partial: { label: "Partial", tone: "bg-secondary/40" },
