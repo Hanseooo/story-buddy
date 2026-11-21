@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Type:** task
-**Progress:** open
+**Progress:** resolved
 **Blocked by:** None
 
 **Parent:** `docs/specs/teacher-review-and-approval.md` §14
@@ -48,3 +48,7 @@ Extend the existing page test. Run it red by restoring the old string.
 None.
 
 ## Comments
+
+## Answer (2026-11-21)
+
+Shipped in `d4249a0` (PR #132). The book page reads "Ask your teacher about downloading this book"; the old approval sentence is gone. D-V closed in `DECISION_BACKLOG.md`. Signed-in browser pass not done (login wall); see the PR for test evidence.

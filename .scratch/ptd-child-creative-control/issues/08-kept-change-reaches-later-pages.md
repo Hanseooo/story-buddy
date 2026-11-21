@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Type:** task
-**Progress:** done
+**Progress:** resolved
 **Blocked by:** `.scratch/ptd-child-creative-control/issues/06-character-pencil-at-reveal.md`
 
 **Parent:** `docs/specs/magic-pencil.md` (US-02)
@@ -57,3 +57,7 @@ Pure projection tests, no mocks (spec §6.1): hand-written expected prompt strin
 06 (the keep action that appends).
 
 ## Comments
+
+## Answer (2026-11-21)
+
+Shipped in `ec5b2de` (PR #133). Kept pencil text appends to `Character.child_changes` (`backend/pipeline/char_bible.py`) and renders in later scene prompts through the style filter (`backend/pipeline/prompt_optimizer.py`). Signed-in browser pass not done (login wall); see the PR for test evidence.

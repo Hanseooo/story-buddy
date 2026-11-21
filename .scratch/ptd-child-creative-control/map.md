@@ -22,7 +22,7 @@ rejected page image should look, and a verdict on whether custom prompts are a g
 | 05 | [Unchosen first-round pictures, moderated on open](issues/05-unchosen-draws-moderated-on-open.md) | task | resolved | — |
 | 06 | [Character magic pencil at the reveal](issues/06-character-pencil-at-reveal.md) | task | resolved | 04 |
 | 07 | [Held character pencil result: replacement re-runs the edit](issues/07-held-character-pencil-replacement.md) | task | resolved | 06 |
-| 08 | [Kept character change reaches later pages](issues/08-kept-change-reaches-later-pages.md) | task | open | 06 |
+| 08 | [Kept character change reaches later pages](issues/08-kept-change-reaches-later-pages.md) | task | resolved | 06 |
 | 09 | [Other versions of a page on the finished book](issues/09-page-other-versions.md) | task | done | 04 |
 | 10 | [Page magic pencil on the finished book](issues/10-page-pencil-on-finished-book.md) | task | done | 09 |
 | 11 | [Held page pencil result: replacement re-runs the edit](issues/11-held-page-pencil-replacement.md) | task | done | 10 |
@@ -33,6 +33,8 @@ Owner rulings at breakdown: OD-07 (page pencil holds reuse `job_moderation_revie
 spec §7. Release gates unchanged: off by default, synthetic-only, free text ships after rank 2 audit 01.
 
 ## Answers
+
+**08 (2026-11-21, resolved).** Shipped in `ec5b2de` (PR #133): a kept character change is drawn on later pages. All build tickets 03–11 are merged; signed-in browser pass for US-01–US-05 still outstanding.
 
 **01 (2026-11-01).** [Audit](issues/01-audit-child-creative-control.md#answer-2026-11-01-0-no-model-calls):
 today a child controls only 3 chip redraws at the reveal and no pages. Recommended: keep the

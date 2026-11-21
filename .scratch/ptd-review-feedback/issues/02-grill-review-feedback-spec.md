@@ -2,7 +2,7 @@
 
 **Status:** ready-for-human
 **Type:** grilling
-**Progress:** open
+**Progress:** resolved
 **Blocked by:** `.scratch/ptd-review-feedback/issues/01-audit-review-feedback.md`
 **Conflict gate:** `teacher-review-and-approval.md` §12–13. Open the session by naming the conflict
 and wait for the owner's verdict.
@@ -23,3 +23,7 @@ and wait for the owner's verdict.
 - Build tickets `03` onward: comments first, highlights as a later ticket.
 
 ## Comments
+
+## Answer (2026-11-21)
+
+Resolved by the spec amendment `docs/specs/teacher-review-and-approval.md` §14 and ADR-081 (accepted 2026-10-29), with build tickets 03–09 cut from it. Highlights and tooltips stay out of scope (§14.1) as a later ticket. Child replies are a no-go per audit 01.
