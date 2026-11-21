@@ -336,11 +336,9 @@ git tag `technical-defense-2026-10`.
   A Pass means *the stage emitted valid output*, **never** *the judge approved it* — scoring outputs with the
   judge would break non-circularity (ADR-004). It runs on **fixture stories**, so it carries no ethics load
   and is valid October-defense material.
-- **Expert-validation harness (Objective 3)** — the Dean/Professor of the Arts College, one Arts
-  student/intern, and one Education student/intern respond to a written, open-ended interview form
-  (the expert questionnaire); responses coded positive / negative / suggestion per criterion (narrative coherence,
-  story faithfulness, visual presentation, visual style consistency, classroom suitability) via content
-  analysis (ADR-008, RESEARCH_PROTOCOL §5). Stimuli are served by
+- **Expert-validation harness (Objective 3)** — two BEEd professors and one Arts professor respond to a
+  seven-question, written, open-ended questionnaire (the expert questionnaire); analysis by content or
+  thematic analysis, to be decided (ADR-008, RESEARCH_PROTOCOL §5). Stimuli are served by
   `frontend/app/(research)/books/` — provenance stripped, order shuffled per validator, so blinding holds in
   code rather than by discipline (ADR-026). The **responses themselves stay on paper**: the instrument is
   open-ended prose, not a form.

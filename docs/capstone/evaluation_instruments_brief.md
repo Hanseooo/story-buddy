@@ -26,16 +26,15 @@
   classification performance → Evaluate software quality.**
 - We use **three instruments**, one per evaluation objective (Objectives 1–2 are evidenced by the built pipeline, its tests and the 42 books):
   - **The expert questionnaire:** are the generated books acceptable in presentation quality and
-    classroom suitability, judged by expert validators through a written, open-ended interview? (Objective 3.)
+    classroom suitability, judged by three experts (2 BEEd professors, 1 Arts professor) through a seven-question, open-ended questionnaire? (Objective 3.)
   - **Judge classification:** does the fine-tuned consistency judge classify character consistency to a
     standard comparable with human-established labels — precision, recall, F1 (F1 primary)? (Objective 4.)
   - **The ISO/IEC 25010 questionnaire:** is the *software* functional, usable, reliable, efficient,
     secure? (Objective 5.)
 - **Key decision on the expert questionnaire:** there is **no ready-made, validated instrument** for rating AI-generated
-  children's picture books on a numeric scale, and with only a three-person validator panel a numeric rubric's
+  children's picture books on a numeric scale, and with only a three-person expert panel a numeric rubric's
   statistics (CVI, Krippendorff's α) aren't meaningful anyway. The defensible path is a **written, open-ended
-  interview form analysed by content analysis** — pre-set categories from five criteria, each response coded
-  positive / negative / suggestion, tallied per criterion.
+  questionnaire** of seven questions, analysed by content analysis or thematic analysis (to be decided, O-04).
 - **The judge fine-tune is now a full objective (4), not a descriptive footnote.** We fine-tune the judge and
   report **precision, recall, and F1 (F1 primary)** against human-established reference labels, split at the
   character-identity level. An optional, secondary comparison against a zero-shot base model and the existing
@@ -70,7 +69,7 @@ see §6.)*
 
 | Tool | What it measures | Answers | Instrument type |
 |---|---|---|---|
-| **Expert questionnaire** | Are the generated books acceptable — narrative coherence, story faithfulness, visual presentation, visual style consistency, suitability for classroom use? | Objective 3 (acceptability) | Written, open-ended interview form, analysed by content analysis |
+| **Expert questionnaire** | Are the generated books acceptable, as three experts judge the original story and its book? | Objective 3 (acceptability) | Seven open-ended questions, no rating scale; analysis method to be decided (O-04) |
 | **Judge classification** | Does the fine-tuned judge classify character consistency to a standard comparable with human-established labels? | Objective 4 (classification performance) | Precision / recall / F1 (F1 primary) against human reference labels |
 | **ISO/IEC 25010 questionnaire** | Is the *software* good (functional, usable, reliable, efficient, secure)? | Objective 5 (software quality) | 5-point Likert questionnaire |
 
@@ -97,32 +96,24 @@ Earlier drafts scored the generated books on a numeric feature-level rubric (ada
 Caldecott/ALSC criteria), validated via Content Validity Index and Krippendorff's α. Two problems didn't go
 away: there is still **no single published, psychometrically validated instrument** that rates AI-generated
 children's picture books across our constructs, and — more decisively — **CVI and Krippendorff's α are not
-statistically meaningful with a 3-person validator panel** (the math needs a much larger rater/expert pool than
+statistically meaningful with a 3-person expert panel** (the math needs a much larger rater/expert pool than
 this study can field). Rather than force statistics the sample can't support, the manuscript's answer is a
-**written, open-ended interview form, analysed by content analysis** — a method built for exactly this
-respondent count, whose trustworthiness comes from a transparent coding procedure rather than an under-powered
-statistic.
+**written, open-ended questionnaire** whose answers are analysed by content analysis or thematic analysis (to
+be decided, O-04) — methods built for this respondent count, whose trustworthiness comes from a transparent
+coding procedure rather than an under-powered statistic.
 
 ### 4.2 The instrument
 
-Three purposively selected validators, each judging what they're best placed to judge:
+Three evaluators: 2 BEEd professors and 1 Arts professor (D-05). Each signs the informed consent form
+first, reviews the original story and its generated book, and fills in one questionnaire per book, with its
+Story ID. The form has seven open-ended questions (text in `expert-evaluation-questionnaire.md`, D-21).
+There is no numeric scale.
 
-| Validator | Judges |
-|---|---|
-| Dean/Professor of the Arts College | Visual/artistic presentation |
-| Arts student/intern | Visual/artistic presentation |
-| Education student/intern | Educational suitability |
+### 4.3 The analysis: content analysis or thematic analysis (to be decided)
 
-Each validator completes a **written, open-ended interview form** against **five pre-set criteria**: narrative
-coherence, story faithfulness, visual presentation, visual style consistency, and suitability for classroom
-use. There is no numeric scale.
-
-### 4.3 The analysis: content analysis
-
-Each written response is coded against the five criteria and, within each criterion, coded as **positive
-feedback**, **negative feedback**, or a **suggestion for improvement**. Codes are tallied per criterion. This
-produces a systematic, auditable account of validator feedback without leaning on a rating scale or an
-under-powered reliability statistic.
+The written answers are coded by content analysis or thematic analysis. The owner has not chosen between
+them (O-04). Either gives a systematic, auditable account of expert feedback without leaning on a rating
+scale or an under-powered reliability statistic.
 
 **Note:** the closed failure taxonomy we already use for the judge (`wrong_colour`, `wrong_species`,
 `wrong_body_feature`, `wrong_clothing`, `wrong_style`, `different_face`, `character_absent`) is **not** part of
@@ -157,7 +148,7 @@ characteristic, against the Table 4 interpretation bands declared in advance:
 **Naive-reader recall — dropped entirely.** The comprehension study — a reader who never saw the story given
 the finished book and scored on free recall against a story-grammar protocol — no longer exists as an
 instrument. There is no reader-recall Cohen's κ, no story-grammar scoring, and no captions-stripped session.
-Objective 3's acceptability claim now rests entirely on the expert validation interview (§4); there is no
+Objective 3's acceptability claim now rests entirely on the expert questionnaire (§4); there is no
 separate fidelity/comprehension leg. *(Any reference to a `comprehension-instrument` build spec, or to a
 Tier-2 / Fun Toolkit child-engagement instrument, in the roadmap or backlog is stale and should be removed —
 outside the scope of this brief, but flagged here.)*
@@ -199,7 +190,7 @@ was deleted 2026-07-27; the drift check no longer applies to it.)*
 | **Content Validity Index (CVI)** — Lawshe (1975); Polit & Beck (2006) | ISO/IEC 25010 questionnaire (the ISO/IEC 25010 questionnaire), before administration | I-CVI > 0.78; S-CVI/Ave ≥ 0.90 |
 | **Cronbach's α** | Internal consistency of the ISO/IEC 25010 questionnaire (the ISO/IEC 25010 questionnaire) | ≥ 0.70 |
 | **Inter-annotator agreement** (statistic per `docs/specs/judge-finetune.md`) | Human reference labels for judge classification (Objective 4) | per `judge-finetune.md` |
-| **Content analysis coding** | Expert validation interview responses (the expert questionnaire) — positive / negative / suggestion, tallied per criterion | Qualitative; not a reliability statistic |
+| **Content or thematic analysis coding** | Expert questionnaire answers; method to be decided (O-04) | Qualitative; not a reliability statistic |
 
 **Dropped from this study:** Krippendorff's α and ICC(2,k) for a numeric expert rubric, and Cohen's κ for
 naive-reader recall scoring — all tied to instruments that no longer exist (the feature-level rubric and the
@@ -211,7 +202,7 @@ comprehension study).
 
 1. **Confirm the citation set below still applies.** DreamBench++ and Caldecott/ALSC were cited to ground the
    now-removed numeric feature-level rubric; verify whether they're still needed anywhere now that Objective 3
-   uses an open-ended interview + content analysis instead (`action_checklist.md` A1/A2 history of unverified
+   uses an open-ended questionnaire instead (`action_checklist.md` A1/A2 history of unverified
    citations still applies to what remains).
 2. **Judge-classification split sizes and the human-label agreement statistic/threshold** — deferred to
    `docs/specs/judge-finetune.md`, not finalized in this brief.
@@ -234,8 +225,7 @@ comprehension study).
 - **Polit, D. F., & Beck, C. T. (2006)** — the Content Validity Index (CVI), Research in Nursing & Health.
   *(Still used — the ISO/IEC 25010 questionnaire.)*
 - **Caldecott Medal criteria** — Association for Library Service to Children (ALSC/ALA). *(Recognized
-  criteria, not a validated instrument; its relevance to the expert questionnaire's questions — narrative
-  coherence, visual presentation, suitability — is plausible but unconfirmed now that the expert questionnaire is qualitative;
+  criteria, not a validated instrument; its relevance to the expert questionnaire's questions is plausible but unconfirmed now that the expert questionnaire is qualitative;
   verify before citing.)*
 
 **Do NOT cite (unverified / could not be traced):**

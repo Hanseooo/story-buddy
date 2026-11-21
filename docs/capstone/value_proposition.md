@@ -36,13 +36,12 @@ the whole point: a panel can attack each layer, and each has its own answer.
 |---|---|---|---|
 | **Warrant** (why it matters) | An *authentic audience* and *actual publication* are among the strongest levers on children's writing engagement. | **Cited prior literature — not our finding.** We inherit it; we do not test it. | External, established |
 | **Design property** (who it reaches) | Open-weight, self-hostable, **zero per-seat vendor cost** → a provincial public school can run what only a well-funded private school could otherwise afford. SDG-4 (Quality Education). | **True by construction.** It is a property of the architecture (open-weight mandate, ADR-015), provable without any study. | Architectural |
-| **Measured finding** (what we prove) | The pipeline **works**: it produces picture books that domain experts validate as acceptable, and the consistency mechanism that drives it classifies correctly against human judgment. | **Three output measures — Objectives 3, 4, 5.** (1) Purposively selected expert validators (the Arts college Dean/Professor, an Arts student/intern, an Education student/intern) judge the finished books through an open-ended interview, coded by content analysis across five criteria — narrative coherence, story faithfulness, visual presentation, visual style consistency, classroom suitability (**Objective 3**). (2) The fine-tuned open-weight consistency judge is scored against human-established reference labels with **precision, recall, and F1** (F1 primary) on a character-disjoint held-out set (**Objective 4**). (3) The system's software quality is rated on applicable ISO/IEC 25010 characteristics by designated evaluators (**Objective 5**). | Empirical (this study) |
+| **Measured finding** (what we prove) | The pipeline **works**: it produces picture books that domain experts validate as acceptable, and the consistency mechanism that drives it classifies correctly against human judgment. | **Three output measures — Objectives 3, 4, 5.** (1) Three experts (2 BEEd professors, 1 Arts professor) judge the finished books through a seven-question open-ended questionnaire, analysed by content analysis or thematic analysis (to be decided) (**Objective 3**). (2) The fine-tuned open-weight consistency judge is scored against human-established reference labels with **precision, recall, and F1** (F1 primary) on a character-disjoint held-out set (**Objective 4**). (3) The system's software quality is rated on applicable ISO/IEC 25010 characteristics by designated evaluators (**Objective 5**). | Empirical (this study) |
 
 The chain reads top to bottom: *prior work says an authentic audience matters → publishing many illustrated
 books was effectively infinite-cost → an orchestrated 10-module pipeline collapses that cost → **but only if
 the pipeline reliably produces books worth publishing**, else you have shipped a model output, not the
-child's story → Objective 3's expert validation shows the finished books are judged acceptable on exactly the
-criteria that matter (coherence, faithfulness, presentation, style consistency, classroom fit), Objective 4
+child's story → Objective 3's expert validation shows the finished books are judged acceptable by three experts who read each original story beside its book, Objective 4
 shows the mechanism that enforces character consistency classifies correctly against human judgment, and
 Objective 5 shows the system holds up as software.*
 
@@ -70,8 +69,8 @@ Tempting, and **worse than it looks**, for two independent reasons:
    picture-superiority warrant changes nothing: it is *still* not our contribution.
 
 **The correct reframing of the "readership" instinct** is Layer 3 above: not *"pictures beat text,"* but
-*"expert validators judge the finished book faithful to the story the child wrote"* — story faithfulness is
-one of Objective 3's five content-analysis criteria — *"and the mechanism enforcing character consistency is
+*"expert validators judge the finished book faithful to the story the child wrote"* — each expert reads the
+original story beside the book — *"and the mechanism enforcing character consistency is
 independently shown to classify correctly against human judgment"* (Objective 4). That is a finding you own.
 Hold this line if a panelist says *"aren't pictures obviously easier to read?"* — the study measures
 **whether the pipeline's output is judged faithful and consistent**, not picture-vs-text comprehension.

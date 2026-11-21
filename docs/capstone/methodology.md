@@ -72,7 +72,7 @@ directly to the four core quadrants of Boehm's Spiral Model:
 | **0** & **0.5** | **Loop 1: Risk resolution** | Scaffolding and open-weight spike to resolve the substrate risk cheaply | A real slideshow renders. Reference conditioning retains identity on ≥ 80% of items **and** exceeds unconditioned by ≥ 30 points. ✅ Phase 0 done. ✅ Phase 0.5 closed 2026-07-29 — see `PHASE_05_RESULTS.md`. |
 | **1** | **Loop 2: Core pipeline** | The consistency loop is real, on clean stories | A story produces a consistent book; a case exists where the judge caught a drifted image and the retry fixed it. ✅ **Complete (2026-08-02)** — all ten Phase-1 specs built, from the `StoryMemory` contract through `compose`. |
 | **2** & **2.5** | **Loop 3: Integration & tuning** | Safe for a real child, survives messy input. An honestly evaluated specialized judge | The Filipino/Taglish moderation probe passes in **both** directions. A results table exists and the held-out set was read exactly once. **Phase 2 in progress (2026-08-04):** the moderation stack, input-gate hardening, and the kid-facing flow (book persistence, the ADR-029 reveal, failure semantics, reader/wait states) are built; auth + classroom RLS, teacher review and data deletion remain; narration remains cut (ADR-058); PDF download was restored on 2026-10-21 (ADR-071, implementation/release status in `docs/specs/export-pdf.md`). |
-| **3** | **Loop 4: Evaluation** | Expert validation (Obj 3), judge classification (Obj 4), and ISO/IEC 25010 software quality (Obj 5) | Expert-validation responses collected and content-analysed; the judge held-out classification table read exactly once; ISO/IEC 25010 questionnaire administered |
+| **3** | **Loop 4: Evaluation** | Expert validation (Obj 3), judge classification (Obj 4), and ISO/IEC 25010 software quality (Obj 5) | Expert questionnaire answers collected and analysed; the judge held-out classification table read exactly once; ISO/IEC 25010 questionnaire administered |
 
 Phase 0.5's kill criterion is the sharpest instance of the method. **It ran on 2026-07-29 and split its
 two gates**: reference conditioning retained identity on **80%** of pipeline-ON items (absolute gate met)
@@ -183,7 +183,7 @@ the pipeline's architecture is identical either way.
 |---|---|---|
 | Story text | Donated Grade 5–6 child writing (15 collected → 10 primary + 5 backup) | Generation input; the source of every generated image; expert-validation stimuli |
 | Generated picture books | Pipeline output over the primary corpus | Expert validation (Objective 3) |
-| Expert-validation responses | Expert validators (Dean/Professor of the Arts College + Arts student/intern + Education student/intern) | Objective 3 — acceptability |
+| Expert-validation responses | Expert evaluators (2 BEEd professors + 1 Arts professor) | Objective 3 — acceptability |
 | Image-pair identity labels | Two trained annotators | Objective 4 — the judge's training and evaluation data |
 | System-evaluation questionnaire | Designated software-quality evaluators | Objective 5 — software quality (§6.3) |
 
@@ -230,10 +230,10 @@ Three groups, treated separately because they address different aspects of the s
   `docs/specs/obj4-readiness-audit.md` §7, `research-changelog.md` row 2026-09-16 to 17). Their participation is limited to the voluntary submission of original
   stories; they do not validate the books or evaluate the software. Stories are anonymized and assigned unique
   identifiers.
-- **Expert validators**, purposively selected from the Arts and Education colleges: the **Dean/Professor of
-  the Arts College**, one **Arts student/intern**, and one **Education student/intern**. The Arts-sector
-  validators judge the visual and artistic presentation; the Education-sector validator judges educational
-  suitability. They complete the written expert-validation instrument (§6.1).
+- **Expert evaluators**: two Bachelor of Elementary Education (BEEd) professors and one Arts professor
+  (D-05). Each signs the informed consent form first. Each reviews the original child-written story and its
+  generated picture book, and completes the seven-question open-ended questionnaire in
+  `expert-evaluation-questionnaire.md` (§6.1), one questionnaire per book, with its Story ID.
 - **Software-quality evaluators** — a separate designated group who complete the ISO/IEC 25010 questionnaire
   (§6.3). Their responses are treated separately from the expert validation because the two activities address
   different objects: the generated picture-book outputs versus the StoryBuddy software system.
@@ -248,8 +248,8 @@ Three groups, treated separately because they address different aspects of the s
    Hizon, Sr. Elementary School; twelve were generated into books (the other three stay quarantined).
 3. **Generation.** Each primary story processed **once** through the full pipeline. Traces record per-scene
    verdicts, regeneration counts, latency, and cost. Seeds are fixed and reported for reproducibility.
-4. **Expert-validation sessions.** The generated picture books are presented to the expert validators, who
-   complete the written open-ended interview form against the five criteria (§6.1).
+4. **Expert evaluation.** Each expert reviews an original story and its generated picture book, then
+   completes one seven-question open-ended questionnaire per book (§6.1).
 5. **Image-pair labelling**, then fine-tuning and classification evaluation of the Consistency Judge (§5).
 6. **ISO/IEC 25010 questionnaire** administered to the designated software-quality evaluators (§6.3).
 
@@ -398,22 +398,14 @@ what each can and cannot do.
 
 ### 6.1 The expert-validation instrument (Objective 3)
 
-The generated picture books are presented to the expert validators (§3.3) using a **written, open-ended
-interview form**. The validators examine the outputs against five established criteria:
+Each expert (§3.3) reviews the original child-written story and the picture book generated from it, then
+answers a **written, open-ended questionnaire** of seven questions, one questionnaire per book, with its
+Story ID. There is no rating scale. The questions and the consent terms are in
+`docs/capstone/expert-evaluation-questionnaire.md` (D-05, D-21).
 
-- **narrative coherence**,
-- **story faithfulness**,
-- **visual presentation**,
-- **visual style consistency**, and
-- **suitability for classroom use**.
-
-**How it is evaluated — content analysis.** Before analysis, pre-set categories are defined from the five
-criteria. Each validator's written response is reviewed and coded into **positive feedback**, **negative
-feedback**, or **suggestion for improvement**, then tallied per criterion to produce a structured summary of
-expert judgments. This determines the level of acceptability and classroom suitability of the generated books
-as perceived by the validators, from the recurring patterns across their written responses. This instrument
-is **qualitative** — it replaces the earlier ordinal feature-rubric (dropped, ADR-008). The full instrument
-and its criteria wording are finalized in `docs/capstone/research_instruments.md`.
+**How it is evaluated.** The written answers are analysed by **content analysis or thematic analysis**. The
+method is not yet chosen (O-04). This instrument is **qualitative** — it replaces the earlier ordinal
+feature-rubric (dropped, ADR-008) and the five-criteria interview (superseded 2026-11-21).
 
 ### 6.2 The Consistency-Judge classification evaluation (Objective 4)
 
@@ -474,7 +466,7 @@ three different questions and are never substituted for one another:
 
 | Question | Instrument (Objective) | What it can support |
 |---|---|---|
-| Are the generated books acceptable? | Expert validation, open-ended + content analysis (Obj 3) | The **acceptability** of the outputs — presentation quality and classroom suitability, as experts judge them; not a causal claim |
+| Are the generated books acceptable? | Expert questionnaire, seven open-ended questions (Obj 3) | The **acceptability** of the outputs — presentation quality and classroom suitability, as experts judge them; not a causal claim |
 | Can the judge measure consistency automatically? | Judge classification evaluation (Obj 4) | The judge's **classification performance** against human labels (precision/recall/F1) |
 | Is the software any good? | ISO/IEC 25010 questionnaire (Obj 5) | **Perceived software quality.** Not efficacy |
 
@@ -492,13 +484,11 @@ defensive move available, and it converts a null result from a failure into a fi
 
 ### 7.1 Objective 3 — acceptability (expert validation)
 
-- **Design.** The generated picture books are validated **directly** by the expert panel (§6.1); there is no
+- **Design.** The generated picture books are evaluated **directly** by the expert panel (§6.1); there is no
   control condition and no ON/OFF contrast (the ablation is dropped, ADR-008).
-- **Analysis.** Content analysis: written responses coded into positive / negative / suggestion categories
-  against the five pre-set criteria (narrative coherence, story faithfulness, visual presentation, visual
-  style consistency, classroom suitability), then tallied per criterion.
-- **Reporting.** A structured per-criterion summary of the coded categories, with representative excerpts, that
-  determines the level of acceptability and classroom suitability of the generated books.
+- **Analysis.** Content analysis or thematic analysis of the seven open-ended answers (to be decided, O-04).
+- **Reporting.** A structured summary of the coded answers, with representative excerpts, that
+  determines the level of acceptability of the generated books as the experts judge it.
 - **What it cannot support.** No causal "the pipeline caused this quality" claim — there is no control arm. It
   reports what the outputs are, as experts validate them.
 
@@ -546,8 +536,8 @@ Cronbach's α reported for the instrument.
 > **The expert validation is never scored using the judge.**
 
 The judge drives regeneration inside the pipeline. Using that same judge as the acceptability outcome would be
-the system grading its own homework. The Objective-3 outcome is the **expert validators' content-analysed
-judgments**; the Objective-5 outcome is the ISO/IEC 25010 questionnaire. The judge's own accuracy is the
+the system grading its own homework. The Objective-3 outcome is the **experts' written
+answers**; the Objective-5 outcome is the ISO/IEC 25010 questionnaire. The judge's own accuracy is the
 separate Objective-4 question, measured on a human-labeled, character-disjoint held-out set it never trained
 on, and its results are never substituted for the expert validation.
 
