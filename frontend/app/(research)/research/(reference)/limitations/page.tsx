@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { ArrowRight, Warning } from "@phosphor-icons/react/dist/ssr";
+import ChartFigure from "../../../_shared/components/ChartFigure";
 import ScrollTable from "../../../_shared/components/ScrollTable";
 import Source from "../../../_shared/components/Source";
-import { AUDIT, BY_KIND, CHECKS, DEFECTS, EXAMPLES, KLEIN, LIMITATIONS, PHASE_05, SOURCES, TRIED, type Share } from "./data";
+import { AUDIT, AUDIT_NOTE, BY_KIND, CHARTS, CHARTS_AS_OF, CHECKS, CHECK_SENTENCES, DEFECTS, EXAMPLES, KLEIN, KLEIN_NOTES, LIMITATIONS, PHASE_05, SOURCES, TRIED, type Share } from "./data";
 
 export const metadata = {
   title: "StoryBuddy Findings and Limitations",
@@ -31,6 +32,9 @@ const SECTIONS = [
   { id: "tried", label: "What was tried" },
   { id: "limits", label: "Limitations" },
 ];
+
+const DATA_FILE = "frontend/app/(research)/research/(reference)/limitations/data.ts";
+const chartOf = (id: string) => CHARTS.find((chart) => chart.id === id)!;
 
 const percent = ({ part, whole }: Share) => `${((part / whole) * 100).toFixed(1)}%`;
 const count = ({ part, whole }: Share) => `${part} of ${whole}`;
@@ -77,6 +81,7 @@ export default function LimitationsPage() {
           <p className={PROSE}>
             {`The ${AUDIT.pages} pages and ${AUDIT.references} reference pictures used AI-assisted visual assessment on ${AUDIT.date}. The owner has not confirmed the scores, so every audit number here is provisional. Only synthetic stories were reviewed. No child's story is shown or counted on this page.`}
           </p>
+          <p className={PROSE}>{AUDIT_NOTE}</p>
         </div>
       </div>
 
@@ -203,8 +208,14 @@ export default function LimitationsPage() {
           what those stored checks had said about the images the reviewers scored.
         </p>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className={`${CARD} space-y-4`}>
-            <h3 className={H3}>The reference check</h3>
+          <ChartFigure
+            id="reference-check-outcomes"
+            alt={chartOf("reference-check-outcomes").alt}
+            asOf={CHARTS_AS_OF}
+            png={chartOf("reference-check-outcomes").png}
+            source={DATA_FILE}
+            caption={<span className={`${H3} block text-foreground`}>The reference check</span>}
+          >
             <BarGroup title={`Of the ${reference.defective} defective references`}>
               <Bar
                 label="The check failed it"
@@ -221,13 +232,16 @@ export default function LimitationsPage() {
                 tone={BAD}
               />
             </BarGroup>
-            <p className="text-sm text-foreground/80">
-              The check finds most bad references. The pipeline then ships the best of the failing draws, so every
-              defect it found still reached the pages.
-            </p>
-          </div>
-          <div className={`${CARD} space-y-4`}>
-            <h3 className={H3}>The page check</h3>
+            <p className="text-sm text-foreground/80">{CHECK_SENTENCES.reference}</p>
+          </ChartFigure>
+          <ChartFigure
+            id="page-check-outcomes"
+            alt={chartOf("page-check-outcomes").alt}
+            asOf={CHARTS_AS_OF}
+            png={chartOf("page-check-outcomes").png}
+            source={DATA_FILE}
+            caption={<span className={`${H3} block text-foreground`}>The page check</span>}
+          >
             <BarGroup title={`Of the ${page.defective} defective pages`}>
               <Bar
                 label="The check passed it"
@@ -244,13 +258,12 @@ export default function LimitationsPage() {
                 tone={BAD}
               />
             </BarGroup>
-            <p className="text-sm text-foreground/80">
-              The page check compares a page with its reference picture. A mistake copied from the reference
-              matches the reference, so it passes.
-            </p>
-          </div>
+            <p className="text-sm text-foreground/80">{CHECK_SENTENCES.page}</p>
+          </ChartFigure>
         </div>
-        <Source path={SOURCES.stageAudit} where="“Provisional results”, References and Page gate" />
+        <p className={PROSE}>{CHECK_SENTENCES.totals}</p>
+        <Source path={SOURCES.stageAudit} where="“Provisional results”, References, Shipped pages and Page gate" />
+        <Source path={SOURCES.adr082} where="the reference check's false-fail rate" />
       </section>
 
       <section aria-labelledby="editors" className="space-y-4">
@@ -263,9 +276,9 @@ export default function LimitationsPage() {
           <div className={`${CARD} space-y-4`}>
             <h3 className={H3}>FLUX.2 klein, October 2026</h3>
             <p className="text-sm text-foreground/80">
-              {`${KLEIN.pages} random pages, drawn by both editors and scored with the editor's name hidden. klein's style may be recognisable, so the blinding is partial.`}
+              {`${KLEIN.pages} random pages, drawn by both editors and scored with the editor's name hidden. klein's style may be recognisable, so the blinding is partial. ${KLEIN_NOTES.rater}`}
             </p>
-            <BarGroup title="Pages with a duplicate character">
+            <BarGroup title="Pages with a duplicate or extra character">
               <Bar
                 label="Qwen-Image-Edit"
                 value={count({ part: KLEIN.duplicates.qwen, whole: KLEIN.pages })}
@@ -293,9 +306,23 @@ export default function LimitationsPage() {
                 tone={OTHER}
               />
             </BarGroup>
+            <BarGroup title="Pages where the action was missed">
+              <Bar
+                label="Qwen-Image-Edit"
+                value={count({ part: KLEIN.action.qwen, whole: KLEIN.pages })}
+                width={percent({ part: KLEIN.action.qwen, whole: KLEIN.pages })}
+                tone={GOOD}
+              />
+              <Bar
+                label="klein"
+                value={count({ part: KLEIN.action.klein, whole: KLEIN.pages })}
+                width={percent({ part: KLEIN.action.klein, whole: KLEIN.pages })}
+                tone={OTHER}
+              />
+            </BarGroup>
             <p className="text-sm text-foreground/80">
               klein drew as many duplicates and lost the character more often. It was rejected, and Qwen-Image-Edit
-              stays (ADR-063).
+              stays (ADR-063). {KLEIN_NOTES.action}
             </p>
           </div>
           <div className={`${CARD} space-y-4`}>
@@ -325,11 +352,11 @@ export default function LimitationsPage() {
       </section>
 
       <section aria-labelledby="tried" className="space-y-4">
-        <h2 id="tried" className={H2}>What was tried in October</h2>
+        <h2 id="tried" className={H2}>What was tried in October and November</h2>
         <p className={PROSE}>
-          The October tests the group guide lists, one row each. Tests that failed are listed with the rest.
+          The October and November tests the group guide lists, one row each. Tests that failed are listed with the rest.
         </p>
-        <ScrollTable label="What was tried in October">
+        <ScrollTable label="What was tried in October and November">
           <thead>
             <tr className="border-b border-primary/10">
               <th scope="col" className={TH}>Tried</th>

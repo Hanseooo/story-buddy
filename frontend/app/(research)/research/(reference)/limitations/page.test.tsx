@@ -66,15 +66,52 @@ describe("/research/limitations", () => {
     expect(buildCheck).toHaveTextContent(/both runs failed the gate/i);
   });
 
-  it("lists everything that was tried and all nine limitations", () => {
+  it("lists everything that was tried and all eleven limitations", () => {
     render(<LimitationsPage />);
 
-    expect(screen.getByText(/the October tests the group guide lists/i)).toBeInTheDocument();
+    expect(screen.getByText(/the October and November tests the group guide lists/i)).toBeInTheDocument();
     const tried = screen.getByRole("table", { name: /what was tried in october/i });
-    expect(within(tried).getAllByRole("row")).toHaveLength(9);
+    expect(within(tried).getAllByRole("row")).toHaveLength(10);
     const limits = screen.getByRole("region", { name: /limitations to state/i });
-    expect(within(limits).getAllByRole("heading", { level: 3 })).toHaveLength(9);
+    expect(within(limits).getAllByRole("heading", { level: 3 })).toHaveLength(11);
     expect(within(limits).getByRole("heading", { name: "Stated body counts" })).toBeInTheDocument();
+  });
+
+  it("replaces the old reference-check sentence with the counts, and explains 77 + 71 + 2 = 150", () => {
+    render(<LimitationsPage />);
+
+    const checks = screen.getByRole("region", { name: /what the automatic checks caught/i });
+    expect(within(checks).queryByText(/finds most bad references/i)).not.toBeInTheDocument();
+    expect(within(checks).getByText(/fails about 4 in 10 good ones \(15 of 38\)/)).toBeInTheDocument();
+    expect(within(checks).getByText("77 of 150 have a major defect, 71 are acceptable and 2 are uncertain.")).toBeInTheDocument();
+    expect(within(checks).getByText(/23 of the 71 redrawn first drafts were already acceptable/)).toBeInTheDocument();
+  });
+
+  it("gives both outcome charts a stable id, alt text, an as-of caption and a PNG link", () => {
+    const { container } = render(<LimitationsPage />);
+
+    for (const id of ["reference-check-outcomes", "page-check-outcomes"]) {
+      const figure = container.querySelector(`[data-chart-id="${id}"]`) as HTMLElement;
+      expect(figure, id).not.toBeNull();
+      expect(figure.getAttribute("aria-label") ?? "").not.toBe("");
+      expect(within(figure).getByText(/As of 2026-10-08/)).toBeInTheDocument();
+      expect(within(figure).getByRole("link", { name: `Download ${id}.png` })).toHaveAttribute("href", `/research/diagrams/${id}.png`);
+      expect(within(figure).getByRole("link", { name: /data\.ts/ })).toHaveAttribute("target", "_blank");
+    }
+  });
+
+  it("brings the page up to November without a sentence about human review", () => {
+    const { container } = render(<LimitationsPage />);
+
+    expect(screen.getByText(/versions 6 and 7.*500-word.*magic pencil.*not measured here/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "The reference check cannot verify stated details" })).toBeInTheDocument();
+    expect(screen.getByText(/stopped 4 of 30 synthetic stories/)).toBeInTheDocument();
+    expect(screen.getByText(/2 of 9 fixed, against 5 of 9 with hand-written instructions/)).toBeInTheDocument();
+    expect(screen.getByText(/klein also missed the action on 8 of 30 pages, against 2 for Qwen/)).toBeInTheDocument();
+    const editors = screen.getByRole("region", { name: /the scene editor against two others/i });
+    expect(within(editors).getByRole("group", { name: "Pages with a duplicate or extra character" })).toBeInTheDocument();
+    expect(screen.getByText(/one rater, the AI assistant/)).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/human review|reviewed the stored images/i);
   });
 
   it("links each section from the top of the page", () => {
