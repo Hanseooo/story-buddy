@@ -71,7 +71,7 @@ see §6.)*
 |---|---|---|---|
 | **Expert questionnaire** | Are the generated books acceptable, as three experts judge the original story and its book? | Objective 3 (acceptability) | Seven open-ended questions, no rating scale; analysis method to be decided (O-04) |
 | **Judge classification** | Does the fine-tuned judge classify character consistency to a standard comparable with human-established labels? | Objective 4 (classification performance) | Precision / recall / F1 (F1 primary) against human reference labels |
-| **ISO/IEC 25010 questionnaire** | Is the *software* good (functional, usable, reliable, efficient, secure)? | Objective 5 (software quality) | 5-point Likert questionnaire |
+| **ISO/IEC 25010 questionnaire** | Is the *software* good (functional, interactive, reliable, efficient, secure, compatible)? | Objective 5 (software quality) | 23 Likert items, 5 = Strongly Agree, descriptive statistics only |
 
 **Why the split matters:** perceived software quality (the ISO/IEC 25010 questionnaire) is **not** evidence that the outputs are
 acceptable (the expert questionnaire), and neither is evidence about the judge's classification performance (Objective 4).
@@ -124,22 +124,11 @@ grounds the judge's structured failure-reason output.
 
 ## 5. The ISO/IEC 25010 questionnaire (Objective 5)
 
-**Keep as-is** — it is the one genuinely validated *standard* in the set. Five characteristics: **Functional
-Suitability, Performance Efficiency, Usability, Reliability, Security.** Items use a **5-point Likert scale
-(1 = Poor … 5 = Excellent)**, administered to **designated software-quality evaluators** (a group separate
-from the Objective 3 expert validators). Reported as **weighted mean and standard deviation** per
-characteristic, against the Table 4 interpretation bands declared in advance:
-
-| Range | Interpretation |
-|---|---|
-| 4.20–5.00 | Excellent |
-| 3.40–4.19 | Very Good |
-| 2.60–3.39 | Good |
-| 1.80–2.59 | Fair |
-| 1.00–1.79 | Poor |
-
-**Before administration** (already required by `methodology.md §6.4`): run **CVI** on the items, then a
-**pilot** with **Cronbach's α ≥ 0.70** per subscale. Report both figures with the results.
+The owner-supplied form is final (D-06, D-27; text in `iso-25010-questionnaire.md`). It has **23 Likert items
+on six characteristics**: Functional Suitability, Interaction Capability, Reliability, Performance Efficiency,
+Security, Compatibility. Each item is rated 1–5, where **5 = Strongly Agree**. It goes to **at least 30
+respondents** from IT experts, IT students, teachers and education students, not split equally. Results are
+**descriptive statistics only**. There is no CVI and no Cronbach's α pilot.
 
 ---
 
@@ -187,8 +176,6 @@ was deleted 2026-07-27; the drift check no longer applies to it.)*
 
 | Method | Used for | Target |
 |---|---|---|
-| **Content Validity Index (CVI)** — Lawshe (1975); Polit & Beck (2006) | ISO/IEC 25010 questionnaire (the ISO/IEC 25010 questionnaire), before administration | I-CVI > 0.78; S-CVI/Ave ≥ 0.90 |
-| **Cronbach's α** | Internal consistency of the ISO/IEC 25010 questionnaire (the ISO/IEC 25010 questionnaire) | ≥ 0.70 |
 | **Inter-annotator agreement** (statistic per `docs/specs/judge-finetune.md`) | Human reference labels for judge classification (Objective 4) | per `judge-finetune.md` |
 | **Content or thematic analysis coding** | Expert questionnaire answers; method to be decided (O-04) | Qualitative; not a reliability statistic |
 
@@ -221,9 +208,9 @@ comprehension study).
   with Question Answering.* ICCV 2023; arXiv:2303.11897. *(No longer directly used by any surviving
   instrument in this brief — verify before citing.)*
 - **Lawshe, C. H. (1975)** — *A quantitative approach to content validity.* Personnel Psychology, 28(4),
-  563–575. *(Still used — grounds the ISO/IEC 25010 questionnaire's CVI step, the ISO/IEC 25010 questionnaire.)*
+  563–575. *(No longer used: the CVI step is dropped, D-06.)*
 - **Polit, D. F., & Beck, C. T. (2006)** — the Content Validity Index (CVI), Research in Nursing & Health.
-  *(Still used — the ISO/IEC 25010 questionnaire.)*
+  *(No longer used: the CVI step is dropped, D-06.)*
 - **Caldecott Medal criteria** — Association for Library Service to Children (ALSC/ALA). *(Recognized
   criteria, not a validated instrument; its relevance to the expert questionnaire's questions is plausible but unconfirmed now that the expert questionnaire is qualitative;
   verify before citing.)*

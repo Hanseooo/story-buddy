@@ -344,9 +344,9 @@ git tag `technical-defense-2026-10`.
   open-ended prose, not a form.
 - **Story corpus** assembled from **Stage-1 story donation** (below): 15 stories collected → 10 primary +
   5 backup, provenance documented.
-- **Software-quality harness (Objective 5)** — ISO/IEC 25010 questionnaire, five
-  characteristics, 5-point Likert, weighted mean + SD, administered to **designated software-quality
-  evaluators** (IT practitioners and teachers) — never to the expert validators (RESEARCH_PROTOCOL §6).
+- **Software-quality harness (Objective 5)** — ISO/IEC 25010 questionnaire, 23 items on six
+  characteristics, 5 = Strongly Agree, mean + SD only, administered to **at least 30 designated
+  software-quality respondents** (IT experts, IT students, teachers, education students) — never to the expert evaluators (RESEARCH_PROTOCOL §6).
 - **Metrics export** — generation time, image/regen counts, cost from tracing. Objective 4's
   precision/recall/F1 is computed in Phase 2.5, against the judge's held-out set.
 

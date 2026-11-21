@@ -416,46 +416,18 @@ that produced it; its validity rests on the calibration and reliability discipli
 
 ### 6.3 The system-evaluation questionnaire (Objective 5, ISO/IEC 25010) ⚠️
 
-**Confirm the evaluator profile with your adviser before administering this.**
+The form is final as the owner supplied it (D-06, D-27). The text is in
+`docs/capstone/iso-25010-questionnaire.md`.
 
-> ⚠️ **Pending adviser approval (raised 2026-09-04).** The functional-suitability item read
-> *"analyze, segment, illustrate, narrate, export"*. At that date, narration and PDF export were **cut** (ADR-058)
-> and had never been built, so the item asked evaluators to rate two capabilities that do not exist. The
-> wording below is corrected to what ships. **This is an instrument change and it must be signed off
-> before administration** — it cannot be relabelled after collection.
+The software artifact is evaluated with a questionnaire of **23 Likert items** on **six ISO/IEC 25010
+characteristics**: Functional Suitability (items 1–5), Interaction Capability (6–9), Reliability (10–14),
+Performance Efficiency (15–17), Security (18–21) and Compatibility (22–23). Each item is rated 1–5, where
+**5 = Strongly Agree**, so a higher mean is better. It goes to **at least 30 respondents** from IT experts,
+IT students, teachers and education students, not split equally. Each signs a consent form first.
 
-
-**2026-10-21 update (ADR-071):** PDF download is restored; narration stays excluded. The revised functional-suitability item below remains a proposal pending adviser approval and deployed-feature verification. Never relabel collected ratings or historical compose-only results.
-
-The software artifact is evaluated with a structured questionnaire administered to the designated
-software-quality evaluators, following **ISO/IEC 25010** software product quality characteristics. Five
-applicable characteristics are assessed on a **5-point Likert scale (1 = Poor to 5 = Excellent)**:
-
-| Characteristic | What is asked about |
-|---|---|
-| Functional Suitability | Proposed 2026-10-21, pending adviser sign-off: Does the system analyze, segment, illustrate, assemble a book, and download a teacher-approved classroom book as a PDF? |
-| Performance Efficiency | Is generation time acceptable in a classroom period? |
-| Usability | Can a Grade 5–6 student and a teacher operate it without instruction? |
-| Reliability | Does it recover from a stalled or failed generation without losing work? |
-| Security | Are classroom data isolation and asset access controls effective? |
-
-**How it is evaluated.** For each characteristic, the **weighted mean** determines the overall level of
-acceptability and the **standard deviation** the consistency of ratings among evaluators. The weighted mean is
-interpreted against the descriptive rating scale:
-
-| Weighted mean range (5-point Likert) | Descriptive rating |
-|---|---|
-| 4.20 – 5.00 | Excellent |
-| 3.40 – 4.19 | Very Good |
-| 2.60 – 3.39 | Good |
-| 1.80 – 2.59 | Fair |
-| 1.00 – 1.79 | Poor |
-
-**Content validity precedes administration.** Before any evaluator sees it, the questionnaire is reviewed for
-clarity and relevance of each item to the characteristic it claims to measure; a **Content Validity Index
-(CVI)** is computed and sub-threshold items are revised or removed. The validated questionnaire is then
-**piloted** on a small group held out from the reported sample, with **internal consistency reported
-(Cronbach's α, floor ≥ 0.70)** per characteristic before the instrument is used for real.
+**How it is evaluated.** Descriptive statistics only: the mean and standard deviation per characteristic. There
+is no Content Validity Index and no Cronbach's α pilot. The paper consent form disagrees with the
+questionnaire in places (O-12); the questionnaire's own values stand.
 
 ### 6.4 What each instrument can and cannot do — and the trap to avoid
 
@@ -527,9 +499,8 @@ reliability reported**, and the **held-out set is read exactly once** (§5.1).
 
 ### 7.3 Objective 5 — software quality (ISO/IEC 25010)
 
-Weighted mean and standard deviation per characteristic (Functional Suitability, Performance Efficiency,
-Usability, Reliability, Security), interpreted against the Table in §6.3, with Content Validity Index and
-Cronbach's α reported for the instrument.
+Mean and standard deviation per characteristic (Functional Suitability, Interaction Capability, Reliability,
+Performance Efficiency, Security, Compatibility), as descriptive statistics only (§6.3).
 
 ### 7.4 Non-circularity — the constraint that governs everything above
 

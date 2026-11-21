@@ -33,7 +33,7 @@ three-eyed hedgehog, and whether experts find the books acceptable.
 | 2 | Produce picture books | Run it on real and synthetic stories |
 | 3 | Determine acceptability through expert validation | Two BEEd professors and one Arts professor review each original story and its book through a seven-question open-ended questionnaire |
 | 4 | Evaluate the fine-tuned judge | Measure how well a trained AI model tells "same character" from "different character", using precision, recall and F1 (F1 is the main number) |
-| 5 | Evaluate software quality | IT practitioners and teachers rate the system on ISO/IEC 25010 qualities |
+| 5 | Evaluate software quality | At least 30 IT experts, IT students, teachers and education students rate the system on ISO/IEC 25010 qualities |
 
 The study makes no claim that StoryBuddy is better than other methods and no claim about learning
 gains. [`docs/capstone/research_direction_and_goals.md`, Objectives and §5]

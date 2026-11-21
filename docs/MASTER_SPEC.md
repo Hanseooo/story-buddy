@@ -299,7 +299,7 @@ pipeline behaviours exercised here, not standalone evaluation legs):
 - **Judge classification** — precision/recall/F1 (F1 primary) against human-established reference labels on
   the held-out set (**Objective 4**; an optional secondary comparison vs. the zero-shot base model and the
   existing prompted baseline is permitted, ADR-008 rev. 2026-07-25), VLM–human agreement.
-- **Software quality** — ISO/IEC 25010 characteristics, 5-point Likert, weighted mean + SD (**Objective 5**).
+- **Software quality** — ISO/IEC 25010 characteristics, 23 Likert items on six characteristics, descriptive statistics only (**Objective 5**).
 - **Is the same instrumentation as the Phase 3 study** (Langfuse) — build once, use for
   both dev feedback and research data. Costs money and is non-deterministic; that's why it's not CI.
 
