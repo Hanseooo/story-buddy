@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Type:** task
-**Progress:** open
+**Progress:** resolved
 **Parent:** [`docs/specs/research-page-refresh.md`](../../../docs/specs/research-page-refresh.md)
 **What to build:** ADR-083 exists with status Accepted (2026-11-21) and has its row in `docs/product/ADRs.md`.
 **Source criteria:** US-26 AC-08, AC-09; D-01–D-03, D-13, D-19
@@ -37,3 +37,9 @@ Read it against D-01–D-03, D-13 and D-19. No tests.
 
 ## Blocked by
 None
+
+## Answer
+
+Resolved 2026-11-21. Wrote `docs/product/adr/ADR-083-research-pages-hub-chapter-routes-and-png-diagram-export.md` (status Accepted 2026-11-21, D-19) and its row at the end of `docs/product/ADRs.md`.
+
+It records the six new routes and the hub (D-01, D-02), the three-item header (D-03) and the PNG export (D-13). It keeps the ADR-065/066/067 static, synthetic-only and source-pinned rules, and lists the pipeline facts tested against code (SH-08). No code changed, no frozen ADR edited. No tests (docs only).
