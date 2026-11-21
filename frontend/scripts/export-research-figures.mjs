@@ -69,7 +69,9 @@ const shot = (selector, file, prep = "") =>
       `async page => { const el = page.locator('${selector}').first(); await el.evaluate(el => { ${prep} }); await el.screenshot({ path: '${file.replaceAll("\\", "/")}', scale: 'device' }); }`,
     ),
   );
-const sha256 = (file) => createHash("sha256").update(readFileSync(file)).digest("hex");
+// LF-normalised, matching figures.test.ts, so autocrlf checkouts hash the same as CI.
+const sha256 = (file) =>
+  createHash("sha256").update(readFileSync(file, "utf8").replace(/\r\n/g, "\n")).digest("hex");
 
 const server = createServer((req, res) => {
   const name = decodeURIComponent((req.url ?? "").split("?")[0]).replace(/^\//, "");

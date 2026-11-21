@@ -29,7 +29,9 @@ describe("figure manifest", () => {
     expect(diagrams.length).toBeGreaterThan(0);
     for (const f of diagrams) {
       const source = f.source as string;
-      const sha = createHash("sha256").update(readFileSync(path.join(REPO_ROOT, source))).digest("hex");
+      // Hash with LF line endings so a Windows autocrlf checkout and a CI checkout agree.
+      const text = readFileSync(path.join(REPO_ROOT, source), "utf8").replace(/\r\n/g, "\n");
+      const sha = createHash("sha256").update(text).digest("hex");
       expect(sha, `${source} changed since export: re-export ${f.png}`).toBe(f.sourceSha256);
     }
   });

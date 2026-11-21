@@ -19,7 +19,7 @@
       "png": "langgraph_pipeline_after_2026-10.png",
       "kind": "diagram",
       "source": "docs/diagrams/drawio/langgraph_pipeline_after_2026-10.drawio.svg",
-      "sourceSha256": "b002586d5167400e36c245101b1ce25bc8b637b22b145f7e00e386e01069ffb6",
+      "sourceSha256": "718a82e7a151165e3ea3815846a96aef21568085b617d909b3e474f8ef382ce9",
       "exportedOn": "2026-11-21"
     },
     {
@@ -40,7 +40,7 @@
       "png": "system_architecture.png",
       "kind": "diagram",
       "source": "docs/diagrams/drawio/system_architecture.drawio.svg",
-      "sourceSha256": "0b5db3f1fae74368bd3a2fd299100bfba7a0da7141a8cb16d2573fd76eb9ea77",
+      "sourceSha256": "c240452af25011743afc08994dcb19e2655ed24c661329de7bfaac2b722097de",
       "exportedOn": "2026-11-21"
     },
     {
