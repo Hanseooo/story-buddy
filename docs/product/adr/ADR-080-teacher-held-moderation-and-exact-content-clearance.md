@@ -5,6 +5,8 @@ ADR and synthetic-only, feature-off build authorization. Ticket 05's scene hold 
 contracts are implemented; teacher inspection/decisions and later subjects remain pending. This acceptance does
 not claim audit completion, educator/ethics approval or authorization to enable real-child use.
 
+**Default changed (2026-11-21):** the owner turned this on by default so it can be tested without setup. The ethics re-review and the moderation-audit gate before real children still apply; flipping the default back is part of that release decision. `enable_teacher_moderation_review` now defaults to `True`.
+
 **Amendments:** ADR-003/024 and ADR-029 (a dedicated moderation pause alongside child
 reveal); ADR-011 (first-flag holds and policy-based exact-content teacher clearance);
 ADR-023 (defaulted additive contract fields); ADR-025 (held/stopped outcomes, bounded replacement

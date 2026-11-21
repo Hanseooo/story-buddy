@@ -190,3 +190,10 @@ def test_settings_has_no_dev_classroom_id():
 def test_settings_has_no_dev_profile_id():
     """spec §9 test 14: sentinel is retired."""
     assert not hasattr(settings, "dev_profile_id")
+
+
+def test_teacher_review_and_magic_pencil_ship_on_by_default():
+    from app.config import Settings
+
+    assert Settings.model_fields["enable_teacher_moderation_review"].default is True
+    assert Settings.model_fields["enable_magic_pencil"].default is True

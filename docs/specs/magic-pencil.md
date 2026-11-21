@@ -40,7 +40,7 @@ holds for pencil text and results, approval reset on edit, logging of every penc
 - Page-level teacher approval. Review stays whole-book.
 - Further paid probes for this epic. The pencil ships unmeasured on children's wording.
 
-**Release gates (unchanged from the phase map):** the feature is off by default and synthetic-only
+**Release gates:** the feature is on by default since 2026-11-21 (owner, for testing ease) and synthetic-only
 until an ethics re-review. Pencil free text does not ship before
 `ptd-moderation-calibration` audit 01 resolves.
 
@@ -192,7 +192,7 @@ teacher-review mode a flag already holds and a teacher replacement redraws from
 
 ## 3. Shared behaviour
 
-- **SH-01 — Off by default, per submission.** A new setting (default off) is snapshotted onto the job at
+- **SH-01 — On by default (2026-11-21), per submission.** A setting (default on; was off until 2026-11-21) is snapshotted onto the job at
   submission, like `enable_teacher_moderation_review`. A job submitted with it off never shows the
   tools, even if the setting is later turned on. Turning it off does not remove tools from jobs
   already submitted with it on. The tools are offered only on jobs whose `moderation_mode` is

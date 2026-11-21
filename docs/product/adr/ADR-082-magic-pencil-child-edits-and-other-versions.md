@@ -6,6 +6,8 @@ ethics re-review before real children; pencil free text ships only after `ptd-mo
 audit 01. Implemented behind the setting (tickets 03–11, 2026-11-03); migrations 0027–0032 not yet
 applied and the US-01–US-05 browser pass pending.
 
+**Default changed (2026-11-21):** the owner turned this on by default so it can be tested without setup. The ethics re-review and the moderation-audit gate before real children still apply; flipping the default back is part of that release decision. `enable_magic_pencil` now defaults to `True`.
+
 **Amends:** ADR-029 §2 (what a reveal change is, and the unconditional overwrite) and ADR-069 (chips are
 the only child input; the description is never extended). Specified by
 [`docs/specs/magic-pencil.md`](../../specs/magic-pencil.md).

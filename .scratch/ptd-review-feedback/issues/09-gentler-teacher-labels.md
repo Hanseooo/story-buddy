@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Type:** task
-**Progress:** open
+**Progress:** resolved
 **Blocked by:** None
 
 **Parent:** `docs/specs/teacher-review-and-approval.md` §14
@@ -53,3 +53,7 @@ The existing page test, with the strings updated. Run it red against the old lab
 None. (OD-8 was settled 2026-10-29.)
 
 ## Comments
+
+## Answer (2026-11-21)
+
+Shipped in `c6a7fb7` (PR #132). Buttons read "Share with class" / "Not ready to share yet"; no "Reject" remains in the teacher UI. API values unchanged. Signed-in browser pass not done (login wall); see the PR for test evidence.

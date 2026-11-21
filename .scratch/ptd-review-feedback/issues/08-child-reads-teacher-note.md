@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Type:** task
-**Progress:** open
+**Progress:** resolved
 **Blocked by:** `.scratch/ptd-review-feedback/issues/05-notes-schema-and-teacher-api.md`,
 `.scratch/ptd-review-feedback/issues/07-teacher-note-row-in-review-dialog.md`
 
@@ -75,3 +75,7 @@ Backend: test client in `test_review_notes.py` for owner-only reads, 404 parity,
 05 (table and switch), 07 (teacher UI for the J1–J3 pass).
 
 ## Comments
+
+## Answer (2026-11-21)
+
+Shipped in `6da7d8b` and `e46dd25` (PR #132). Bookshelf card shows "A note from your teacher"; the book page shows the note and marks it seen via `POST /jobs/{id}/note/seen`. Needs the classroom switch (06) on. Signed-in browser pass not done (login wall); see the PR for test evidence.

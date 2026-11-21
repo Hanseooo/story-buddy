@@ -45,7 +45,7 @@ stricter, the stricter rule wins.
   spend at that scene. Two capped loops return to `char_bible`: `reveal`'s `try_again` (3 taps,
   `MAX_RETRY_TAPS`) and one redraw of a moderation-flagged reference (`MAX_MOD_REDRAWS = 1`).
   In baseline mode `reveal` holds the only `interrupt()`. Jobs captured in `teacher_review_v1`
-  (ADR-080, `enable_teacher_moderation_review`, off by default) can also enter `optional_themes`,
+  (ADR-080, `enable_teacher_moderation_review`, on by default since 2026-11-21) can also enter `optional_themes`,
   `moderation_review` (a second `interrupt()`, the teacher hold) and `moderation_replace`.
   Export is cut from scope (ADR-058).
 - The worker's checkpointer uses the Supabase **direct connection (5432)**, never the 6543 pooler
