@@ -3,6 +3,12 @@
 export const SOURCES = {
   groupGuide: "docs/capstone/group-guide.md",
   stageAudit: "docs/capstone/pipeline-stage-audit-2026-10.md",
+  changelog: "docs/capstone/research-changelog.md",
+  adr056: "docs/product/adr/ADR-056-numeric-attribute-fidelity-is-a-documented-limitation-not-a-pre-campaign-fix.md",
+  adr068: "docs/product/adr/ADR-068-story-input-expands-to-500-words-with-the-existing-page-and-image-ceilings.md",
+  adr082: "docs/product/adr/ADR-082-magic-pencil-child-edits-and-other-versions.md",
+  referenceJudge: "docs/capstone/reference_judge_investigation_2026-09-02.md",
+  readiness: "docs/specs/obj4-readiness-audit.md",
   probes: "docs/capstone/model-probes-2026-10.md",
   phase05: "docs/product/PHASE_05_RESULTS.md",
   examples: "docs/specs/research-limitations-examples.md",
@@ -83,6 +89,8 @@ export const AUDIT = {
   pages: 150,
   references: 55,
   defective: 77,
+  acceptable: 71,
+  uncertain: 2,
 } as const;
 
 export type Share = { part: number; whole: number };
@@ -121,7 +129,7 @@ export const DEFECTS = [
 // Stage audit, "References" and "Page gate": what the pipeline's own two checks said about the reviewed images.
 export const CHECKS = {
   reference: { defective: 17, defectiveFailed: 15, acceptable: 38, acceptableFailed: 15 },
-  page: { defective: 77, defectivePassed: 29, acceptable: 71, acceptableFailed: 28 },
+  page: { defective: 77, defectivePassed: 29, acceptable: 71, acceptableFailed: 28, rejectedFirstDrafts: { whole: 71, acceptable: 23 } },
 } as const;
 
 // Group guide §5.4, first row: the blinded screen of 2026-10-08.
@@ -129,6 +137,7 @@ export const KLEIN = {
   pages: 30,
   duplicates: { qwen: 4, klein: 4 },
   identityLost: { qwen: 3, klein: 10 },
+  action: { qwen: 2, klein: 8 },
 } as const;
 
 // Group guide §5.1: one invented character, with its reference picture and without it.
@@ -136,6 +145,38 @@ export const PHASE_05 = {
   qwen: { withReference: "70%", without: "40%" },
   omnigen: { withReference: "80%", without: "30%" },
 } as const;
+
+// Stage audit "Provisional results", Shipped pages, and "Page gate". The sums are 77 + 71 + 2 = 150.
+export const CHECK_SENTENCES = {
+  totals: `${AUDIT.defective} of ${AUDIT.pages} have a major defect, ${AUDIT.acceptable} are acceptable and ${AUDIT.uncertain} are uncertain.`,
+  reference:
+    "The check fails most bad references (15 of 17), but it also fails about 4 in 10 good ones (15 of 38). The pipeline then ships the best of the failing draws, so every defect it found still reached the pages.",
+  page: "The page check let 29 of the 77 defective pages through (missed) and failed 28 of the 71 acceptable ones (false alarms). 23 of the 71 redrawn first drafts were already acceptable. A mistake copied from the reference matches the reference, so it passes.",
+} as const;
+
+// Probes, top note and "Blinded klein screen: result".
+export const KLEIN_NOTES = {
+  rater: "Scored by one rater, the AI assistant, with the editor's name hidden.",
+  action: "klein also missed the action on 8 of 30 pages, against 2 for Qwen.",
+} as const;
+
+// The audit pages were drawn before these changes (changelog 2026-10-11, 2026-10-13, 2026-11-02, 2026-11-21).
+export const AUDIT_NOTE =
+  "Changes since the audit, such as generation versions 6 and 7, the 500-word story limit and the magic pencil, are not measured here.";
+
+// Chart ids that ticket 11 screenshots from `[data-chart-id]`. The values are CHECKS above.
+export const CHARTS_AS_OF = AUDIT.date;
+const chart = (id: string, alt: string) => ({ id, alt, png: `/research/diagrams/${id}.png` });
+export const CHARTS = [
+  chart(
+    "reference-check-outcomes",
+    `Bars for the ${CHECKS.reference.defective} defective and ${CHECKS.reference.acceptable} acceptable references. The reference check failed ${CHECKS.reference.defectiveFailed} of the defective ones and also ${CHECKS.reference.acceptableFailed} of the acceptable ones.`
+  ),
+  chart(
+    "page-check-outcomes",
+    `Bars for the ${CHECKS.page.defective} defective and ${CHECKS.page.acceptable} acceptable shipped pages. The page check passed ${CHECKS.page.defectivePassed} of the defective ones and failed ${CHECKS.page.acceptableFailed} of the acceptable ones.`
+  ),
+] as const;
 
 export type Outcome = "Rejected" | "Not adopted" | "No change" | "Merged" | "Stated limitation" | "A lead, not adopted";
 
@@ -180,6 +221,11 @@ export const TRIED: { tried: string; result: string; outcome: Outcome }[] = [
       "5 of 9 fixed with the character unchanged, 1 borderline, 3 missed. Pages redrawn from the fixed references then showed the right count on 5 of 6 (1 borderline). One try each, with instructions written by hand. Not adopted yet: it needs a test with automatic instructions and an ADR.",
     outcome: "A lead, not adopted",
   },
+  {
+    tried: "Editing the reference with only the tapped chip's words (November 1)",
+    result: "2 of 9 fixed, against 5 of 9 with hand-written instructions. It failed its 6-of-9 rule. A tap stays a fresh draw.",
+    outcome: "Rejected",
+  },
 ];
 
 export type Area = "The pictures" | "How it was scored" | "The judge" | "Scope";
@@ -188,17 +234,17 @@ export type Area = "The pictures" | "How it was scored" | "The judge" | "Scope";
 export const LIMITATIONS: { title: string; body: string; area: Area }[] = [
   {
     title: "Duplicate characters",
-    body: "About 13% of page images show a character twice. Two different scene editors do this at the same rate, and four fixes failed. It is a limitation of this kind of edit model, measured on two of them, and it remains open.",
+    body: "About 13% of page images, counting redrawn drafts (28 of 221), show a character twice. On finished pages it is 15 of 150. Two different scene editors do this at the same rate, and four fixes failed. It is a limitation of this kind of edit model, measured on two of them, and it remains open.",
     area: "The pictures",
   },
   {
     title: "Stated body counts",
-    body: '"Six legs" or "seven stripes" usually come out wrong. No tested model draws them from text (ADR-056). Editing the finished reference fixed 5 of 9 in one small test, and pages redrawn from those references kept the fix. It is a lead and not yet a fix: one try each, with instructions written by hand.',
+    body: "\"Six legs\" or \"seven stripes\" usually come out wrong, and no tested model draws them from text (ADR-056). The reference check cannot reliably catch them either: it once listed \"six legs\" as present on a four-legged drawing. Editing the finished reference fixed 5 of 9 with hand-written instructions, but only 2 of 9 with the chip's own words. The magic pencil (ADR-082) lets a child request such an edit in their own words, and it has been on by default since 2026-11-21. Whether children's wording works is unmeasured, and every use is logged.",
     area: "The pictures",
   },
   {
     title: "Characters with no reference",
-    body: 'Background groups like "his six dust-bunny soldiers" have no reference picture. The model guesses what they look like, and once drew them as human boys.',
+    body: "Background groups like \"his six dust-bunny soldiers\" have no reference picture. The model guesses what they look like: dust-bunny soldiers came out as human boys in one draw and as helmeted humanoid soldiers in another. Scenes that call for such a group ship a duplicate or extra character on 24% of pages, against 10% elsewhere.",
     area: "The pictures",
   },
   {
@@ -213,7 +259,7 @@ export const LIMITATIONS: { title: string; body: string; area: Area }[] = [
   },
   {
     title: "The judge result",
-    body: "Objective 4's result is partial, and the trained judge scored lower F1 than the untrained one.",
+    body: "Objective 4's result is partial: the prompted Gemma baseline was not scored. The trained judge raised fewer false alarms but missed most real differences, and scored lower F1 than the untrained model (0.31 vs 0.47).",
     area: "The judge",
   },
   {
@@ -230,5 +276,15 @@ export const LIMITATIONS: { title: string; body: string; area: Area }[] = [
     title: "Where the defect rate comes from",
     body: 'The "about half the pages" figure is from invented stories, with 117 of 150 pages tagged as containing non-human characters, including mixed casts. Human-only pages did better (11 of 33 against 66 of 117), but 33 pages is too few to call a rate, and no donated story was reviewed.',
     area: "How it was scored",
+  },
+  {
+    title: "The reference check cannot verify stated details",
+    body: "Off-the-shelf vision models tested in September could not tell that a \"metal comb\" was drawn red, and one listed \"six legs\" as present on a four-legged drawing. The trained judge would not fix this: it compares pages with references, not references with the story text.",
+    area: "The pictures",
+  },
+  {
+    title: "Safety checks sometimes refuse harmless stories",
+    body: "In the corpus run, the stricter of the two image checks stopped 4 of 30 synthetic stories that the main check had cleared. The same scene could pass on a later try with no change.",
+    area: "The pictures",
   },
 ];

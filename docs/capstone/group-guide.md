@@ -114,19 +114,29 @@ ranks each judge by how well it catches those 47.
 
 An unreadable answer is output that did not parse. It is scored as "same character", so on a
 different-character pair it counts as a miss. Seeds 0 and 1 gave unreadable answers on about one
-pair in eight, which is part of why their recall is low.
+pair in eight. An unreadable answer on a Different pair counts as a miss, so this may lower their
+recall. How many of them fell on Different pairs was not counted.
 
 **In plain words:**
 
-- The trained judge is more careful. When it says "different", it is usually right (high precision).
-- It misses most of the real differences (low recall).
-- On F1, the main number, it is lower than the untrained model.
+- The fine-tuned judge raises far fewer false alarms (2 vs 47) because it rarely says 'different' at
+  all. As a result it misses most real character changes (38 of 47 vs 18 of 47), and 12% of its
+  answers could not be read. On the main score, F1, it is worse (0.31 vs 0.47).
 - The gap's 95% interval runs from −0.36 to +0.003, so it just touches zero.
 - This is a partial result. It does not say fine-tuning can never work. It says this training run
   did not improve the judge under these data and settings.
 - Dropping the characters whose references were ambiguous (a check registered in advance; one
   of them is in the test set, 20 pairs) does not change the picture: untrained F1 0.48, trained
   seed 1 0.35.
+
+**What we recommend.** Items 2 to 4 come from measured facts. Whether they would fix the result is
+untested.
+
+1. Keep prompted Gemma, a no-change decision. Gemma was not scored on this test set.
+2. Reject checkpoints with many unreadable answers, and enlarge validation's Different class.
+3. Record the judge's full answer text.
+4. Fix the constructed-pair sentence shared by 104 training pairs.
+5. Report the result in the bounded wording of research-changelog.md section 1 item 4.
 
 **How much the two human raters agreed.** On the 329 test pairs, the two groupmates gave the same
 "same or different" answer 89.7% of the time; Cohen's κ, which corrects for chance agreement, is
@@ -178,27 +188,34 @@ as provisional.
 | Adding a character the direction names by species ("the moth") | Fixed the one story it targets. Merged on 2026-10-09 (PR #101). |
 | Other reference-picture models for stated body counts | None drew counts like "six legs" correctly. Already a stated limitation (ADR-056). |
 | Editing the finished reference to fix the count (October 11) | 5 of 9 fixed with the character unchanged, 1 borderline, 3 missed. Pages redrawn from the fixed references then showed the right count on 5 of 6 (1 borderline). One try each, with instructions written by hand. Not adopted yet: it needs a test with automatic instructions and an ADR. |
+| Editing the reference with only the tapped chip's words (November 1) | 2 of 9 fixed, against 5 of 9 with hand-written instructions. It failed its 6-of-9 rule. A tap stays a fresh draw. |
 
 [`docs/capstone/model-probes-2026-10.md`, top table]
 
 ## 6. Limitations to say out loud at the defense
 
-1. **Duplicate characters.** About 13% of page images show a character twice. Two different scene
-   editors do this at the same rate, and four fixes failed. It is a limitation of this kind of edit
-   model, measured on two of them, and it remains open.
-2. **Stated body counts.** "Six legs" or "seven stripes" usually come out wrong. No tested model
-   draws them from text (ADR-056). Editing the finished reference fixed 5 of 9 in one small test,
-   and pages redrawn from those references kept the fix. It is a lead and not yet a fix: one try
-   each, with instructions written by hand.
+1. **Duplicate characters.** About 13% of page images, counting redrawn drafts (28 of 221), show a
+   character twice. On finished pages it is 15 of 150. Two different scene editors do this at the
+   same rate, and four fixes failed. It is a limitation of this kind of edit model, measured on two
+   of them, and it remains open.
+2. **Stated body counts.** "Six legs" or "seven stripes" usually come out wrong, and no tested model
+   draws them from text (ADR-056). The reference check cannot reliably catch them either: it once
+   listed "six legs" as present on a four-legged drawing. Editing the finished reference fixed 5 of
+   9 with hand-written instructions, but only 2 of 9 with the chip's own words. The magic pencil
+   (ADR-082) lets a child request such an edit in their own words, and it has been on by default
+   since 2026-11-21. Whether children's wording works is unmeasured, and every use is logged.
 3. **Characters with no reference.** Background groups like "his six dust-bunny soldiers" have no
-   reference picture. The model guesses what they look like, and once drew them as human boys.
+   reference picture. The model guesses what they look like: dust-bunny soldiers came out as human
+   boys in one draw and as helmeted humanoid soldiers in another. Scenes that call for such a group
+   ship a duplicate or extra character on 24% of pages, against 10% elsewhere.
 4. **Actions.** Some pages miss the action, or give it to the wrong character. Describing only what
    is visible helped where the text mentioned something absent or pretend. That kind is about 3
    pages in 150, too few to measure a fix before the defense.
 5. **How the image findings were sampled.** Most October probes used pages chosen because they
    had failed, with one or two draws each. Only the klein screen was blinded and used random pages.
-6. **The judge result.** Objective 4's result is partial, and the trained judge scored lower F1
-   than the untrained one.
+6. **The judge result.** Objective 4's result is partial: the prompted Gemma baseline was not
+   scored. The trained judge raised fewer false alarms but missed most real differences, and scored
+   lower F1 than the untrained model (0.31 vs 0.47).
 7. **The labels.** Two groupmates labelled every pair and the owner settled disagreements. Pairs
    both raters got wrong were never re-checked, apart from ten audited ones. Hair length is not a
    rule, so raters could split on it. Object characters (such as a tin can) lean toward
@@ -209,6 +226,13 @@ as provisional.
    stories, with 117 of 150 pages tagged as containing non-human characters, including mixed
    casts. Human-only pages did better (11 of 33 against 66 of 117), but 33
    pages is too few to call a rate, and no donated story was reviewed.
+10. **The reference check cannot verify stated details.** Off-the-shelf vision models tested in
+   September could not tell that a "metal comb" was drawn red, and one listed "six legs" as present
+   on a four-legged drawing. The trained judge would not fix this: it compares pages with
+   references, not references with the story text.
+11. **Safety checks sometimes refuse harmless stories.** In the corpus run, the stricter of the two
+   image checks stopped 4 of 30 synthetic stories that the main check had cleared. The same scene
+   could pass on a later try with no change.
 
 [`docs/capstone/model-probes-2026-10.md` "Limitations to carry into the write-up",
 `docs/product/PREREGISTRATION_OBJ4.md`, `docs/capstone/methodology.md` §9]
