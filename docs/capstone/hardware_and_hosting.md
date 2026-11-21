@@ -67,7 +67,7 @@ the de-scope ladder** and nothing may hard-depend on it.
 The original single hardware table conflated two different machines. They are split below.
 
 ### 3a. Development Environment Hardware
-*(Updated 2026-11-21: the only confirmed development hardware is the RTX 3050 Ti with 4 GB VRAM, `docs/capstone/research_runbook.md:549`. The processor, memory and storage rows below are the July recommendations; the owner has not confirmed them. The registered training did not run on this machine; see §7.)*
+*(Updated 2026-11-21: the only confirmed development hardware is the RTX 3050 Ti with 4 GB VRAM, `docs/capstone/research_runbook.md` ("RTX 3050 Ti has 4 GB VRAM"). The processor, memory and storage rows below are the July recommendations; the owner has not confirmed them. The registered training did not run on this machine; see §7.)*
 *What the student needs to build, orchestrate, fine-tune, and evaluate the system.* This is a developer
 workstation, not a server — it never serves the deployed product to users.
 
