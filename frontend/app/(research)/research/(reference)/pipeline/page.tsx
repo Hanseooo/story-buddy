@@ -41,6 +41,7 @@ function Diagram({ figure, caption, alt }: { figure: (typeof FIGURES)[keyof type
   return (
     <ChartFigure
       id={figure.id}
+      wide
       alt={alt}
       asOf={figure.asOf}
       png={figure.png}

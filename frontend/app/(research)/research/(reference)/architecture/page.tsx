@@ -79,6 +79,7 @@ export default function ArchitecturePage() {
         </p>
         <ChartFigure
           id="system-architecture"
+          wide
           alt={DIAGRAM.alt}
           asOf={DIAGRAM.asOf}
           png={DIAGRAM.png}
