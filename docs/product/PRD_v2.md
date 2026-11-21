@@ -25,9 +25,9 @@ The updated capstone manuscript is now authoritative for the study design (ADR-0
   primary) against human reference labels, character-identity-level split, with an **optional** secondary
   comparison against the zero-shot base model and the existing prompted baseline. This is no longer
   "descriptive only / no comparative claim / build-gate only."
-- **Objective 5 is ISO/IEC 25010 software quality** — five characteristics (Functional Suitability,
-  Performance Efficiency, Usability, Reliability, Security), 5-point Likert, weighted mean + SD, Table 4
-  interpretation bands.
+- **Objective 5 is ISO/IEC 25010 software quality** — 23 Likert items on six characteristics (Functional Suitability,
+  Interaction Capability, Reliability, Performance Efficiency, Security, Compatibility), 5 = Strongly Agree,
+  descriptive statistics only (D-06).
 - **Corpus renumbered and located:** ~~"~50 (60–70) donated stories"~~ → **15 stories collected → 10
   primary + 5 backup**, Grade 5–6. Stories collected at **Vicente Hizon, Sr. Elementary School** (D-04); system
   development and evaluation at **Holy Cross of Davao College (HCDC)**, Davao City, Philippines.
@@ -331,12 +331,11 @@ the *warrant* for why acceptability matters; it is not a finding of this study.
   figure, not a replacement for it. ADR-018's δ = 3 non-inferiority test remains a **deployment gate**
   (does the fine-tuned judge replace the prompted incumbent in the product), not a reported finding. Full
   machinery in ADR-018 and `docs/specs/judge-finetune.md`.
-- **Objective 5 — software quality.** The ISO/IEC 25010 questionnaire — five applicable
-  characteristics (Functional Suitability, Performance Efficiency, Usability, Reliability, Security),
-  5-point Likert, weighted mean + SD per characteristic, interpreted against Table 4 bands
-  (4.20–5.00 Excellent · 3.40–4.19 Very Good · 2.60–3.39 Good · 1.80–2.59 Fair · 1.00–1.79 Poor) —
-  administered to **designated software-quality evaluators** (IT practitioners and teachers), separate
-  from the expert validators.
+- **Objective 5 — software quality.** The ISO/IEC 25010 questionnaire — 23 Likert items on six
+  characteristics (Functional Suitability, Interaction Capability, Reliability, Performance Efficiency,
+  Security, Compatibility), 5 = Strongly Agree, mean + SD per characteristic as descriptive statistics only —
+  administered to **at least 30 designated software-quality respondents** (IT experts, IT students, teachers
+  and education students, not split equally), separate from the expert evaluators.
 
 **Objectives 1–2 are the built artifact, evidenced by the built pipeline, its tests and the 42 books (D-20, D-28).** The planned **Functional Verification
 Matrix** (dropped 2026-11-21, never built) would have recorded system-generated pass/fail per functional category (input validation & moderation, story
@@ -364,7 +363,7 @@ collect their responses on paper and by form, not in-app. Rationale and rejected
 |---|---|---|
 | Grade 5–6 learners | Write original stories only — no evaluation role | Corpus |
 | Expert evaluators (2 BEEd professors, 1 Arts professor) | Written seven-question open-ended questionnaire | Objective 3 |
-| Designated software-quality evaluators (IT practitioners, teachers) | ISO/IEC 25010 questionnaire | Objective 5 |
+| Designated software-quality respondents (IT experts, IT students, teachers, education students) | ISO/IEC 25010 questionnaire | Objective 5 |
 
 Full detail (recruitment, instruments, ethics staging): `docs/product/RESEARCH_PROTOCOL.md` §4–§10.
 
@@ -374,7 +373,7 @@ Full detail (recruitment, instruments, ethics staging): `docs/product/RESEARCH_P
 | Functional verification (Objectives 1–2) | Per-category success rate, `Successful ÷ Total × 100` | Dropped (D-28): not built; evidence is the built pipeline, its tests and the 42 books |
 | Expert validation (Objective 3) | Coded answers to the seven open-ended questions | Content or thematic analysis (to be decided, O-04) |
 | Judge classification (Objective 4) | Precision, recall, F1 (F1 primary) vs human reference labels | Held-out test set; optional comparison vs zero-shot base + prompted baseline |
-| Software quality (Objective 5) | Weighted mean + SD per ISO/IEC 25010 characteristic | the ISO/IEC 25010 questionnaire |
+| Software quality (Objective 5) | Mean + SD per ISO/IEC 25010 characteristic (descriptive only) | the ISO/IEC 25010 questionnaire |
 | Generation Time | Submission → completed storybook | Instrumentation (§16) |
 | AI Resource Usage | Avg generation time, image count, regen count, API cost/story | Instrumentation (§16) |
 

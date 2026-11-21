@@ -83,8 +83,8 @@ regeneration inside the pipeline and using it to score the outputs it helped pro
 
 Separately from Objectives 3 and 4, the delivered **software artifact** is evaluated with a structured
 questionnaire administered to **designated software-quality evaluators** — a group separate from the expert
-validators of Objective 3 — following the **ISO/IEC 25010** software product quality model, restricted to the
-five applicable characteristics below. This is the operator-facing *software* leg, kept as a separate
+validators of Objective 3 — following the **ISO/IEC 25010** software product quality model, with the
+six characteristics below. This is the operator-facing *software* leg, kept as a separate
 instrument from expert validation (defense-panel note 11): Objective 3 judges the artifacts the system
 produces; this questionnaire judges the system itself.
 
@@ -94,24 +94,12 @@ administration; it cannot be relabelled after collection.
 
 **2026-10-21 update (ADR-071):** PDF download is restored; narration stays excluded. The revised item below remains a proposal until adviser sign-off and deployed-feature verification. No collected ratings or historical compose-only results may be relabelled.
 
-| Characteristic | What the items ask about |
-|---|---|
-| Functional suitability | Proposed 2026-10-21, pending adviser sign-off: Does the system analyze, segment, illustrate, assemble a book, and download a teacher-approved classroom book as a PDF? |
-| Performance efficiency | Is generation time acceptable within a classroom period? |
-| Usability | Can a Grade 5–6 student and a teacher operate it without instruction? |
-| Reliability | Does it recover from a stalled or failed generation without losing work? |
-| Security | Are classroom data isolation and asset-access controls effective? |
-
-Items use a **five-point Likert scale (1 = Poor … 5 = Excellent)**. Results are reported as the **weighted
-mean and standard deviation** per characteristic, interpreted against the following bands:
-
-| Range | Interpretation |
-|---|---|
-| 4.20–5.00 | Excellent |
-| 3.40–4.19 | Very Good |
-| 2.60–3.39 | Good |
-| 1.80–2.59 | Fair |
-| 1.00–1.79 | Poor |
+The form is final as the owner supplied it (D-06, D-27; text in `iso-25010-questionnaire.md`). It has **23
+Likert items on six characteristics**: Functional Suitability, Interaction Capability, Reliability,
+Performance Efficiency, Security and Compatibility. Items use a **five-point Likert scale where 5 = Strongly
+Agree**. It goes to **at least 30 respondents** from IT experts, IT students, teachers and education students,
+not split equally. Results are reported as **descriptive statistics only**: the mean and standard deviation
+per characteristic. There is no Content Validity Index and no Cronbach's α pilot.
 
 This questionnaire measures **perceived software quality only.** It does not, and is not presented to, answer
 whether the generated outputs are acceptable (Objective 3) or how well the consistency judge classifies
@@ -121,28 +109,10 @@ whether the generated outputs are acceptable (Objective 3) or how well the consi
 
 ## Validation of the Instruments
 
-An instrument is not trustworthy merely because it exists. Two properties are established before any
-instrument's results are reported: that it measures the right thing (**validity**) and that it measures
-consistently (**reliability**). The procedure differs between the questionnaire and the human-scored
-instruments, and both are described below.
-
-### Content and face validity of the questionnaire ⚠️
-
-Before administration, the ISO/IEC 25010 system-evaluation questionnaire is reviewed by a panel of **content-
-validity reviewers** — practitioners with relevant software-engineering or educational-technology background —
-who judge whether each item is clear, relevant to the quality characteristic it claims to measure, and free of
-ambiguity. Item-level and scale-level agreement is quantified with a **Content Validity Index (CVI)**, and
-items falling below the accepted threshold are revised or removed. The questionnaire is not administered to
-real evaluators until this review is complete. This step establishes that the questionnaire measures the
-ISO/IEC 25010 characteristics it claims to, rather than assuming it.
-
-### Reliability pilot of the questionnaire
-
-The validated questionnaire is then piloted with a small group of evaluators who are not part of the reported
-sample. The **internal consistency** of each subscale is computed as **Cronbach's α**, with a conventional
-floor of **α ≥ 0.70**. A subscale that falls below the floor is revised — by clarifying or replacing items —
-and the pilot is repeated before the questionnaire is used for real. The final internal-consistency figures are
-reported alongside the questionnaire results.
+An instrument is not trustworthy merely because it exists. The human-scored instruments are calibrated before
+their results are reported, as described below. The two questionnaires (Objectives 3 and 5) are the owner's
+final forms: there is no CVI review and no Cronbach's α pilot for the ISO/IEC 25010 questionnaire (D-06), and
+the expert questionnaire is qualitative.
 
 ### Calibration and reliability of the human reference labels ⚠️
 

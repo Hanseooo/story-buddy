@@ -97,7 +97,7 @@ That is the SDG-4 hook, and it is a design property, not a hope.
 |---|---|---|---|
 | 3 — acceptability | Are the generated picture books acceptable for presentation quality and classroom use? | Seven-question written open-ended questionnaire (the expert questionnaire); content or thematic analysis, to be decided (§5) | Expert evaluators: two BEEd professors, one Arts professor |
 | 4 — judge classification | How well does the fine-tuned judge classify character consistency against human reference labels? | Precision / recall / F1 (F1 primary) on the character-disjoint held-out set; optional comparison vs zero-shot base + existing prompted baseline (§6) | None — model evaluated against researcher-established reference labels |
-| 5 — software quality | Is StoryBuddy's software quality acceptable on ISO/IEC 25010? | 5-point Likert questionnaire, five characteristics, weighted mean + SD (§6) | Designated software-quality evaluators (separate from the expert validators) |
+| 5 — software quality | Is StoryBuddy's software quality acceptable on ISO/IEC 25010? | 23-item Likert questionnaire, six characteristics, mean + SD only (§6) | At least 30 designated software-quality respondents (separate from the expert evaluators) |
 
 **Objectives 1–2 sit outside this table, and are evidenced by the built pipeline, its tests and the 42 books (D-20, D-28).** They are the built artifact, not an
 evaluation leg with respondents. The planned **Functional Verification Matrix** (dropped 2026-11-21, never built) would have recorded system-generated pass/fail per
@@ -170,14 +170,13 @@ finding of Objective 4.
 
 ### Objective 5 — ISO/IEC 25010 software quality
 
-- **Five applicable characteristics:** Functional Suitability, Performance Efficiency, Usability,
-  Reliability, Security.
-- **Instrument (D):** **5-point Likert (1 = Poor … 5 = Excellent).**
-- **Analysis:** descriptive statistics — **weighted mean + standard deviation** per characteristic,
-  interpreted against the manuscript's Table 4 bands: **4.20–5.00 Excellent · 3.40–4.19 Very Good ·
-  2.60–3.39 Good · 1.80–2.59 Fair · 1.00–1.79 Poor.**
-- **Respondents:** **designated software-quality evaluators** (IT practitioners and teachers), separate
-  from the Objective 3 expert validators.
+- **Six characteristics:** Functional Suitability, Interaction Capability, Reliability, Performance
+  Efficiency, Security, Compatibility.
+- **Instrument:** **23 Likert items, 5 = Strongly Agree** (`docs/capstone/iso-25010-questionnaire.md`, D-06, D-27).
+- **Analysis:** **descriptive statistics only** — mean + standard deviation per characteristic. No CVI and
+  no Cronbach's α pilot.
+- **Respondents:** **at least 30 designated software-quality respondents** (IT experts, IT students,
+  teachers and education students, not split equally), separate from the Objective 3 expert evaluators.
 
 ---
 
@@ -189,7 +188,7 @@ Three respondent groups, three roles — none of them overlap:
 |---|---|---|
 | Grade 5–6 learners | Write **original stories only** — no validation/evaluation role | Corpus (§8) |
 | Expert evaluators (2 BEEd professors, 1 Arts professor) | Written seven-question open-ended questionnaire | Objective 3 |
-| Designated software-quality evaluators (IT practitioners, teachers) | ISO/IEC 25010 questionnaire | Objective 5 |
+| Designated software-quality respondents (IT experts, IT students, teachers, education students) | ISO/IEC 25010 questionnaire | Objective 5 |
 
 Learners are anonymized and assigned unique IDs at intake (§9); they never see, rate, or comment on any
 generated book, their own or anyone else's — the classroom gallery is display-only (ADR-021) and carries
@@ -321,7 +320,7 @@ Objectives 3–5.
 (HCDC)**, Davao City, where system development and evaluation take place.
 
 **Software-quality evaluators (Objective 5, §6).** Designated separately from the expert validators, drawn
-from IT practitioners and teachers.
+from IT experts, IT students, teachers and education students (at least 30 in total).
 
 A classroom-level intervention study, or recruitment beyond the named institutions, would need a broader
 ethics footprint. That is a bigger thesis than this one.
@@ -355,7 +354,7 @@ moderation thresholds, and failure copy are all calibrated to a band.
 |---|---|---|
 | Expert validation (Objective 3) | Coded answers to the seven open-ended questions | Content or thematic analysis of the expert questionnaire responses (to be decided, O-04) |
 | Judge classification (Objective 4) | Precision, recall, F1 (F1 primary) vs human reference labels, character-identity-level split | Held-out test set; optional comparison vs zero-shot base + prompted baseline |
-| Software quality (Objective 5) | Weighted mean + SD per ISO/IEC 25010 characteristic (Functional Suitability, Performance Efficiency, Usability, Reliability, Security), interpreted against Table 4 bands | The ISO/IEC 25010 questionnaire, designated software-quality evaluators |
+| Software quality (Objective 5) | Mean + SD per ISO/IEC 25010 characteristic (six characteristics, descriptive only) | The ISO/IEC 25010 questionnaire, at least 30 designated software-quality respondents |
 | Generation Time | Submission → completed storybook | Instrumentation (Langfuse) |
 | AI Resource Usage | Avg generation time, image count, regen count | Instrumentation (Langfuse; `Cost.image_count` / `Cost.regen_count`) |
 | AI Resource Usage — cost | API cost/story | ⚠️ **not instrumented** (see below) |
