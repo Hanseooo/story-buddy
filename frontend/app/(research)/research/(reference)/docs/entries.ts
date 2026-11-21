@@ -64,7 +64,7 @@ export const DOC_CHAPTERS: DocChapter[] = [
       {
         path: "docs/product/RESEARCH_PROTOCOL.md",
         answers: "What is the research protocol, and what is its current status?",
-        lastChanged: "2026-11-21",
+        lastChanged: "2026-11-22",
       },
       {
         path: "docs/product/PHASE_05_RESULTS.md",
@@ -74,7 +74,7 @@ export const DOC_CHAPTERS: DocChapter[] = [
       {
         path: "docs/capstone/ethics_and_safety.md",
         answers: "Which ethics basis does the study rest on, and which safety features does the system have?",
-        lastChanged: "2026-11-21",
+        lastChanged: "2026-11-22",
       },
       {
         path: "docs/capstone/story_donation_consent_and_assent_draft.md",
@@ -205,6 +205,11 @@ export const DOC_CHAPTERS: DocChapter[] = [
       {
         path: "docs/product/adr/ADR-083-research-pages-hub-chapter-routes-and-png-diagram-export.md",
         answers: "Why does the research site have a hub, chapter pages and PNG diagram export?",
+        lastChanged: "2026-11-22",
+      },
+      {
+        path: "docs/product/adr/ADR-084-the-study-corpus-is-english-only.md",
+        answers: "Why is the study corpus English-only, and which stories were translated?",
         lastChanged: "2026-11-22",
       },
     ],

@@ -29,8 +29,8 @@ against git and wins.
 | Loop | Phase | Risk it addressed | Merged PRs | First merge | Last merge | Gate | Gate result |
 |---|---|---|---|---|---|---|---|
 | 1 | 0 & 0.5 | Can an open image model hold a stylized, invented, non-human character across scenes? | 0 | — | — | Reference conditioning retains identity on ≥ 80% of items and exceeds unconditioned by ≥ 30 points. | Split. Run 3 passed absolute (80%), failed separation (+25 vs ≥30); the failed gate is carried as a stated limitation. |
-| 2 | 1 | Does the consistency loop work on clean stories? | 21 | 2026-07-29 | 2026-10-13 | A clean multi-scene, multi-character story produces a coherent, character-consistent storybook, and you can point to a case where the VLM-judge caught an off-model image and the targeted retry fixed it. | Recorded as complete on 2026-08-02, when all ten Phase-1 specs were built. No run showing the exit case is named in the repository. |
-| 3 | 2 | Is it safe for a real child in a real classroom, and does it survive messy input? | 20 | 2026-08-02 | 2026-10-23 | Entry: probe 4 (Filipino/Taglish moderation), no MISS in either direction. | Not run. Phase 2 was built without its entry gate. |
+| 2 | 1 | Does the consistency loop work on clean stories? | 21 | 2026-07-29 | 2026-10-13 | A clean multi-scene, multi-character story produces a coherent, character-consistent storybook, and you can point to a case where the VLM-judge caught an off-model image and the targeted retry fixed it. | Partial. The loop runs end to end, but the judge's accuracy fell short: in the October audit it passed 29 of 77 defective pages, and in no audited redraw did it catch an off-model character and accept the fix. That weakness became loop 4's risk. |
+| 3 | 2 | Is it safe for a real child in a real classroom, and does it survive messy input? | 20 | 2026-08-02 | 2026-10-23 | Entry: probe 4 (Filipino/Taglish moderation), no MISS in either direction. | Not run. Phase 2 was built without its entry gate, for lack of time. No child has used the system, so the risk it guards has not arisen; it stays a gate before children use it. |
 | 4 | 2.5 | Does fine-tuning make the Consistency Judge better? | 17 | 2026-08-22 | 2026-10-09 | The results table exists and is honest, and the held-out set was read exactly once. | Partial. Paid evaluation stopped on 2026-10-07; on the held-out set the untuned model scored higher F1 than every fine-tuned seed. |
 | 5 | After the technical defense | Do the panel's suggestions work without weakening child safety? | 5 | 2026-10-26 | 2026-11-21 | Items that touch ADR-011, ADR-017, ADR-029 or the teacher-review spec ship behind an off-by-default setting pending an ethics re-review. | Shipped off by default, then turned on by default on 2026-11-21 so they can be tested. The real-child gates (ethics re-review, moderation audit 01) still apply. |
 | 6 | 3 | Does the system hold up under the study's three evaluations? | 5 | 2026-08-10 | 2026-10-11 | One full expert-validation session (Objective 3) and one full ISO/IEC 25010 session (Objective 5) end-to-end, and a clean metrics table. | Open. The repository records no completed session yet, and the functional verification matrix was dropped (D-28). |
@@ -41,9 +41,16 @@ Sources, by loop:
    commit `1e33a27` (2026-07-08); the probes and gates were pre-declared in commit `b5c57ac`
    (2026-07-10).
 2. `docs/product/ROADMAP.md` Phase 1 exit criteria; `methodology.md` §1.3 as it stood before
-   2026-11-22 ("Complete (2026-08-02) — all ten Phase-1 specs built").
+   2026-11-22 ("Complete (2026-08-02) — all ten Phase-1 specs built"). The result is from
+   `docs/capstone/pipeline-stage-audit-2026-10.md` (Page gate: 29 of 77 defective pages passed) and
+   `docs/specs/research-page-refresh/evidence/loop2_redraws.py`, which reads the audit's local data: of
+   71 redrawn scenes, 9 had a bad first draw and a good shipped page, and the judge passed the shipped
+   page in 1, whose defect was an action, not an off-model character. The audit's reviews are AI-only
+   and the owner did not confirm them, so these counts are provisional.
 3. `docs/product/ROADMAP.md` Phase 1 "Gate → Phase 2" and Phase 2 "Entry"; `PHASE_05_RESULTS.md`
-   status line ("⬜ Probes 2 and 4 not run"); `docs/capstone/action_checklist.md` D4 (unchecked).
+   status line ("⬜ Probes 2 and 4 not run"); `docs/capstone/action_checklist.md` D4 (unchecked). The
+   reason, lack of time, is the owner's (2026-11-22); that no child uses the system is `methodology.md`
+   §3.2 (Stage 1, story donation).
 4. `docs/product/ROADMAP.md` Phase 2.5 exit criteria; `docs/capstone/group-guide.md` §4,
    Objective 4; `docs/capstone/research-changelog.md` §1, point 4.
 5. `docs/capstone/research-changelog.md` rows 2026-10-25 and 2026-11-21; the "Default changed"
@@ -56,9 +63,11 @@ Sources, by loop:
 1. **Loop 1's separation gate was missed.** It was reported as a miss and carried as a limitation,
    not as a pass. The escalation was declined (ADR-001).
 2. **Loop 3 started without its entry gate.** Probe 4 has not run. The moderation stack shipped in
-   PR #12 on 2026-08-02 without it.
+   PR #12 on 2026-08-02 without it. It was skipped for time (owner, 2026-11-22), and children only donate
+   stories in the study (ethics Stage 1, `methodology.md` §3.2), so no child has met the unchecked filter.
 3. **Loop 2 kept going after its gate.** 10 consistency PRs merged after Phase 1 was recorded
-   complete, the last on 2026-10-13.
+   complete, the last on 2026-10-13. The pipeline's output is not deterministic, so running it on more
+   stories kept turning up edge cases, each fixed in its own PR.
 4. **Loop 4's exit criterion is not met.** The held-out result is partial: paid evaluation stopped
    for budget and the Gemma baseline failed authentication (group-guide.md §4).
 5. **Scope changed inside loop 3.** Narration and PDF export were cut (ADR-058, PR #79); PDF

@@ -61,7 +61,7 @@ StoryBuddy operates under a strict mandate to use **open-weight models** without
 
 * **No Built-in Safety Filters:** Unlike proprietary APIs (e.g., Google's SafeSearch), open image models (like Qwen-Image-Edit) do not ship with built-in safety filters. As a result, StoryBuddy's output image moderation gate (Stage 3) is **load-bearing**, not merely defense-in-depth. 
 * **No Built-in Watermarking:** The open-weight shift means dropping proprietary watermarking (like SynthID). Provenance and C2PA Content Credentials are noted as future work, but watermarking is explicitly not claimed in the current system.
-* **No Assumed Language Coverage:** The Taglish and Filipino performance of open text gates is treated as a critical child-safety vulnerability. Moderation performance in these languages must be empirically probed before Phase 2 release. 
+* **No Assumed Language Coverage:** The Taglish and Filipino performance of open text gates is treated as a critical child-safety vulnerability. Moderation performance in these languages must be empirically probed before Phase 2 release. The study corpus is English-only (ADR-084), so this risk applies when children type into the system (ethics Stage 2), not to the corpus. 
 * **Data Privacy Reality:** Running open weights on *hosted inference* (e.g., OpenRouter) means the child's text still transits a third party. Consequently, the project makes **no claims of absolute privacy preservation**. 
 
 ## 4. Setting and Human Backstops

@@ -99,14 +99,14 @@ describe("SDLC page data", () => {
   it("marks each gate result with the outcome its sentence states", () => {
     const opens: Record<data.Outcome, string> = {
       split: "Split.",
-      recorded: "Recorded as complete",
       "not run": "Not run.",
       partial: "Partial.",
       relaxed: "Shipped off by default, then turned on",
       open: "Open.",
     };
     for (const l of data.LOOPS) expect(l.result.startsWith(opens[l.outcome]), `loop ${l.loop}: ${l.outcome}`).toBe(true);
-    expect(new Set(data.LOOPS.map((l) => l.outcome)).size).toBe(6);
+    // Loop 2 is partial since 2026-11-22: its judge passed 29 of 77 defective pages.
+    expect(data.LOOPS.map((l) => l.outcome)).toEqual(["split", "partial", "not run", "partial", "relaxed", "open"]);
   });
 
   it("takes each deviation from the record", () => {
@@ -137,6 +137,12 @@ describe("SDLC page data", () => {
   it("records the Phase 0.5 gate result as both documents state it", () => {
     states(read(data.SOURCES.phase05), data.PHASE_05.recorded);
     states(read(data.SOURCES.methodology), data.PHASE_05.methodology);
+  });
+
+  // The loop 2 counts the script printed, against the audit they come from.
+  it("takes loop 2's judge miss count from the October audit", () => {
+    states(read("docs/capstone/pipeline-stage-audit-2026-10.md"), "Of the 77 defective shipped pages, 29 passed the stored gate");
+    expect(data.LOOPS[1].result).toContain("passed 29 of 77 defective pages");
   });
 
   it("names the model as methodology.md does", () => {
