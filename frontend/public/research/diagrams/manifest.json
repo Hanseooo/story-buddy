@@ -1,0 +1,108 @@
+{
+  "exportedOn": "2026-11-21",
+  "figures": [
+    {
+      "png": "dataset_build_and_annotation_flow.png",
+      "kind": "diagram",
+      "source": "docs/diagrams/drawio/dataset_build_and_annotation_flow.drawio.svg",
+      "sourceSha256": "fea6cce64e4589b619d66eaea7c603abcc7a161c2eaea7c4864e81f0d1b18b5c",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "ipo_model.png",
+      "kind": "diagram",
+      "source": "docs/diagrams/drawio/ipo_model.drawio.svg",
+      "sourceSha256": "30a3b11250ee4aecb96f267199d82e68fac2f68098f6c531ad8f2f62d997dd2a",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "langgraph_pipeline_after_2026-10.png",
+      "kind": "diagram",
+      "source": "docs/diagrams/drawio/langgraph_pipeline_after_2026-10.drawio.svg",
+      "sourceSha256": "b002586d5167400e36c245101b1ce25bc8b637b22b145f7e00e386e01069ffb6",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "langgraph_pipeline_before_2026-07.png",
+      "kind": "diagram",
+      "source": "docs/diagrams/drawio/langgraph_pipeline_before_2026-07.drawio.svg",
+      "sourceSha256": "b0a6a33b842f9acd10bcb2c0ea73b4e48644915469d119c7f8249d46e32bfd7c",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "student_journey.png",
+      "kind": "diagram",
+      "source": "docs/diagrams/drawio/student_journey.drawio.svg",
+      "sourceSha256": "2199039c1099b50030b64383ba93fbddfb01b0e14e31bdb231dd831fca7d5c63",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "system_architecture.png",
+      "kind": "diagram",
+      "source": "docs/diagrams/drawio/system_architecture.drawio.svg",
+      "sourceSha256": "0b5db3f1fae74368bd3a2fd299100bfba7a0da7141a8cb16d2573fd76eb9ea77",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "teacher_journey.png",
+      "kind": "diagram",
+      "source": "docs/diagrams/drawio/teacher_journey.drawio.svg",
+      "sourceSha256": "71f8236d042d49c9b26a7c555cce91accc4319cfe52684506b20318a83760fcf",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "judge-confusion-matrices.png",
+      "kind": "chart",
+      "source": {
+        "page": "/research/results",
+        "chartId": "judge-confusion-matrices"
+      },
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "judge-f1-precision-recall.png",
+      "kind": "chart",
+      "source": {
+        "page": "/research/results",
+        "chartId": "judge-f1-precision-recall"
+      },
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "judge-catches-false-alarms.png",
+      "kind": "chart",
+      "source": {
+        "page": "/research/results",
+        "chartId": "judge-catches-false-alarms"
+      },
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "judge-validation-checkpoints.png",
+      "kind": "chart",
+      "source": {
+        "page": "/research/results",
+        "chartId": "judge-validation-checkpoints"
+      },
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "reference-check-outcomes.png",
+      "kind": "chart",
+      "source": {
+        "page": "/research/limitations",
+        "chartId": "reference-check-outcomes"
+      },
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "page-check-outcomes.png",
+      "kind": "chart",
+      "source": {
+        "page": "/research/limitations",
+        "chartId": "page-check-outcomes"
+      },
+      "exportedOn": "2026-11-21"
+    }
+  ]
+}
