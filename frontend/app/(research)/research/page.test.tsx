@@ -16,6 +16,22 @@ describe("/research hub", () => {
     expect(screen.getByRole("link", { name: "Back to StoryBuddy" })).toHaveAttribute("href", "/");
   });
 
+  // Hand-worked from graph.py (14 add_node calls), group-guide.md (42 books) and the runbook F1s (0.310, 0.472).
+  it("shows three sourced facts, each linking to the page that explains it", () => {
+    render(<ResearchHubPage />);
+    const facts = within(screen.getByRole("list", { name: "At a glance" })).getAllByRole("listitem");
+    expect(facts.map((f) => f.textContent)).toEqual([
+      "14nodes in the story pipeline",
+      "42picture books in the study",
+      "0.310 vs 0.472F1 of the fine-tuned judge vs its untrained base",
+    ]);
+    expect(facts.map((f) => within(f).getByRole("link").getAttribute("href"))).toEqual([
+      "/research/pipeline",
+      "/research/methodology",
+      "/research/results",
+    ]);
+  });
+
   it("lists three groups in the order of index 4.1, each page once with its title, line and paper sections", () => {
     const { container } = render(<ResearchHubPage />);
 

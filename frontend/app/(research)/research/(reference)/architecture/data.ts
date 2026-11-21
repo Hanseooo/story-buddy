@@ -33,7 +33,7 @@ export const COMPONENTS = [
   { name: "Web-tier moderation and Presidio", role: "Before the job row is written, the web service redacts the title and checks it. In teacher review mode it redacts the story text too.", files: ["backend/app/main.py", "backend/providers.py"], mentions: "check_text" },
   { name: "Worker moderation", role: "Checks the story text and every picture before a child sees it.", files: ["backend/pipeline/input_gate.py", "backend/pipeline/char_ref_mod.py", "backend/pipeline/output_mod.py"], mentions: "classify_text_primary" },
   { name: "Langfuse", role: "Run traces from the worker.", files: ["backend/worker/run_job.py"], mentions: "Langfuse" },
-  { name: "Sentry", role: "Error reports from the web service and the frontend.", files: ["backend/app/main.py", "frontend/sentry.server.config.ts"], mentions: "sentry_sdk" },
+  { name: "Sentry", role: "Error reports from the web service, sent only when a Sentry DSN is set. The frontend has the package but never starts it (there is no instrumentation file), and the worker does not use it.", files: ["backend/app/main.py"], mentions: "if settings.sentry_dsn_backend" },
   { name: "Research endpoint", role: "Gives researchers the run viewer's data. Needs a researcher account.", files: ["backend/app/research.py"], mentions: "research_router" },
   { name: "Teacher review", role: "A teacher approves or rejects each book. In teacher review mode a first moderation flag holds the job for the teacher.", files: ["backend/app/review.py", "backend/app/moderation_hold.py"], mentions: "def review_job" },
   { name: "Teacher notes", role: "A note from the teacher that the child can read.", files: ["backend/app/review_notes.py"], mentions: "child_notes_router" },

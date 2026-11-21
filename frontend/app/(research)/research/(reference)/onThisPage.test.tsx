@@ -23,3 +23,18 @@ describe.each([
     expect(targets.sort()).toEqual(headings.sort());
   });
 });
+
+// Long lists fold behind a tap (14 chips fill most of a phone's first screen); short ones stay open.
+describe("contents fold", () => {
+  it("folds the 14-section results list and leaves the 7-section methodology list open", () => {
+    const results = render(<ResultsPage />);
+    const folded = results.container.querySelector('nav[aria-label="On this page"] details');
+    expect(folded).not.toBeNull();
+    expect(folded).not.toHaveAttribute("open");
+    expect(folded?.querySelector("summary")).toHaveTextContent("On this page: 14 sections");
+    results.unmount();
+
+    const methodology = render(<MethodologyPage />);
+    expect(methodology.container.querySelector('nav[aria-label="On this page"] details')).toBeNull();
+  });
+});
