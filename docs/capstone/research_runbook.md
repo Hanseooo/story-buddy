@@ -357,6 +357,10 @@ Accuracy = (caught + correct Same) / 329. False-alarm rate = false alarms / 282.
 accuracy is 2.1 points above always answering Same, and it gets there by answering Same more often, not by
 finding more Different pairs.
 
+**No score to sweep.** In `qwen_comparison.partial.json`, AUROC is null for all four judges (reason: "scores
+contain None"). Each judge answers with a verdict and no score, so no ROC, precision-recall or threshold curve can be
+drawn for them.
+
 **Checkpoint tie.** The rule fixed in advance picks the checkpoint with the best validation Different-class F1
 and, on a tie, the earlier step. Seeds 0 and 1 had a tie, and the earlier step won both times:
 
@@ -374,6 +378,69 @@ checkpoint 183), so training longer would not have fixed those two seeds on this
 at every step from 120, with 5 to 26 false alarms. This replaces the earlier reading that three seeds are too few
 to call a pattern (research-changelog, 2026-10-11 Finding). The validation set has only 4 Different pairs, so every
 validation figure rests on 4 pairs.
+
+**Validation scores by checkpoint.** All 57 rows of `validation_checkpoint_scores.csv`, copied here because that file is
+local and git-ignored. F1 is on the Different class of the 86 validation pairs. The `/research/results` chart reads this table.
+
+| Seed | Checkpoint | Validation F1 | Unreadable (of 86) |
+|---|---|---|---|
+| 0 | 10 | 0.250 | 1 |
+| 0 | 20 | 0.121 | 29 |
+| 0 | 30 | 0.000 | 28 |
+| 0 | 40 | 0.333 | 13 |
+| 0 | 50 | 0.000 | 1 |
+| 0 | 60 | 0.000 | 2 |
+| 0 | 70 | 0.111 | 0 |
+| 0 | 80 | 0.333 | 0 |
+| 0 | 90 | 0.000 | 0 |
+| 0 | 100 | 0.286 | 0 |
+| 0 | 110 | 0.174 | 0 |
+| 0 | 120 | 0.000 | 1 |
+| 0 | 130 | 0.000 | 4 |
+| 0 | 140 | 0.000 | 1 |
+| 0 | 150 | 0.000 | 0 |
+| 0 | 160 | 0.000 | 0 |
+| 0 | 170 | 0.000 | 0 |
+| 0 | 180 | 0.000 | 0 |
+| 0 | 183 | 0.000 | 0 |
+| 1 | 10 | 0.273 | 2 |
+| 1 | 20 | 0.000 | 38 |
+| 1 | 30 | 0.000 | 35 |
+| 1 | 40 | 0.444 | 8 |
+| 1 | 50 | 0.200 | 0 |
+| 1 | 60 | 0.182 | 2 |
+| 1 | 70 | 0.000 | 3 |
+| 1 | 80 | 0.000 | 11 |
+| 1 | 90 | 0.000 | 8 |
+| 1 | 100 | 0.261 | 0 |
+| 1 | 110 | 0.444 | 0 |
+| 1 | 120 | 0.125 | 0 |
+| 1 | 130 | 0.000 | 1 |
+| 1 | 140 | 0.000 | 1 |
+| 1 | 150 | 0.000 | 2 |
+| 1 | 160 | 0.000 | 2 |
+| 1 | 170 | 0.000 | 2 |
+| 1 | 180 | 0.000 | 1 |
+| 1 | 183 | 0.000 | 1 |
+| 2 | 10 | 0.261 | 2 |
+| 2 | 20 | 0.214 | 34 |
+| 2 | 30 | 0.121 | 7 |
+| 2 | 40 | 0.095 | 2 |
+| 2 | 50 | 0.000 | 19 |
+| 2 | 60 | 0.095 | 5 |
+| 2 | 70 | 0.000 | 10 |
+| 2 | 80 | 0.143 | 13 |
+| 2 | 90 | 0.108 | 1 |
+| 2 | 100 | 0.000 | 0 |
+| 2 | 110 | 0.267 | 0 |
+| 2 | 120 | 0.167 | 0 |
+| 2 | 130 | 0.250 | 2 |
+| 2 | 140 | 0.364 | 2 |
+| 2 | 150 | 0.235 | 0 |
+| 2 | 160 | 0.154 | 0 |
+| 2 | 170 | 0.125 | 1 |
+| 2 | 180 | 0.133 | 0 |
+| 2 | 183 | 0.129 | 0 |
 
 ### Verification sources for the accepted comparison
 

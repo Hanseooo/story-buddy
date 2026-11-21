@@ -154,3 +154,94 @@ describe("results page data", () => {
     }
   });
 });
+
+// Ticket 07: plain-words copy, accuracy, the checkpoint tie, recommendations and chart data.
+const guide = read(data.SOURCES.groupGuide);
+const plain = flat(between(guide, "### 5.2 ", "### 5.3 "));
+const recount = between(runbook, "### Results figures recounted for the research page refresh", "### Verification sources");
+const changelog = flat(read(data.SOURCES.changelog));
+
+describe("results page plain-words data", () => {
+  it("states the false-alarm tradeoff verbatim, as the group guide does", () => {
+    expect(data.TRADEOFF).toBe(
+      "The fine-tuned judge raises far fewer false alarms (2 vs 47) because it rarely says 'different' at all. As a result it misses most real character changes (38 of 47 vs 18 of 47), and 12% of its answers could not be read. On the main score, F1, it is worse (0.31 vs 0.47)."
+    );
+    states(plain, data.TRADEOFF);
+  });
+
+  it("says unreadable answers may lower recall and were not counted by class", () => {
+    expect(data.UNREADABLE_NOTE).toContain("may lower their recall");
+    expect(data.UNREADABLE_NOTE).not.toContain("part of why");
+    states(plain, data.UNREADABLE_NOTE);
+  });
+
+  it("takes each accuracy row, and the always-Same baseline, from the runbook", () => {
+    expect(data.ACCURACY.map((row) => row.name)).toEqual([
+      "Always answering Same",
+      "Untuned Qwen3.5-9B",
+      "Seed 1",
+      "Seed 0",
+      "Seed 2",
+    ]);
+    expect(data.ACCURACY[0]).toMatchObject({ accuracy: "282 / 329 = 85.7%", missRate: "100%" });
+    for (const r of data.ACCURACY) {
+      expect(rows(recount), r.name).toContain(`| ${r.name} | ${r.accuracy} | ${r.correctSame} | ${r.falseAlarmRate} | ${r.missRate} |`);
+    }
+    states(flat(recount), data.ACCURACY_NOTE);
+    states(flat(recount), "Accuracy = (caught + correct Same) / 329.");
+  });
+
+  it("takes the checkpoint tie from the runbook", () => {
+    for (const t of data.CHECKPOINT_TIE) {
+      expect(rows(recount), t.seed).toContain(`| ${t.seed} | ${t.f1} | ${t.selected} | ${t.alternative} | ${t.unreadable} |`);
+    }
+    expect(data.CHECKPOINT_TIE).toHaveLength(3);
+    for (const sentence of data.TIE_SENTENCES) states(flat(recount), sentence);
+    states(flat(recount), "The selected checkpoint is a lead for the unreadable answers, not a tested cause");
+  });
+
+  it("copies every validation checkpoint score from the runbook", () => {
+    let count = 0;
+    for (const [seed, points] of Object.entries(data.CHECKPOINTS)) {
+      for (const p of points) {
+        expect(rows(recount), `${seed} ${p.step}`).toContain(`| ${seed} | ${p.step} | ${p.f1} | ${p.unreadable} |`);
+        count += 1;
+      }
+    }
+    expect(count).toBe(57);
+    // Hand-read from the runbook: the selected points and the ties.
+    expect(data.CHECKPOINTS[1].find((p) => p.step === 40)).toMatchObject({ f1: "0.444", unreadable: 8 });
+    expect(data.CHECKPOINTS[1].find((p) => p.step === 110)).toMatchObject({ f1: "0.444", unreadable: 0 });
+    expect(data.CHECKPOINTS[0].find((p) => p.step === 80)).toMatchObject({ f1: "0.333", unreadable: 0 });
+  });
+
+  it("explains the partial status from the changelog", () => {
+    for (const sentence of data.PARTIAL_SENTENCES) states(changelog, sentence);
+  });
+
+  it("gives five recommendations, items 2 to 4 marked untested, each in the group guide", () => {
+    expect(data.RECOMMENDATIONS).toHaveLength(5);
+    expect(data.RECOMMENDATIONS.map((r) => r.untested)).toEqual([false, true, true, true, false]);
+    for (const r of data.RECOMMENDATIONS) states(plain, r.guide);
+    states(plain, "Items 2 to 4 come from measured facts. Whether they would fix the result is untested.");
+    states(changelog, "Under the evaluated dataset, training settings and inference constraints, fine-tuning did not demonstrate a reliable improvement over the untuned baseline.");
+  });
+
+  it("explains why no curve is drawn, from the runbook", () => {
+    states(flat(recount), data.NO_CURVE_SOURCE);
+  });
+
+  it("names a stable id and a PNG for each chart", () => {
+    expect(data.CHARTS.map((c) => c.id)).toEqual([
+      "judge-confusion-matrices",
+      "judge-f1-precision-recall",
+      "judge-catches-false-alarms",
+      "judge-validation-checkpoints",
+    ]);
+    for (const c of data.CHARTS) {
+      expect(c.png).toBe(`/research/diagrams/${c.id}.png`);
+      expect(c.alt.length).toBeGreaterThan(40);
+    }
+    states(runbook, `### Results figures recounted for the research page refresh (${data.CHARTS_AS_OF})`);
+  });
+});

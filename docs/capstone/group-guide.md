@@ -114,19 +114,29 @@ ranks each judge by how well it catches those 47.
 
 An unreadable answer is output that did not parse. It is scored as "same character", so on a
 different-character pair it counts as a miss. Seeds 0 and 1 gave unreadable answers on about one
-pair in eight, which is part of why their recall is low.
+pair in eight. An unreadable answer on a Different pair counts as a miss, so this may lower their
+recall. How many of them fell on Different pairs was not counted.
 
 **In plain words:**
 
-- The trained judge is more careful. When it says "different", it is usually right (high precision).
-- It misses most of the real differences (low recall).
-- On F1, the main number, it is lower than the untrained model.
+- The fine-tuned judge raises far fewer false alarms (2 vs 47) because it rarely says 'different' at
+  all. As a result it misses most real character changes (38 of 47 vs 18 of 47), and 12% of its
+  answers could not be read. On the main score, F1, it is worse (0.31 vs 0.47).
 - The gap's 95% interval runs from −0.36 to +0.003, so it just touches zero.
 - This is a partial result. It does not say fine-tuning can never work. It says this training run
   did not improve the judge under these data and settings.
 - Dropping the characters whose references were ambiguous (a check registered in advance; one
   of them is in the test set, 20 pairs) does not change the picture: untrained F1 0.48, trained
   seed 1 0.35.
+
+**What we recommend.** Items 2 to 4 come from measured facts. Whether they would fix the result is
+untested.
+
+1. Keep prompted Gemma, a no-change decision. Gemma was not scored on this test set.
+2. Reject checkpoints with many unreadable answers, and enlarge validation's Different class.
+3. Record the judge's full answer text.
+4. Fix the constructed-pair sentence shared by 104 training pairs.
+5. Report the result in the bounded wording of research-changelog.md section 1 item 4.
 
 **How much the two human raters agreed.** On the 329 test pairs, the two groupmates gave the same
 "same or different" answer 89.7% of the time; Cohen's κ, which corrects for chance agreement, is
