@@ -656,7 +656,7 @@ Applies: SH-01
 
 **US-05. As a teacher, I want to choose whether my class sees notes, so that I only get the note UI
 when I use it.** Applies: SH-04
-- AC-18. Classroom settings has a control "Let students read my notes", off by default.
+- AC-18. Classroom settings has a control "Let students read my notes", on by default (was off until migration `0033`, 2026-11-21).
 - AC-19. When off, no note row appears in the dialog and no badge or panel appears for the class. Stored
   notes are kept.
 - AC-20. The value is written only by the server, the way `0025` classroom settings are.

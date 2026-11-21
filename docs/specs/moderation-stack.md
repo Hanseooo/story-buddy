@@ -2,7 +2,8 @@
 
 **Post-defense amendment:** §9 records the moderation-calibration interviews. The 2026-10-27
 technical completion in §9.9 supplies concrete contracts and project policy, explicitly accepted
-with ADR-080 on 2026-10-27 (“accept all”). Synthetic-only, feature-off implementation is authorized.
+with ADR-080 on 2026-10-27 (“accept all”). Synthetic-only, feature-off implementation is authorized. On 2026-11-21 the owner made `enable_teacher_moderation_review`
+default on for testing ease; real-child release gates are unchanged.
 Implementation records in §§9.10–9.16 track the completed slices; §§1–8 describe baseline behavior.
 Audit 01, the remaining tickets and real-child release review remain outstanding.
 Owner acceptance does not establish externally validated policy or efficacy.

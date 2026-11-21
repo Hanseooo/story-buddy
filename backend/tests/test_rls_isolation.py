@@ -714,7 +714,9 @@ def test_review_notes_lifecycle_and_guards(conn, fx):
             (job or fx.ba1, teacher or fx.ta, operation, body),
         ).fetchone()[0]
 
-    assert conn.execute("select review_notes_enabled from classrooms where id=%s", (fx.cls_a,)).fetchone() == (False,)
+    # 0033: new classrooms start with notes on.
+    assert conn.execute("select review_notes_enabled from classrooms where id=%s", (fx.cls_a,)).fetchone() == (True,)
+    conn.execute("update classrooms set review_notes_enabled=false where id=%s", (fx.cls_a,))
     assert call("PUT", "Hello") == {"status": 409, "detail": "notes_disabled"}
     assert call("GET") == {"status": 404, "detail": "not found"}
     conn.execute("update classrooms set review_notes_enabled=true where id=%s", (fx.cls_a,))

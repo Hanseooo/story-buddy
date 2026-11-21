@@ -47,7 +47,8 @@ two marked *owner*.
    pipeline as it was at defense.
 6. **Items that conflict with an accepted ADR or the child-safety rules get their full version.**
    They are built behind a setting that is off by default. An ethics re-review comes before real
-   children use them.
+   children use them. *Amended 2026-11-21:* teacher-held moderation, the magic pencil and student notes
+   are on by default for testing ease; the ethics re-review before real children still applies.
 7. **Conflict gate.** A ticket with a `Conflict gate:` line touches an accepted ADR or a child-safety
    rule. Before any grill, brainstorm, design or build on it, the agent names the conflict to the
    owner and waits for the owner's verdict. `AGENTS.md` carries a temporary pointer to this rule.

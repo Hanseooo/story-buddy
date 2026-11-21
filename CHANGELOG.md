@@ -14,6 +14,19 @@ instead of repeating it.
 
 ---
 
+## Features on by default · 2026-11-21
+
+### Code
+
+- `enable_teacher_moderation_review` and `enable_magic_pencil` default to `True`. Tests pin both off in `conftest.py` and opt in per test.
+- Migration `0033`: `classrooms.review_notes_enabled` defaults to `true`, and existing classrooms are switched on.
+
+### Docs
+
+- Default amendments in ADR-080, ADR-081, ADR-082, the three specs, `AGENTS.md`, the phase map Decision 6 and the research changelog.
+
+---
+
 ## Magic pencil code review · 2026-11-03 · Child page changes survive a withdrawal rerun
 
 ### Code

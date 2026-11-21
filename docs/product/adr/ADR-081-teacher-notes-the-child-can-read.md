@@ -4,6 +4,8 @@
 teacher-review-and-approval §4.10, invariants 9 and 12, and §13.6. This satisfies
 ticket 05's ADR acceptance gate for migration `0026`, not the real-child release gate.
 
+**Default changed (2026-11-21):** the owner turned this on by default so it can be tested without setup. The ethics re-review and the moderation-audit gate before real children still apply; flipping the default back is part of that release decision. Migration `0033` sets `review_notes_enabled` to default `true` and switches existing classrooms on.
+
 **Amendments:** `teacher-review-and-approval` §4.10, invariants 9 and 12, and §13.6,
 as specified by [§14 SH-01 and SH-05](../../specs/teacher-review-and-approval.md#143-shared-behavior).
 Children may read their own teacher note and see its badge and the reworded download line,
@@ -24,7 +26,7 @@ records the agreed scope and behavior. This ADR records the accepted decision, n
    following ADR-080's private service-role table precedent. Reads go through server endpoints:
    the owning teacher via `owned_job`, the owning child via `jobs.profile_id`. No classmate,
    gallery, researcher or export read path exists. A note is deleted with its book by cascade.
-2. Add `classrooms.review_notes_enabled`, off by default and written only by the server.
+2. Add `classrooms.review_notes_enabled`, off by default (on since 0033, 2026-11-21) and written only by the server.
    Check it server-side on every note read and write. When off, hide child notes and all note UI,
    retain stored rows, return no notes to children, and reject teacher writes with
    `409 notes_disabled`. The teacher's GET still returns the stored note (OD-11).
