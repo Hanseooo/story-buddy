@@ -181,10 +181,13 @@ Each step advance pushes a history entry, so browser back and the Android back g
 | 2 | Nickname | Single field, live preview of the normalized form |
 | 3 | Password | Show/hide toggle, **hidden by default** |
 
-**The code field accepts the generator's 32-symbol alphabet.** S1-3 uses
-`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`. `L` is valid; `I`, `O`, `0`, and `1` are excluded.
-Typing and pasting both reject characters outside that alphabet and reveal:
-*"That letter isn't used in class codes."* Paste ignores whitespace and fills up to six boxes.
+**The code field accepts any letter or digit.** S1-3 generates codes from
+`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, leaving out `I`, `O`, `0`, and `1` for handwriting. The field
+does not enforce that alphabet: the screen font tells those characters apart, so they are taken as
+typed, never rejected or swapped for a lookalike. A code that does not exist fails at sign-in like
+any other typo. Characters that are not letters or digits are rejected and reveal: *"Class codes only
+use letters and numbers."* `frontend/lib/class-code.ts` holds this rule for `/join` and `/join/[code]`.
+Paste ignores whitespace and fills up to six boxes.
 Input is case-insensitive and normalized to lowercase, including direct `/join/[code]` links.
 Filled boxes select their character on focus for easy correction. Keyboard shortcuts remain native.
 The prompt calls it a six-character code because digits are valid too.

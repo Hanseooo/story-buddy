@@ -5,10 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { ArrowLeft, Backpack } from "@phosphor-icons/react";
-
-// Match backend/app/classrooms.py: letters except I/O, plus digits 2–9.
-const CODE_CHAR = /^[a-hj-np-z2-9]$/;
-const BOX_COUNT = 6;
+import { CODE_LENGTH as BOX_COUNT, toCodeChar } from "@/lib/class-code";
 
 export default function JoinPage() {
   const router = useRouter();
@@ -34,7 +31,7 @@ export default function JoinPage() {
       refs.current[idx + 1]?.focus();
       return;
     }
-    if (key.length === 1 && !CODE_CHAR.test(key)) {
+    if (key.length === 1 && toCodeChar(key) === null) {
       e.preventDefault();
       setHint(true);
     } else if (key.length === 1) {
@@ -55,10 +52,11 @@ export default function JoinPage() {
     let hasExcluded = false;
 
     for (const char of raw) {
-      if (!CODE_CHAR.test(char)) {
+      const codeChar = toCodeChar(char);
+      if (codeChar === null) {
         hasExcluded = true;
       } else {
-        cleanChars.push(char);
+        cleanChars.push(codeChar);
       }
     }
 
@@ -94,7 +92,7 @@ export default function JoinPage() {
       .getData("text")
       .toLowerCase()
       .replace(/\s/g, "");
-    const validChars = [...text].filter((char) => CODE_CHAR.test(char));
+    const validChars = [...text].map(toCodeChar).filter((char) => char !== null);
     const chars = validChars.slice(0, BOX_COUNT);
     const next = Array(BOX_COUNT).fill("") as string[];
     chars.forEach((c, i) => { next[i] = c; });
@@ -189,7 +187,7 @@ export default function JoinPage() {
                   role="alert" 
                   className="text-sm font-bold text-warning"
                 >
-                  That letter isn&apos;t used in class codes.
+                  Class codes only use letters and numbers.
                 </motion.p>
               )}
             </AnimatePresence>

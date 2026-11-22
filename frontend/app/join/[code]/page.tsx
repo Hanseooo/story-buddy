@@ -4,12 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { normalizeNickname } from "@/lib/nickname";
+import { normalizeCode } from "@/lib/class-code";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, Eye, EyeSlash, UserCircle, Key } from "@phosphor-icons/react";
-
-// Match backend/app/classrooms.py: letters except I/O, plus digits 2–9.
-const CODE_REGEX = /^[a-hj-np-z2-9]{6}$/i;
 
 export const CRED_ERROR = "Something didn't work. Check your code and nickname.";
 export const NET_ERROR = "We can't reach StoryBuddy right now. Try again in a moment.";
@@ -32,10 +30,11 @@ export default function JoinCodePage({
 
   useEffect(() => {
     params.then(({ code: c }) => {
-      if (!CODE_REGEX.test(c)) {
+      const normalized = normalizeCode(c);
+      if (normalized === null) {
         setMalformed(c);
       } else {
-        setCode(c.toLowerCase());
+        setCode(normalized);
       }
     });
   }, [params]);

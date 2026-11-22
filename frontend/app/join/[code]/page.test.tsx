@@ -44,6 +44,18 @@ describe("Join code page — §9.6–10", () => {
     expect(screen.getByRole("heading", { name: /what's your nickname/i })).toBeDefined();
   });
 
+  it("signs in with a class link exactly as written, I and 1 included", async () => {
+    mockSignIn.mockResolvedValue({ data: { user: { id: "p-1" } }, error: null });
+    await renderJoinCode("ABCI1Z");
+    fireEvent.change(screen.getByLabelText(/nickname/i), { target: { value: "Juan" } });
+    fireEvent.click(screen.getByRole("button", { name: /next/i }));
+    await waitFor(() => screen.getByRole("heading", { name: /secret word/i }));
+    fireEvent.change(screen.getByLabelText(/secret word/i), { target: { value: "pw" } });
+    fireEvent.click(screen.getByRole("button", { name: /join class/i }));
+    await waitFor(() => expect(mockSignIn).toHaveBeenCalled());
+    expect(mockSignIn.mock.calls[0][0].email).toBe("juan@abci1z.students.storybuddy.invalid");
+  });
+
   it("§9.8 — advances to password step when nickname submitted", async () => {
     await renderJoinCode();
     fireEvent.change(screen.getByLabelText(/nickname/i), { target: { value: "Juan" } });

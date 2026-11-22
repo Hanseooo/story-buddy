@@ -14,6 +14,32 @@ instead of repeating it.
 
 ---
 
+## Class code input takes any letter or digit · 2026-11-22
+
+### Code
+
+- The `/join` code boxes and `/join/[code]` links take any letter or digit as typed. Typing `I`
+  used to show "That letter isn't used in class codes." The generator still leaves out `I`, `O`,
+  `0`, and `1` so handwritten codes stay readable, but the screen font (Nunito ExtraBold) shows
+  each of them distinctly, so the input neither rejects them nor swaps them for a lookalike. A code
+  that does not exist fails at sign-in like any other typo.
+- Both pages share `frontend/lib/class-code.ts`. The frontend no longer copies the generator's
+  alphabet. Three hand-copied alphabets with no check between them caused the `L` bug on
+  2026-10-23, so that kind of bug can no longer happen.
+- Only characters that are not letters or digits show a hint, now reading "Class codes only use
+  letters and numbers."
+
+### Docs
+
+- Update S1-3 and the auth-routes code-field rule.
+
+### Checks
+
+- `pnpm lint` passed, `tsc --noEmit` passed, and `pnpm test` passed 1189 tests across 102 files.
+  The changed tests failed before the change. Typing `a I 1 b O 0 !` on `/join` in a real browser
+  gives `AI1BO0` and the hint for `!`, with no console errors. Live sign-in with a real class code
+  was not run.
+
 ## Features on by default · 2026-11-21
 
 ### Code
