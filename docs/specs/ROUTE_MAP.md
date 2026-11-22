@@ -77,7 +77,7 @@ Next.js App Router nested layouts. Each layout is a `layout.tsx` that wraps its 
 ```
 app/
 ├── layout.tsx                          # RootLayout — html/body, fonts (Outfit, Nunito, Inter),
-│                                       # theme provider, Supabase client init, Sentry
+│                                       # theme provider, Supabase client init
 ├── page.tsx                            # Landing page (/)
 ├── login/page.tsx                      # /login
 ├── signup/page.tsx                     # /signup
@@ -109,7 +109,7 @@ app/
 
 | Layout | Responsibility | Mounts nav? |
 |---|---|---|
-| `RootLayout` | `<html>`, fonts, theme provider, Supabase client, Sentry, `<Toaster>` | No |
+| `RootLayout` | `<html>`, fonts, theme provider, Supabase client, `<Toaster>` | No |
 | `MarketingLayout` | Minimal marketing header (logo + CTA) + footer | Yes (static) |
 | `AuthLayout` | Centered card container, no nav | No |
 | `TeacherShell` | Auth guard, sidebar/bottom-sheet nav, breadcrumbs, teacher-density typography | Yes |
@@ -363,7 +363,7 @@ Each route group also gets an `error.tsx`:
 - [ ] CC-1 Moderation ordering — N/A (routing layer; moderation is pipeline-side)
 - [ ] CC-2 PII redaction — N/A (no PII in URLs; `profileId` is a UUID)
 - [ ] CC-3 Cost control — N/A
-- [ ] CC-5 Observability — N/A (handled at Sentry/Langfuse level)
+- [ ] CC-5 Observability — N/A (pipeline tracing is Langfuse; route errors go to the console and the host's logs)
 - [ ] CC-7 Reproducibility — N/A
 - [ ] CC-10 Checkpointing — N/A (process route *displays* checkpoint state but doesn't own it)
 

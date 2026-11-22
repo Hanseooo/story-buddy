@@ -9,7 +9,84 @@ export const SOURCES = {
   groupGuide: "docs/capstone/group-guide.md",
   manifest: "backend/finetune/manifest.py",
   buildDataset: "backend/finetune/build_dataset.py",
+  annotationSurface: "docs/specs/annotation-surface.md",
+  labellingDemo: "docs/specs/research-labelling-demo.md",
+  adr060: "docs/product/adr/ADR-060-rejected-attempts-are-harvested-because-the-judge-is-deployed-on-candidates-not-finals.md",
+  adr026:"docs/product/adr/ADR-026-researcher-facing-surfaces-two-authenticated-routes-no.md",
 } as const;
+
+// Runbook, "Counts recounted for the research page refresh (2026-11-21)".
+export const PAIR_FACTS = { pairs: 899, books: 42, natural: 795, constructed: 104, laterAttempt: 422 } as const;
+
+export const LABEL_FACTS = {
+  conflicted: 172,
+  differedOnSameDifferent: 85,
+  aiAssisted: 10,
+  changed: 23,
+  changedByAdjudication: 13,
+  // Different with only Wrong Clothing or Wrong Style ticked. Known errors, kept because the freeze is registered.
+  kept: { total: 9, train: 6, validation: 1, test: 2 },
+} as const;
+
+export const TRAIN_DIFFERENT = { total: 157, constructed: 104, natural: 53 } as const;
+
+// Runbook, "Constructed matches", and PREREGISTRATION_OBJ4.md section 12 (2026-08-24 amendment).
+export const CONSTRUCTED = { matches: 14, humanMatches: 12 } as const;
+export const DONATED_CANDIDATES = 15;
+
+// The dataset-flow diagram. The SVG in public/ is a byte copy of the docs source (data.test.ts checks it).
+// The PNG is exported by the diagram export script and is not committed by this page.
+export const FLOW_DIAGRAM = {
+  source: "docs/diagrams/drawio/dataset_build_and_annotation_flow.drawio.svg",
+  svg: "/research/diagrams/dataset_build_and_annotation_flow.drawio.svg",
+  png: "/research/diagrams/dataset_build_and_annotation_flow.png",
+  asOf: "2026-11-21",
+} as const;
+
+// Owner-stated reasons for building the labelling tool: annotation-surface.md section 1a.
+export const OWNER_TOOL_REASONS = [
+  "It saves time.",
+  "Both raters can label in parallel.",
+  "Every label saves to the cloud as it is made.",
+  "It is easy for teammates to use.",
+] as const;
+
+// Documented in ADR-026 and annotation-surface.md section 1a.
+export const DOCUMENTED_TOOL_REASONS = [
+  "The images stay in a private bucket and are opened only through short-lived signed links.",
+  "No training data sits on a shared lab PC.",
+  "A rater cannot see the other rater's labels. Database rules enforce it.",
+] as const;
+
+// Definitions box. Terms are the SH-09 vocabulary that this page uses.
+export const DEFINITIONS: { term: string; meaning: string }[] = [
+  { term: "Pair", meaning: "One character's reference picture and one drawing of a book page where that character should appear." },
+  { term: "Reference", meaning: "The one portrait the app draws of a character before it draws the book." },
+  { term: "Page drawing", meaning: "One attempt at drawing a book page. Attempts the app rejected still count." },
+  { term: "Natural pair", meaning: "A pair that came out of the app and was labelled by people. The files call it pipeline." },
+  { term: "Constructed pair", meaning: "A pair a script made by setting one character's reference against a different character's page. No one labelled it." },
+  { term: "Same / Different", meaning: "The label. Same: the page shows the same character as the reference. Different: it does not." },
+  { term: "Study owner", meaning: "The group member who settles pairs the two raters labelled differently." },
+  { term: "Freeze (registered)", meaning: "The dataset files, written once on 2026-09-30 with a checksum and never edited after." },
+  { term: "Train, validation, held-out test", meaning: "Train teaches the judge. Validation picks the best saved model. The held-out test set is read once at the end." },
+  { term: "Seed", meaning: "The starting random number of a training run. Three seeds mean three separate runs." },
+  { term: "Checkpoint", meaning: "The model saved part way through a training run." },
+  { term: "Catch and false alarm", meaning: "A catch: a Different pair the judge calls Different. A false alarm: a Same pair it calls Different." },
+];
+
+// The ten steps, in the order the spec gives (US-08). Figures are the constants above and SPLITS.
+export const PROCESS_STEPS: { name: string; text: string }[] = [
+  { name: "Stories", text: `30 stories were written by the researchers. ${DONATED_CANDIDATES} stories were donated by children. Each story got its split and art style when it was entered.` },
+  { name: "Generated books", text: `The app drew each story as a picture book: a reference portrait for each main character, then every page, redrawn when a page failed its own check. ${PAIR_FACTS.books} books finished.` },
+  { name: "Pairs", text: `Each drawing attempt of a page, for each character on it, is one natural pair. That gives ${PAIR_FACTS.natural}.` },
+  { name: "Two raters", text: "Two group members labelled every natural pair on their own, seeing only the two pictures." },
+  { name: "Adjudication", text: `The study owner settled the ${LABEL_FACTS.conflicted} pairs where the two labels differed on any field, and relabelled ${LABEL_FACTS.aiAssisted} more with AI assistance.` },
+  { name: "Freeze", text: `A script added ${PAIR_FACTS.constructed} constructed pairs to train. Then the dataset files were frozen on 2026-09-30.` },
+  { name: "Splits", text: "Every story's split was fixed when it was entered: 24 train stories, 6 validation stories, and 12 donated stories for the held-out test." },
+  { name: "Training", text: "The judge model, Qwen3.5-9B, was fine-tuned on the 484 train pairs. This was done three times, once per seed." },
+  { name: "Checkpoint choice", text: "For each seed, the checkpoint with the best validation F1 on the Different class was kept. F1 rewards catching Different pairs without false alarms." },
+  { name: "One held-out test read", text: "The 329 held-out test pairs were read once, to score the chosen checkpoints." },
+];
 
 // Runbook, "What the registered freeze contains".
 export const SPLITS = [
@@ -20,11 +97,15 @@ export const SPLITS = [
 
 export type SplitName = (typeof SPLITS)[number]["name"];
 
-// Runbook, "Human/non-human training and validation mix". Generated characters, not declared rosters.
+// Runbook, "Human and non-human characters, by species". Counted by each character's species field.
 export const CHARACTER_KINDS = [
-  { split: "Train", humanCharacters: 19, nonHumanCharacters: 25, humanPairs: 220, nonHumanPairs: 264 },
+  { split: "Train", humanCharacters: 12, nonHumanCharacters: 32, humanPairs: 178, nonHumanPairs: 306 },
   { split: "Validation", humanCharacters: 9, nonHumanCharacters: 2, humanPairs: 75, nonHumanPairs: 11 },
 ] as const;
+
+// The earlier table matched names to the intake roster and counted this many training characters as human
+// that are animals or machines (same runbook entry).
+export const ROSTER_MISSES = 7;
 
 // Runbook, "Dataset handoff": this filtered freeze was separate from the completed registered runs.
 export const EXPLORATORY = { excluded: 16, trainPairs: 468 } as const;
@@ -63,7 +144,28 @@ export type FrozenRecord = {
   ref_verdict_status: "passed" | "failed" | "unverified";
 };
 
-type ExampleImage = { src: string; alt: string };
+// Validation row 033b8372e89e4c06 of obj4-v1/manifest.val.jsonl, in stored order. "…" marks cut text, and only
+// the two image paths are cut. data.test.ts compares it with the file where the freeze is on disk (US-06).
+export const VERBATIM_RECORD = {
+  pair_id: "033b8372e89e4c06",
+  char_id: "syn-025:c0",
+  split: "val",
+  provenance: "synthetic",
+  pair_type: "pipeline",
+  images: [
+    "assets/ref/syn-025--campaign-…_ref-c0-1.png",
+    "assets/scene/syn-025--campaign-…_s0-3.png",
+  ],
+  differences_observed: "Present on the page: human, brown hair, tan skin, human body with arms and legs, human face with eyes, nose, and mouth, human body, blue shirt, pants.",
+  same_character: true,
+  label: false,
+  anatomy_intact: true,
+  text_free: true,
+  failure_reasons: [],
+  ref_verdict_status: "passed",
+} as const;
+
+type ExampleImage ={ src: string; alt: string };
 
 export type Example = {
   record: FrozenRecord;
@@ -206,19 +308,20 @@ export const EXAMPLES: Example[] = [
 ];
 
 // ADR-066 decision 2. Meanings follow the comments on `ManifestRecord` in backend/finetune/manifest.py.
-export const RECORD_FIELDS: { field: keyof FrozenRecord; meaning: string }[] = [
+export const RECORD_FIELDS: { field: keyof typeof VERBATIM_RECORD; meaning: string }[] = [
   { field: "pair_id", meaning: "The pair's id, made by the build script. It carries no meaning." },
-  { field: "char_id", meaning: "The story and the character the reference belongs to. Splits are made on it. It never reaches the training text." },
-  { field: "split", meaning: "train, val or test. Bookkeeping, not training text." },
+  { field: "char_id", meaning: "The story and the character the reference belongs to. In the shown record, syn-025 is the story and c0 is its first character. Splits are made on the story. It never reaches the training text." },
+  { field: "split", meaning: "Which set the pair is in: train, val (validation) or test. Bookkeeping, not training text." },
   { field: "provenance", meaning: "synthetic for a story the researchers wrote, donated for a child's story." },
-  { field: "pair_type", meaning: "pipeline for a page the pipeline drew for this character, which the two raters labelled. constructed for a pair a script made from two characters." },
-  { field: "differences_observed", meaning: "A sentence a script builds from the ticked reasons and the character's stored attributes. No rater wrote it." },
+  { field: "pair_type", meaning: "pipeline is a natural pair: the app drew the page and two raters labelled it. constructed is a pair a script made from two characters." },
+  { field: "images", meaning: "Two image files: the reference first, the page drawing second. In the page file name, s0-3 means scene 0, third attempt." },
+  { field: "differences_observed", meaning: "A sentence a script writes from the ticked reasons and the character's stored description. No rater wrote it, and it does not describe the picture." },
   { field: "same_character", meaning: "The final answer. true means Same." },
-  { field: "label", meaning: "The opposite of same_character. true means Different, the class the judge is scored on." },
-  { field: "anatomy_intact", meaning: "false when a rater ticked Broken Anatomy. A constructed pair takes the default, true." },
-  { field: "text_free", meaning: "false when a rater ticked Text Visible. A constructed pair takes the default, true." },
-  { field: "failure_reasons", meaning: "The reasons ticked, from the fixed list of seven above." },
-  { field: "ref_verdict_status", meaning: "Whether the automatic check of the reference picture passed when the book was made. Bookkeeping, not training text." },
+  { field: "label", meaning: "The opposite of same_character, so true means Different. Different is the class the judge is scored on." },
+  { field: "anatomy_intact", meaning: "false when the final label ticked Broken Anatomy (32 of 899 pairs). A constructed pair takes the default, true." },
+  { field: "text_free", meaning: "false when the final label ticked Text Visible (3 of 899 pairs). A constructed pair takes the default, true." },
+  { field: "failure_reasons", meaning: "The reasons ticked, from the fixed list of seven in the table above. Empty for Same." },
+  { field: "ref_verdict_status", meaning: "Whether the app's automatic check passed the reference portrait when the book was made. Bookkeeping, not training text." },
 ];
 
 // ADR-066 decision 3: the train.json entry for the constructed example, without `images`.

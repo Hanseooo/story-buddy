@@ -17,20 +17,19 @@ The updated capstone manuscript is now authoritative for the study design (ADR-0
 - **The RQ5 naive-reader/child-comprehension recall study is dropped entirely** — no reader-recall leg, no
   Tier-1/Tier-2 respondent tiers, no Fun Toolkit (Smileyometer, Again-Again), no child engagement
   instruments. Respondents are now: **Grade 5–6 learners** (write stories only, no evaluation role),
-  **expert validators** (Dean/Professor of the Arts College, one Arts student/intern, one Education
-  student/intern), and separate **designated software-quality evaluators** (ISO/IEC 25010).
-- **Objective 3 (expert validation) uses a written, open-ended interview form + content analysis**
-  (positive / negative / suggestion per criterion, five criteria), not the earlier feature-level scored
+  **expert evaluators** (two BEEd professors, one Arts professor), and separate **designated software-quality evaluators** (ISO/IEC 25010).
+- **Objective 3 (expert validation) uses a seven-question, written, open-ended questionnaire**
+  (content analysis or thematic analysis, to be decided, O-04), not the earlier feature-level scored
   rubric (CVI / Krippendorff's α).
 - **Objective 4 (judge classification) is a formal, reported objective**: precision / recall / F1 (F1
   primary) against human reference labels, character-identity-level split, with an **optional** secondary
   comparison against the zero-shot base model and the existing prompted baseline. This is no longer
   "descriptive only / no comparative claim / build-gate only."
-- **Objective 5 is ISO/IEC 25010 software quality** — five characteristics (Functional Suitability,
-  Performance Efficiency, Usability, Reliability, Security), 5-point Likert, weighted mean + SD, Table 4
-  interpretation bands.
+- **Objective 5 is ISO/IEC 25010 software quality** — 23 Likert items on six characteristics (Functional Suitability,
+  Interaction Capability, Reliability, Performance Efficiency, Security, Compatibility), 5 = Strongly Agree,
+  descriptive statistics only (D-06).
 - **Corpus renumbered and located:** ~~"~50 (60–70) donated stories"~~ → **15 stories collected → 10
-  primary + 5 backup**, Grade 5–6. Stories collected at **Matina Aplaya Elementary School**; system
+  primary + 5 backup**, Grade 5–6. Stories collected at **Vicente Hizon, Sr. Elementary School** (D-04); system
   development and evaluation at **Holy Cross of Davao College (HCDC)**, Davao City, Philippines.
 - **ADR-018's δ = 3 non-inferiority gate is unaffected** — still a *deployment* gate (does the fine-tuned
   judge replace the prompted incumbent in the product), not a reported finding.
@@ -175,7 +174,7 @@ ten-year-olds (ADR-017).
 
 ### 5.1 MVP modules
 1. Story Analyzer (grammar-tolerant entity + coreference extraction; tolerant of light Taglish)
-2. Scene Segmentation Engine (selects up to 10–15 scenes; graceful floor behavior for short stories)
+2. Scene Segmentation Engine (selects 3 to 10 scenes, `MIN_SCENES`/`MAX_SCENES` in `backend/app/config.py`, ADR-037; graceful floor behavior for short stories)
 3. Character Bible Generator + auto-generated canonical reference image (multi-character, max 2 canonical refs in v1)
 4. **Style Presets** (selectable styles defaulting to Gouache, author picks one before generation; config, not a generator — ADR-007, ADR-022, ADR-042)
 5. Prompt Optimization Engine
@@ -255,7 +254,7 @@ it is the long pole and cannot be compressed by coding faster (§10, §18, RESEA
 
 ### MVP
 - Story Analyzer (grammar-tolerant extraction: characters/locations/objects/events + coreference)
-- Scene Segmentation (up to 10–15 scenes; **floor behavior**: fewer scenes allowed, never invent content)
+- Scene Segmentation (3 to 10 scenes, ADR-037; **floor behavior**: fewer scenes allowed, never invent content)
 - Character Bible + auto-generated canonical reference image (≤2 canonical characters)
 - **Style Presets** — hand-authored prompt fragments (Gouache default, Cel selectable, Comic compatibility); the author picks one **before** the canonical
   reference is generated, and it is then frozen for the storybook. No style-anchor image (ADR-022, ADR-042).
@@ -320,11 +319,10 @@ the *warrant* for why acceptability matters; it is not a finding of this study.
 ### Evaluation design (see ADR-008)
 
 **Three legs, one per evaluation objective — no reader-comprehension leg.**
-- **Objective 3 — expert validation.** Purposively selected expert validators — the Dean/Professor of the
-  Arts College, one Arts student/intern, one Education student/intern — respond to a **written,
-  open-ended interview form** (Tool B). Responses are analysed by **content analysis**: each is
-  coded **positive / negative / suggestion** per criterion, across five criteria (narrative coherence,
-  story faithfulness, visual presentation, visual style consistency, classroom suitability). This replaces
+- **Objective 3 — expert validation.** Three experts — two BEEd professors and one Arts professor — each review the original
+  story and its generated book, and respond to a **written, open-ended questionnaire** of seven questions,
+  one per book (the expert questionnaire). Responses are analysed by **content analysis or thematic
+  analysis** (to be decided, O-04). This replaces
   the earlier feature-level scored rubric (CVI / Krippendorff's α).
 - **Objective 4 — judge classification.** The fine-tuned `Qwen3.5-9B` (QLoRA, postregistration amended) judge predicts
   Same/Different Character on the character-disjoint held-out set; scored against human reference labels
@@ -333,15 +331,14 @@ the *warrant* for why acceptability matters; it is not a finding of this study.
   figure, not a replacement for it. ADR-018's δ = 3 non-inferiority test remains a **deployment gate**
   (does the fine-tuned judge replace the prompted incumbent in the product), not a reported finding. Full
   machinery in ADR-018 and `docs/specs/judge-finetune.md`.
-- **Objective 5 — software quality.** The ISO/IEC 25010 questionnaire (Tool C) — five applicable
-  characteristics (Functional Suitability, Performance Efficiency, Usability, Reliability, Security),
-  5-point Likert, weighted mean + SD per characteristic, interpreted against Table 4 bands
-  (4.20–5.00 Excellent · 3.40–4.19 Very Good · 2.60–3.39 Good · 1.80–2.59 Fair · 1.00–1.79 Poor) —
-  administered to **designated software-quality evaluators** (IT practitioners and teachers), separate
-  from the expert validators.
+- **Objective 5 — software quality.** The ISO/IEC 25010 questionnaire — 23 Likert items on six
+  characteristics (Functional Suitability, Interaction Capability, Reliability, Performance Efficiency,
+  Security, Compatibility), 5 = Strongly Agree, mean + SD per characteristic as descriptive statistics only —
+  administered to **at least 30 designated software-quality respondents** (IT experts, IT students, teachers
+  and education students, not split equally), separate from the expert evaluators.
 
-**Objectives 1–2 are the built artifact, verified — not judged — by Tool A.** The **Functional Verification
-Matrix** records system-generated pass/fail per functional category (input validation & moderation, story
+**Objectives 1–2 are the built artifact, evidenced by the built pipeline, its tests and the 42 books (D-20, D-28).** The planned **Functional Verification
+Matrix** (dropped 2026-11-21, never built) would have recorded system-generated pass/fail per functional category (input validation & moderation, story
 analysis, scene structuring, visual planning, scene generation & refinement, picture book production) as
 `Successful ÷ Total × 100`. It has **no human respondents**, runs on **fixture stories** — so it carries no
 ethics load and is defensible in October — and is computed by an offline script over tracing exports, not a
@@ -365,24 +362,24 @@ collect their responses on paper and by form, not in-app. Rationale and rejected
 | Group | Role | Contributes to |
 |---|---|---|
 | Grade 5–6 learners | Write original stories only — no evaluation role | Corpus |
-| Expert validators (Dean/Professor Arts College, Arts student, Education student) | Written open-ended interview + content analysis | Objective 3 |
-| Designated software-quality evaluators (IT practitioners, teachers) | ISO/IEC 25010 questionnaire | Objective 5 |
+| Expert evaluators (2 BEEd professors, 1 Arts professor) | Written seven-question open-ended questionnaire | Objective 3 |
+| Designated software-quality respondents (IT experts, IT students, teachers, education students) | ISO/IEC 25010 questionnaire | Objective 5 |
 
 Full detail (recruitment, instruments, ethics staging): `docs/product/RESEARCH_PROTOCOL.md` §4–§10.
 
 ### Metrics
 | Metric | What it measures | Source |
 |---|---|---|
-| Functional verification (Objectives 1–2) | Per-category success rate, `Successful ÷ Total × 100` | Tool A — offline script over tracing exports, on fixture stories |
-| Expert validation (Objective 3) | Positive / negative / suggestion tallies per criterion | Content analysis, Tool B |
+| Functional verification (Objectives 1–2) | Per-category success rate, `Successful ÷ Total × 100` | Dropped (D-28): not built; evidence is the built pipeline, its tests and the 42 books |
+| Expert validation (Objective 3) | Coded answers to the seven open-ended questions | Content or thematic analysis (to be decided, O-04) |
 | Judge classification (Objective 4) | Precision, recall, F1 (F1 primary) vs human reference labels | Held-out test set; optional comparison vs zero-shot base + prompted baseline |
-| Software quality (Objective 5) | Weighted mean + SD per ISO/IEC 25010 characteristic | Tool C |
+| Software quality (Objective 5) | Mean + SD per ISO/IEC 25010 characteristic (descriptive only) | the ISO/IEC 25010 questionnaire |
 | Generation Time | Submission → completed storybook | Instrumentation (§16) |
 | AI Resource Usage | Avg generation time, image count, regen count, API cost/story | Instrumentation (§16) |
 
 ### Story corpus (validity — do not skip)
 Corpus = **donated child writing + researcher labels**: **15 stories collected from Grade 5–6 learners at
-Matina Aplaya Elementary School → 10 primary + 5 backup.** System development and evaluation take place at
+Vicente Hizon, Sr. Elementary School → 10 primary + 5 backup.** System development and evaluation take place at
 **Holy Cross of Davao College (HCDC)**, Davao City, Philippines. Not builder-authored clean text, which
 would measure best-case behavior only. Researcher-written stories are permitted **only** as
 judge-training-split augmentation — never as evaluation stimuli and never in the judge's val/held-out-test
@@ -406,7 +403,7 @@ use only, not any evaluation leg.
 6. **Very short stories** → **fewer scenes allowed**; scene count tracks the story's distinct major plot points, target ≥3 where the arc supports it, never padded to reach it (never-invent overrides the floor). Described as a pipeline behaviour of Scene Segmentation, not a standalone evaluation objective (RESEARCH_PROTOCOL §4).
 7. **Whole-run timeout / stall** → **LangGraph checkpointing + resumability**: a stall at scene N resumes from N, never re-rolls scenes 1…N-1. Kid sees "taking a little longer…" then "we saved your progress — come back soon." ADR-005.
 8. **Image model/API** → **Qwen-Image-Edit (Apache-2.0) on fal.ai.** Open weight, hosted. ADR-001, ADR-015.
-9. **Moderation services** → text (**meta-llama/llama-guard-4-12b** on the OpenRouter + **`gpt-oss-safeguard-20b`** on OpenRouter, both Apache-2.0) + PII (Presidio + **Filipino recognizers**) + image (NSFW ViT + VLM safety rubric). **Two independent open classifiers per path.** §13, ADR-011.
+9. **Moderation services** → text (**meta-llama/llama-guard-4-12b** on the OpenRouter + **`gpt-oss-safeguard-20b`** on OpenRouter, both Apache-2.0) + PII (Presidio + **Filipino recognizers**) + image (Mistral Small 3.2 primary + gemma-3-27b-it backstop via OpenRouter, ADR-032). **Two independent open classifiers per path.** §13, ADR-011.
 10. **Fine-tuning** → **the consistency judge** (`Qwen3.5-9B`, QLoRA), served on vLLM only if qualified and selected. Identity and style
     remain the *wrong* targets — ADR-016's reasoning is preserved and is precisely why the judge is right. **ADR-018, ADR-019, ADR-061.**
 11. **What "open source" means** → **open weight**, hosted inference, self-hosting available — and, as of
@@ -423,26 +420,26 @@ use only, not any evaluation leg.
 
 ## 12. Technical Architecture
 
-**Frontend:** Next.js (React) + Tailwind + shadcn/ui (teacher) + hand-built cartoon-pop components (kid) + Motion (micro-interactions) + Lottie (wait states). Deployed on Vercel.
+**Frontend:** Next.js (React) + Tailwind + hand-built components (teacher and kid) + Motion (`framer-motion`, micro-interactions). Deployed on Vercel. *(Updated 2026-11-22: shadcn/ui and Lottie were planned but are not in `frontend/package.json`.)*
 
-**Backend:** FastAPI (web) + **separate RQ worker** + **Redis** (broker), on Northflank (Render/Fly.io equivalent; Singapore region). *A long pipeline cannot run in a request cycle — this is a 3-service deployment, not one.*
+**Backend:** FastAPI (web) + **separate RQ worker** + **Redis** (broker), on Northflank (Render/Fly.io equivalent; North America region, free tier, D-07). *A long pipeline cannot run in a request cycle — this is a 3-service deployment, not one.*
 
-**Pipeline engine:** **LangGraph as a deterministic state machine** (explicit nodes; conditional edges only at moderation pass/fail and consistency pass/fail). LangChain omitted unless a concrete need appears. Model APIs called directly through `backend/providers.py` — the only file that names a vendor (ADR-003, ADR-015).
+**Pipeline engine:** **LangGraph as a deterministic state machine** (explicit nodes; conditional edges only at moderation pass/fail and consistency pass/fail). LangChain is installed only because Langfuse's LangGraph `CallbackHandler` needs it (`worker/run_job.py`); no node uses it. Model APIs called directly through `backend/providers.py` — the only file that names a vendor (ADR-003, ADR-015).
 
 **State/persistence:** Supabase Postgres (app data + LangGraph checkpoints via `langgraph-checkpoint-postgres`); Supabase Auth (teacher) + classroom-scoped student auth + RLS; Supabase Storage (images, signed URLs); Supabase Realtime (job progress). ADR-006.
 
 **Structured extraction:** strict `json_schema` structured output + `provider.require_parameters: true` + Pydantic validation on every LLM boundary. The Story Memory schema is the contract between modules. ADR-002.
 
-**Flow:** `POST /storybooks` creates a job row, returns `job_id` immediately → worker runs the LangGraph pipeline, checkpointing after each scene, updating job status → frontend subscribes to the job row via Realtime → on completion, images in Storage, book in library.
+**Flow:** `POST /storybooks` redacts and moderates the title (web tier, `app/main.py`), creates a job row, returns `job_id` immediately → the job goes on the Redis queue → worker runs the LangGraph pipeline, checkpointing after each scene, updating job status → frontend subscribes to the job row via Realtime → on completion, images in Storage, book in library.
 
 ---
 
 ## 13. Moderation & Safety Stack
 
-Four distinct concerns, four mechanisms. **Open classifier as the gate, free proprietary classifier as
-an independent backstop; either one flagging fails the content** (ADR-011).
+Four distinct concerns, four mechanisms. **Open classifier as the gate, a second open classifier from another vendor as
+an independent backstop; either one flagging fails the content** (ADR-011, revised by ADR-011c and ADR-015).
 
-1. **Input text moderation** — **`meta-llama/llama-guard-4-12b`** (Apache-2.0, 119 languages, the 0.6B variant on the
+1. **Input text moderation** — **`meta-llama/llama-guard-4-12b`** (Apache-2.0, 12B, via
    OpenRouter) + **`openai/gpt-oss-safeguard-20b`** (Apache-2.0 open *weights*, via OpenRouter, independent
    backstop) on the child's story before any processing. Gentle, non-scary failure copy.
    meta-llama/llama-guard-4-12b's multilingual coverage closes the Filipino/Taglish hole *by construction*; gpt-oss-safeguard
@@ -520,7 +517,7 @@ image generation:
 
 ## 16. Observability (doubles as research instrumentation)
 
-Instrument the pipeline with **Langfuse** (LangGraph tracing via a per-job `CallbackHandler`; ADR-030, superseding ADR-014's LangSmith). This captures generation time, per-scene regeneration counts, cost per book, and VLM-judge scores — i.e. the "AI Resource Usage" metrics and a large share of the eval dataset. Add **Sentry** for error tracking. Instrument from the walking-skeleton phase so data collection is free by the time you evaluate.
+Instrument the pipeline with **Langfuse** (LangGraph tracing via a per-job `CallbackHandler`; ADR-030, superseding ADR-014's LangSmith). This captures generation time, per-scene regeneration counts, cost per book, and VLM-judge scores — i.e. the "AI Resource Usage" metrics and a large share of the eval dataset. There is no error-tracking service: errors are logged by the services and read in the host's logs. Instrument from the walking-skeleton phase so data collection is free by the time you evaluate.
 
 ---
 

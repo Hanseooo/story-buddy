@@ -61,7 +61,7 @@ export type RunScene = {
 
 export type RunStep = { node: string; started_at: string; duration_ms: number | null };
 
-export type EndedOn = { node: string; kind: "failed" | "waiting" | "running" };
+export type EndedOn = { node: string; kind: "failed" | "waiting" | "teacher" | "running" };
 
 export type RunCost = {
   image_count: number;

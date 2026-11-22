@@ -14,9 +14,9 @@ and a Methods section, not into a Philippine Chapter-1 template.
 
 ---
 
-~~**Product-scope amendment, 2026-10-21 (ADR-071).** On-demand PDF download of a student's own teacher-approved book is restored. Future Tool A picture-book-production verification includes composition and a separate authenticated, complete PDF download check, as specified in `docs/specs/functional-verification-matrix.md`. Preserve all historical criteria/results. Narration stays cut, Objective 4 is unchanged, and revised questionnaire wording still needs adviser sign-off before administration (`docs/capstone/research_instruments.md`).~~
+~~**Product-scope amendment, 2026-10-21 (ADR-071).** On-demand PDF download of a student's own teacher-approved book is restored. Future picture-book-production verification (the matrix was dropped 2026-11-21, D-28) includes composition and a separate authenticated, complete PDF download check, as specified in `docs/specs/functional-verification-matrix.md`. Preserve all historical criteria/results. Narration stays cut, Objective 4 is unchanged, and revised questionnaire wording still needs adviser sign-off before administration (`docs/capstone/research_instruments.md`).~~
 
-**Classroom-download amendment, 2026-10-21 (ADR-071/072).** On-demand PDF download covers teacher-approved books by active students in the viewer's current classroom, including classmates' books. Future Tool A picture-book-production verification includes composition and a separate authenticated, complete PDF download check (`docs/specs/functional-verification-matrix.md`). Preserve historical criteria/results. Narration stays cut, Objective 4 is unchanged, and revised questionnaire wording still needs adviser sign-off before administration (`docs/capstone/research_instruments.md`).
+**Classroom-download amendment, 2026-10-21 (ADR-071/072).** On-demand PDF download covers teacher-approved books by active students in the viewer's current classroom, including classmates' books. Future picture-book-production verification (the matrix was dropped 2026-11-21, D-28) includes composition and a separate authenticated, complete PDF download check (`docs/specs/functional-verification-matrix.md`). Preserve historical criteria/results. Narration stays cut, Objective 4 is unchanged, and revised questionnaire wording still needs adviser sign-off before administration (`docs/capstone/research_instruments.md`).
 
 ## 1. The problem, in one paragraph
 
@@ -53,13 +53,13 @@ Objectives 1–2 are engineering — the pipeline exists and produces books; the
 PRD §5 and the ADRs, not re-litigated here. **Objectives 3, 4, and 5 are the three evaluation legs**, and
 everything past this point in this document is in service of one of them.
 
-Objective 3's "story faithfulness" and "narrative coherence" criteria are where the drift risk above gets
-judged; Objective 4 is where the mechanism that is supposed to catch it in-flight — the consistency
+Objective 3's expert questionnaire is where the drift risk above gets
+judged, because each expert reads the original story beside the generated book; Objective 4 is where the mechanism that is supposed to catch it in-flight — the consistency
 judge — gets measured against human labels in its own right, independent of the books it helped produce.
 
 ## 3. What we claim, and what we must not
 
-**Claim:** that the generated outputs are rated acceptable by expert validators on the five criteria
+**Claim:** that the generated outputs are judged acceptable by the three experts
 (Objective 3); that the fine-tuned consistency judge classifies character consistency against human
 reference labels with reportable precision, recall, and F1 (Objective 4); and that the software is rated
 acceptable on ISO/IEC 25010 (Objective 5).
@@ -95,22 +95,22 @@ That is the SDG-4 hook, and it is a design property, not a hope.
 
 | Objective | Question | Method | Respondents |
 |---|---|---|---|
-| 3 — acceptability | Are the generated picture books acceptable for presentation quality and classroom use? | Written open-ended interview form (Tool B) + content analysis, five criteria (§5) | Expert validators: Dean/Professor of the Arts College, one Arts student/intern, one Education student/intern |
+| 3 — acceptability | Are the generated picture books acceptable for presentation quality and classroom use? | Seven-question written open-ended questionnaire (the expert questionnaire); content or thematic analysis, to be decided (§5) | Expert evaluators: two BEEd professors, one Arts professor |
 | 4 — judge classification | How well does the fine-tuned judge classify character consistency against human reference labels? | Precision / recall / F1 (F1 primary) on the character-disjoint held-out set; optional comparison vs zero-shot base + existing prompted baseline (§6) | None — model evaluated against researcher-established reference labels |
-| 5 — software quality | Is StoryBuddy's software quality acceptable on ISO/IEC 25010? | 5-point Likert questionnaire (Tool C), five characteristics, weighted mean + SD (§6) | Designated software-quality evaluators (separate from the expert validators) |
+| 5 — software quality | Is StoryBuddy's software quality acceptable on ISO/IEC 25010? | 23-item Likert questionnaire, six characteristics, mean + SD only (§6) | At least 30 designated software-quality respondents (separate from the expert evaluators) |
 
-**Objectives 1–2 sit outside this table, and are verified by Tool A.** They are the built artifact, not an
-evaluation leg with respondents. The **Functional Verification Matrix** records system-generated pass/fail per
+**Objectives 1–2 sit outside this table, and are evidenced by the built pipeline, its tests and the 42 books (D-20, D-28).** They are the built artifact, not an
+evaluation leg with respondents. The planned **Functional Verification Matrix** (dropped 2026-11-21, never built) would have recorded system-generated pass/fail per
 functional category as `Successful ÷ Total × 100`, over **fixture stories** — so it carries no ethics load and
 is defensible in October ahead of the corpus. ⚠️ **A Pass means the stage executed and emitted valid output,
 never that the judge approved it** — for scene generation a Pass includes a page the judge flagged and
-best-of-fell-back on. Scoring Tool A by judge approval would make it a second judge-scored instrument and
+best-of-fell-back on. Scoring that matrix by judge approval would make it a second judge-scored instrument and
 break non-circularity (ADR-004). Spec: `docs/specs/functional-verification-matrix.md`.
 
 **Instrument delivery.** Objective 4's labels are collected in the `(research)/annotate/` surface, with
 `adjudicate/` for the third researcher; Objective 3's stimuli are served blinded (provenance stripped, order
 shuffled per validator) from `(research)/books/`, though its **responses stay on paper** — the instrument is
-open-ended prose, not a form. Objective 5's questionnaire is administered by form. Tool A is an offline
+open-ended prose, not a form. Objective 5's questionnaire is administered by form. The dropped matrix was to be an offline
 script. There is no researcher dashboard. See **ADR-026** and `docs/specs/annotation-surface.md`.
 
 **Scene coverage and under-length handling are described pipeline behaviours, not measured objectives.**
@@ -129,22 +129,16 @@ lives in ADR-004 and is repeated here so it is never improvised.
 
 ## 5. Objective 3 — Expert validation
 
-- **Respondents.** Purposively selected expert validators from the Arts and Education colleges: the
-  **Dean/Professor of the Arts College**, one **Arts student/intern**, and one **Education student/intern**.
-  Arts-sector validators judge visual/artistic presentation; the Education-sector validator judges
-  educational suitability.
-- **Instrument.** A **written, open-ended interview form** (**Tool B**) — not a scored ordinal
-  rubric.
-- **Analysis.** **Content analysis.** Pre-set categories from the five criteria below; each written
-  response is coded **positive feedback / negative feedback / suggestion for improvement** and tallied per
-  criterion.
-- **Five criteria:** narrative coherence, story faithfulness, visual presentation, visual style
-  consistency, suitability for classroom use.
+- **Respondents.** Three experts: **two BEEd professors and one Arts professor** (D-05). Each signs the
+  informed consent form first.
+- **Instrument.** A **written, open-ended questionnaire** of seven questions (**the expert questionnaire**,
+  `docs/capstone/expert-evaluation-questionnaire.md`, D-21) — not a scored ordinal rubric. Each expert reviews
+  the original story and its generated book, and fills in one questionnaire per book, with its Story ID.
+- **Analysis.** **Content analysis or thematic analysis**, to be decided (O-04).
 
 This replaces the earlier feature-level scored rubric (1–5 ordinal ratings, CVI, Krippendorff's α), which
-is dropped. There is no reader-recall or comprehension instrument riding alongside it — Objective 3's
-"story faithfulness" and "narrative coherence" criteria are where fidelity is judged, by the expert
-validators, not by a naive-reader recall session.
+is dropped. There is no reader-recall or comprehension instrument riding alongside it — fidelity is judged
+by the experts, who review the original story and the book together, not by a naive-reader recall session.
 
 ---
 
@@ -176,14 +170,13 @@ finding of Objective 4.
 
 ### Objective 5 — ISO/IEC 25010 software quality
 
-- **Five applicable characteristics:** Functional Suitability, Performance Efficiency, Usability,
-  Reliability, Security.
-- **Instrument (D):** **5-point Likert (1 = Poor … 5 = Excellent).**
-- **Analysis:** descriptive statistics — **weighted mean + standard deviation** per characteristic,
-  interpreted against the manuscript's Table 4 bands: **4.20–5.00 Excellent · 3.40–4.19 Very Good ·
-  2.60–3.39 Good · 1.80–2.59 Fair · 1.00–1.79 Poor.**
-- **Respondents:** **designated software-quality evaluators** (IT practitioners and teachers), separate
-  from the Objective 3 expert validators.
+- **Six characteristics:** Functional Suitability, Interaction Capability, Reliability, Performance
+  Efficiency, Security, Compatibility.
+- **Instrument:** **23 Likert items, 5 = Strongly Agree** (`docs/capstone/iso-25010-questionnaire.md`, D-06, D-27).
+- **Analysis:** **descriptive statistics only** — mean + standard deviation per characteristic. No CVI and
+  no Cronbach's α pilot.
+- **Respondents:** **at least 30 designated software-quality respondents** (IT experts, IT students,
+  teachers and education students, not split equally), separate from the Objective 3 expert evaluators.
 
 ---
 
@@ -194,8 +187,8 @@ Three respondent groups, three roles — none of them overlap:
 | Group | Role | Contributes to |
 |---|---|---|
 | Grade 5–6 learners | Write **original stories only** — no validation/evaluation role | Corpus (§8) |
-| Expert validators (Dean/Professor of Arts College, Arts student, Education student) | Written open-ended interview + content analysis | Objective 3 |
-| Designated software-quality evaluators (IT practitioners, teachers) | ISO/IEC 25010 questionnaire (Tool C) | Objective 5 |
+| Expert evaluators (2 BEEd professors, 1 Arts professor) | Written seven-question open-ended questionnaire | Objective 3 |
+| Designated software-quality respondents (IT experts, IT students, teachers, education students) | ISO/IEC 25010 questionnaire | Objective 5 |
 
 Learners are anonymized and assigned unique IDs at intake (§9); they never see, rate, or comment on any
 generated book, their own or anyone else's — the classroom gallery is display-only (ADR-021) and carries
@@ -207,15 +200,16 @@ model against researcher-established reference labels (two researchers annotate 
 ## 8. Corpus
 
 Test stories must be **real or realistic child writing**, not builder-authored clean prose (which measures
-best-case only). Grade 5–6, English with Taglish code-switching tolerated.
+best-case only). Grade 5–6, English. A donated story not written in English is translated into English by the
+research team before use, and the translations are disclosed (ADR-084, 2026-11-22).
 
 **Target: 15 stories collected, split into 10 primary corpus + 5 backup.** Collected from qualified
-**Grade 5 & 6 learners** at **Matina Aplaya Elementary School**. Learners submit **original stories only**
+**Grade 5 & 6 learners** at ~~**Matina Aplaya Elementary School**~~ **Vicente Hizon, Sr. Elementary School** (corrected 2026-11-21, D-04 of `docs/specs/research-page-refresh.md`). Learners submit **original stories only**
 — no validation/evaluation role; anonymized and assigned unique IDs at intake. **Do not use the old
 "~50 (60–70) donated stories" numbers anywhere** — that target belonged to the dropped comparative judge
 study design and no longer applies.
 
-**Locale.** Stories are collected at **Matina Aplaya Elementary School**; system development and
+**Locale.** Stories are collected at ~~**Matina Aplaya Elementary School**~~ **Vicente Hizon, Sr. Elementary School** (corrected 2026-11-21, D-04); system development and
 evaluation take place at **Holy Cross of Davao College (HCDC)**, Davao City, Philippines.
 
 **This is a recruitment decision and it is unfixable later.** By Phase 2.5 the corpus is closed. Ask for
@@ -319,16 +313,15 @@ heavier, not lighter.
 
 ## 10. Recruitment
 
-**Learners (corpus, §8).** Stories are collected at **Matina Aplaya Elementary School**, from qualified
+**Learners (corpus, §8).** Stories are collected at ~~**Matina Aplaya Elementary School**~~ **Vicente Hizon, Sr. Elementary School** (corrected 2026-11-21, D-04), from qualified
 Grade 5–6 learners. Their only role is writing their own story — no validation or evaluation role in
 Objectives 3–5.
 
-**Expert validators (Objective 3, §5).** Purposively selected: the Dean/Professor of the Arts College, one
-Arts student/intern, one Education student/intern — recruited through **Holy Cross of Davao College
+**Expert evaluators (Objective 3, §5).** Two BEEd professors and one Arts professor — recruited through **Holy Cross of Davao College
 (HCDC)**, Davao City, where system development and evaluation take place.
 
 **Software-quality evaluators (Objective 5, §6).** Designated separately from the expert validators, drawn
-from IT practitioners and teachers.
+from IT experts, IT students, teachers and education students (at least 30 in total).
 
 A classroom-level intervention study, or recruitment beyond the named institutions, would need a broader
 ethics footprint. That is a bigger thesis than this one.
@@ -337,11 +330,11 @@ ethics footprint. That is a bigger thesis than this one.
 
 ## 11. Scope and delimitation
 
-**Grade 5–6 (ages 10–12), Philippines, English with Taglish tolerated.** This is derived from the
+**Grade 5–6 (ages 10–12), Philippines, English (ADR-084, 2026-11-22; previously English with Taglish tolerated).** This is derived from the
 objectives, not chosen for convenience, and each boundary is load-bearing:
 
 - They **write independently** → the story is unambiguously the child's. Scaffold a Grade 2 student and
-  Objective 3's story-faithfulness criterion is meaningless: whose story did we illustrate?
+  Objective 3's comparison of the original story with its book is meaningless: whose story did we illustrate?
 - They **read fluently** → they can author at length, and the books produced from their stories are
   substantive enough for expert validators to judge coherence and faithfulness against.
   *(This boundary originally rested on in-app peer comprehension, which is cut — §7, ADR-021. It survives
@@ -360,9 +353,9 @@ moderation thresholds, and failure copy are all calibrated to a band.
 
 | Metric | What it measures | Source |
 |---|---|---|
-| Expert validation (Objective 3) | Positive / negative / suggestion tallies per criterion (narrative coherence, story faithfulness, visual presentation, visual style consistency, classroom suitability) | Content analysis of Tool B responses |
+| Expert validation (Objective 3) | Coded answers to the seven open-ended questions | Content or thematic analysis of the expert questionnaire responses (to be decided, O-04) |
 | Judge classification (Objective 4) | Precision, recall, F1 (F1 primary) vs human reference labels, character-identity-level split | Held-out test set; optional comparison vs zero-shot base + prompted baseline |
-| Software quality (Objective 5) | Weighted mean + SD per ISO/IEC 25010 characteristic (Functional Suitability, Performance Efficiency, Usability, Reliability, Security), interpreted against Table 4 bands | Tool C, designated software-quality evaluators |
+| Software quality (Objective 5) | Mean + SD per ISO/IEC 25010 characteristic (six characteristics, descriptive only) | The ISO/IEC 25010 questionnaire, at least 30 designated software-quality respondents |
 | Generation Time | Submission → completed storybook | Instrumentation (Langfuse) |
 | AI Resource Usage | Avg generation time, image count, regen count | Instrumentation (Langfuse; `Cost.image_count` / `Cost.regen_count`) |
 | AI Resource Usage — cost | API cost/story | ⚠️ **not instrumented** (see below) |
@@ -386,7 +379,7 @@ For Objective 4, pre-registration is what makes the reported F1 trustworthy: the
 reported test-retest (intra-rater) agreement, and the held-out set is **read once**, against an
 analysis plan fixed in advance — so the reported precision/recall/F1 figures are the ones committed to, whatever they turn out to
 be. The optional base/prompted comparison, if reported, follows the same discipline. The same rigor governs
-Objective 3: the five criteria and the content-analysis coding scheme are fixed before data collection, so
+Objective 3: the seven questions and the analysis method are fixed before data collection, so
 a weak result is a finding, not a fudge.
 
 Almost no capstone does this. It is the cheapest defensive move available.

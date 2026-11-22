@@ -53,7 +53,7 @@ intelligent. The place a schedule dies is integration, not algorithms. Every sub
 slice through the whole stack rather than a horizontal layer.
 
 **Exit criteria, not calendar.** Each phase advances on evidence, not on a date. Gates are recorded in
-`docs/product/ROADMAP.md` and are pass/fail.
+`docs/product/ROADMAP.md` and are pass/fail. Where a gate was missed, skipped or relaxed, §1.3 says so.
 
 ### 1.2 Spiral Model quadrant mapping
 
@@ -65,14 +65,30 @@ directly to the four core quadrants of Boehm's Spiral Model:
 3. **Develop & verify:** Building the vertical slice (Phase 0 walking skeleton, Phase 1 pipeline) and verifying against pre-declared criteria.
 4. **Plan next iteration:** Using the evidence from the exit gates to adjust the subsequent phase's architecture.
 
-### 1.3 The phases and their gates
+### 1.3 The loops as they ran, and their gates
 
-| Phase | Iteration loop / Spiral stage | Purpose | Gate to leave it |
-|---|---|---|---|
-| **0** & **0.5** | **Loop 1: Risk resolution** | Scaffolding and open-weight spike to resolve the substrate risk cheaply | A real slideshow renders. Reference conditioning retains identity on ≥ 80% of items **and** exceeds unconditioned by ≥ 30 points. ✅ Phase 0 done. ✅ Phase 0.5 closed 2026-07-29 — see `PHASE_05_RESULTS.md`. |
-| **1** | **Loop 2: Core pipeline** | The consistency loop is real, on clean stories | A story produces a consistent book; a case exists where the judge caught a drifted image and the retry fixed it. ✅ **Complete (2026-08-02)** — all ten Phase-1 specs built, from the `StoryMemory` contract through `compose`. |
-| **2** & **2.5** | **Loop 3: Integration & tuning** | Safe for a real child, survives messy input. An honestly evaluated specialized judge | The Filipino/Taglish moderation probe passes in **both** directions. A results table exists and the held-out set was read exactly once. **Phase 2 in progress (2026-08-04):** the moderation stack, input-gate hardening, and the kid-facing flow (book persistence, the ADR-029 reveal, failure semantics, reader/wait states) are built; auth + classroom RLS, teacher review and data deletion remain; narration remains cut (ADR-058); PDF download was restored on 2026-10-21 (ADR-071, implementation/release status in `docs/specs/export-pdf.md`). |
-| **3** | **Loop 4: Evaluation** | Expert validation (Obj 3), judge classification (Obj 4), and ISO/IEC 25010 software quality (Obj 5) | Expert-validation responses collected and content-analysed; the judge held-out classification table read exactly once; ISO/IEC 25010 questionnaire administered |
+Six loops, as of PR #134 (2026-11-21). The source is `docs/capstone/sdlc-record.md`, which lists every
+merged pull request with its merge commit and the loop it belongs to; its test checks each row against git.
+A pull request belongs to the loop whose risk it addresses, so loops overlap in time: Phase 2 work ran
+alongside the judge fine-tune, and the first evaluation tooling merged during Phase 2.
+
+| Loop | Phase | Risk it addressed | Gate | Gate result |
+|---|---|---|---|---|
+| 1 | 0 & 0.5 | Can an open image model hold a stylized, invented, non-human character across scenes? | Reference conditioning retains identity on ≥ 80% of items and exceeds unconditioned by ≥ 30 points. | Split. Run 3 passed absolute (80%), failed separation (+25 vs ≥30); the failed gate is carried as a stated limitation. |
+| 2 | 1 | Does the consistency loop work on clean stories? | A clean multi-scene, multi-character story produces a coherent, character-consistent storybook, and you can point to a case where the VLM-judge caught an off-model image and the targeted retry fixed it. | Partial. The loop runs end to end, but the judge's accuracy fell short: in the October audit it passed 29 of 77 defective pages, and in no audited redraw did it catch an off-model character and accept the fix. That weakness became loop 4's risk. |
+| 3 | 2 | Is it safe for a real child in a real classroom, and does it survive messy input? | Entry: probe 4 (Filipino/Taglish moderation), no MISS in either direction. | Not run. Phase 2 was built without its entry gate, for lack of time. No child has used the system, so the risk it guards has not arisen; it stays a gate before children use it. |
+| 4 | 2.5 | Does fine-tuning make the Consistency Judge better? | The results table exists and is honest, and the held-out set was read exactly once. | Partial. Paid evaluation stopped on 2026-10-07; on the held-out set the untuned model scored higher F1 than every fine-tuned seed. |
+| 5 | After the technical defense | Do the panel's suggestions work without weakening child safety? | Items that touch ADR-011, ADR-017, ADR-029 or the teacher-review spec ship behind an off-by-default setting pending an ethics re-review. | Shipped off by default, then turned on by default on 2026-11-21 so they can be tested. The real-child gates (ethics re-review, moderation audit 01) still apply. |
+| 6 | 3 | Does the system hold up under the study's three evaluations? | One full expert-validation session (Objective 3) and one full ISO/IEC 25010 session (Objective 5) end-to-end, and a clean metrics table. | Open. The repository records no completed session yet, and the functional verification matrix was dropped (D-28). |
+
+Phase 2's built scope as of PR #134: auth and classroom RLS (PR #15), the teacher dashboard and review
+gate (PR #16), classroom sharing (PR #17), and PDF download of teacher-approved books, restored on
+2026-10-21 (ADR-071, PR #128). Narration remains cut (ADR-058).
+
+**Where the work left the plan.** Loop 1 missed its separation gate and says so (below). Loop 3 began
+without its entry gate: probe 4 has not run. Loop 2's gate is partial: the judge's misses became loop 4's risk, and
+pipeline fixes continued after the gate because the output is not deterministic. Loop 4's held-out result is
+partial. The full list is `sdlc-record.md` §3.
 
 Phase 0.5's kill criterion is the sharpest instance of the method. **It ran on 2026-07-29 and split its
 two gates**: reference conditioning retained identity on **80%** of pipeline-ON items (absolute gate met)
@@ -113,10 +129,10 @@ If asked whether pre-registration is "just Waterfall": pre-registration constrai
   nondeterministic routing.
 - **The testing bright line.** Deterministic tests mock every model call; fuzzy quality — "is the character
   consistent?" — is measured only in an offline evaluation harness against real models. The two never mix. A
-  generated-content assertion in a deterministic suite is a flaky test, not a measurement. *Continuous
-  integration is planned, not yet standing:* the repository has no CI configuration at the time of writing, so
-  the deterministic suite is run locally and the "must stay green" rule is an intended practice rather than an
-  enforced one.
+  generated-content assertion in a deterministic suite is a flaky test, not a measurement. Continuous
+  integration has existed since 2026-07-29 (`2e57d10`). As of PR #134, `.github/workflows/ci.yml` runs the
+  frontend's lint, build and tests and the backend's lint and tests on every pull request to `main` and
+  every push to it.
 - **Frozen decisions.** Architectural decisions are recorded in `docs/product/ADRs.md` and are not revised
   silently; changing one requires appending a new record stating context, decision, consequences, and
   alternatives.
@@ -131,13 +147,13 @@ A deterministic pipeline of **ten logical modules**, in order:
 |---|---|---|
 | 1 | Input Moderation | Text safety gate, then personally-identifiable-information redaction |
 | 2 | Story Analyzer | Entity and coreference extraction into the Story Memory contract |
-| 3 | Scene Segmentation | Selects **up to** 10–15 scenes; scene count tracks the story's distinct major plot points (target ≥ 3 where the arc supports it); never padded to reach a count and never invents content — never-invent overrides the floor |
+| 3 | Scene Segmentation | Selects **3 to 10** scenes (`MIN_SCENES = 3`, `MAX_SCENES = 10`, `backend/app/config.py:185,203`; ADR-037 decision 1); scene count tracks the story's distinct major plot points (target ≥ 3 where the arc supports it); never padded to reach a count and never invents content — never-invent overrides the floor |
 | 4 | Story Memory Manager | Maintains the versioned Pydantic *Story Memory* contract that carries state across every stage |
 | 5 | Character Bible | ≤ 2 canonical characters, each rendered **once** as a reference image |
 | 6 | Style Preset | `cel`, `gouache`, or `cut_paper`, explicitly assigned and frozen for the storybook |
 | 7 | Prompt Optimizer | Scene + character bible + style preset + story memory → structured prompt |
 | 8 | AI Scene Generation | Reference-conditioned image edit — the pipeline's single generation mode |
-| 9 | Consistency Judge & Targeted Regeneration | Vision-language judge (emits `differences_observed` **before** `same_character`); one targeted, prompt-corrected retry; best-of fallback; capped |
+| 9 | Consistency Judge & Targeted Regeneration | Vision-language judge (emits `differences_observed` **before** `same_character`); up to two prompt-corrected redraws (three attempts, `max_scene_attempts = 3`, `backend/app/config.py:100`; ADR-037); best-of fallback; capped |
 | 10 | Picture Book Composition | Slide composer (in-app reader) + on-demand PDF download of teacher-approved classroom books (ADR-071/072). Narration remains cut — ADR-058 |
 
 > **Logical vs. implemented.** These are the manuscript's ten logical modules. In the implementation graph
@@ -145,6 +161,12 @@ A deterministic pipeline of **ten logical modules**, in order:
 > nodes — the **Story Memory Manager** is the shared Pydantic contract every node reads and writes, and
 > **Style Preset** and **Prompt Optimizer** are node *inputs* rather than standalone nodes — but the logical
 > decomposition maps one-to-one onto the deterministic pipeline. The architecture is unchanged.
+
+> **Teacher-review mode.** Jobs captured in `teacher_review_v1` (ADR-080) run a 14-node graph instead of the
+> baseline 11 (`backend/pipeline/graph.py`; `AGENTS.md` Project Context). A flagged
+> page or reference goes to a teacher hold (`moderation_review`) and can be replaced (`moderation_replace`)
+> instead of failing the job. Teacher-held moderation and the magic pencil (ADR-082) are on by default since
+> 2026-11-21 (`config.py:90,92`). The study corpus was generated in baseline mode.
 
 **Models.** Text analysis: `mistralai/mistral-small-3.2-24b-instruct` (Apache-2.0; `qwen/qwen3-32b` until
 2026-08-11, replaced after it returned schema-violating structured output in production — ADR-002
@@ -177,7 +199,7 @@ the pipeline's architecture is identical either way.
 |---|---|---|
 | Story text | Donated Grade 5–6 child writing (15 collected → 10 primary + 5 backup) | Generation input; the source of every generated image; expert-validation stimuli |
 | Generated picture books | Pipeline output over the primary corpus | Expert validation (Objective 3) |
-| Expert-validation responses | Expert validators (Dean/Professor of the Arts College + Arts student/intern + Education student/intern) | Objective 3 — acceptability |
+| Expert-validation responses | Expert evaluators (2 BEEd professors + 1 Arts professor) | Objective 3 — acceptability |
 | Image-pair identity labels | Two trained annotators | Objective 4 — the judge's training and evaluation data |
 | System-evaluation questionnaire | Designated software-quality evaluators | Objective 5 — software quality (§6.3) |
 
@@ -203,9 +225,13 @@ legs.
 
 Both stages require **guardian informed consent and age-appropriate child assent**, in compliance with the
 **Data Privacy Act of 2012 (Republic Act No. 10173)** and the university ethics board. Stories are collected
-at **Matina Aplaya Elementary School**; system development and evaluation are conducted at **Holy Cross of
-Davao College (HCDC), Davao City**, subject to institutional and ethics clearances. Draft consent and assent
-language is held in `docs/product/RESEARCH_PROTOCOL.md` §9.
+at **Vicente Hizon, Sr. Elementary School** (D-04 of `docs/specs/research-page-refresh.md`); system development
+is at **Holy Cross of Davao College (HCDC), Davao City**, subject to institutional and ethics clearances. Draft
+consent and assent language is held in `docs/product/RESEARCH_PROTOCOL.md` §9.
+
+**Implementation site (undecided; D-16, O-07).** Option A: Vicente Hizon, Sr. Elementary School, if the school
+admits researchers despite its PAASCU accreditation. Option B: HCDC, with 40 School of Teacher Education (STE)
+students. The owner has not chosen between them.
 
 **Ethics Stage 1 is the project's longest dependency and cannot be compressed by coding faster.** The
 fine-tuned judge sits four hops downstream of an ethics form: *clearance → stories → images → labels →
@@ -215,14 +241,15 @@ fine-tune.* Everything after `images` takes a weekend. Everything before it take
 
 Three groups, treated separately because they address different aspects of the study:
 
-- **Grade 5–6 learners** provide the child-written stories — fifteen collected, ten forming the primary
-  corpus and five retained as backup. Their participation is limited to the voluntary submission of original
+- **Grade 5–6 learners** provide the child-written stories — fifteen collected, of which twelve were
+  generated into books and three were left out on purpose (two `invalid_terminal`, one `budget_stopped`;
+  `docs/specs/obj4-readiness-audit.md` §7, `research-changelog.md` row 2026-09-16 to 17). Their participation is limited to the voluntary submission of original
   stories; they do not validate the books or evaluate the software. Stories are anonymized and assigned unique
   identifiers.
-- **Expert validators**, purposively selected from the Arts and Education colleges: the **Dean/Professor of
-  the Arts College**, one **Arts student/intern**, and one **Education student/intern**. The Arts-sector
-  validators judge the visual and artistic presentation; the Education-sector validator judges educational
-  suitability. They complete the written expert-validation instrument (§6.1).
+- **Expert evaluators**: two Bachelor of Elementary Education (BEEd) professors and one Arts professor
+  (D-05). Each signs the informed consent form first. Each reviews the original child-written story and its
+  generated picture book, and completes the seven-question open-ended questionnaire in
+  `expert-evaluation-questionnaire.md` (§6.1), one questionnaire per book, with its Story ID.
 - **Software-quality evaluators** — a separate designated group who complete the ISO/IEC 25010 questionnaire
   (§6.3). Their responses are treated separately from the expert validation because the two activities address
   different objects: the generated picture-book outputs versus the StoryBuddy software system.
@@ -233,12 +260,12 @@ Three groups, treated separately because they address different aspects of the s
    generation over two probe characters (one real animal, one invented non-human), scored by the research
    team as the substrate kill-criterion. *(This is a technical substrate gate, not a research arm — the
    pipeline-ON-vs-OFF study ablation is dropped, ADR-008.)*
-2. **Corpus collection** under Ethics Stage 1: fifteen original stories from Grade 5–6 learners at Matina
-   Aplaya Elementary School, screened against the inclusion/exclusion criteria to ten primary + five backup.
+2. **Corpus collection** under Ethics Stage 1: fifteen original stories from Grade 5–6 learners at Vicente
+   Hizon, Sr. Elementary School; twelve were generated into books (the other three stay quarantined).
 3. **Generation.** Each primary story processed **once** through the full pipeline. Traces record per-scene
    verdicts, regeneration counts, latency, and cost. Seeds are fixed and reported for reproducibility.
-4. **Expert-validation sessions.** The generated picture books are presented to the expert validators, who
-   complete the written open-ended interview form against the five criteria (§6.1).
+4. **Expert evaluation.** Each expert reviews an original story and its generated picture book, then
+   completes one seven-question open-ended questionnaire per book (§6.1).
 5. **Image-pair labelling**, then fine-tuning and classification evaluation of the Consistency Judge (§5).
 6. **ISO/IEC 25010 questionnaire** administered to the designated software-quality evaluators (§6.3).
 
@@ -256,10 +283,12 @@ Two story sources have separate research roles. Researcher-authored synthetic st
 train and validation only. Donated child writing supplies the held-out test and Objective-3 book stimuli;
 using it only at evaluation preserves the study's external-validity test.
 
-- **Population:** Grade 5–6 (ages 10–12), Philippines. English, with Taglish code-switching tolerated.
-- **Size:** **fifteen (15) original stories collected**; after screening against the inclusion/exclusion
-  criteria, **ten (10) eligible stories comprise the primary corpus and five (5) are retained as backup** and
-  substituted if a primary story is later excluded.
+- **Population:** Grade 5–6 (ages 10–12), Philippines. English (ADR-084, 2026-11-22). Some donated stories were
+  not in English and were translated into English by the research team before generation; which ones, and
+  whether a second person checked them, were not recorded.
+- **Size:** **fifteen (15) original stories collected**; **twelve (12) were generated into books** and three
+  stay quarantined on purpose, because 12 clear the held-out floor (`docs/specs/obj4-readiness-audit.md` §7;
+  `research-changelog.md` row 2026-09-16 to 17).
 - **Provenance:** documented. Reviewers will ask.
 
 **One generation process, separated provenance:** donated picture books are the Objective-3 expert-validation
@@ -301,8 +330,8 @@ sizes are planning figures (`docs/specs/judge-finetune.md` §5.5) to be finalize
 character yield (§4.1).
 
 Synthetic input is fixed at 24 train and 6 validation stories—8 train and 2 validation stories for each of
-`cel`, `gouache`, and `cut_paper`. The 15 donated candidates are assigned five per style before generation;
-the 10 primary slots are 4 Gouache, 3 Cel and 3 Cut-paper. Overall held-out performance is primary, and
+`cel`, `gouache`, and `cut_paper`. The 15 donated candidates were assigned five per style before generation;
+the 12 generated books are 3 Cel, 4 Gouache and 5 Cut-paper (`docs/specs/obj4-readiness-audit.md` §7). Overall held-out performance is primary, and
 per-style results are descriptive exploratory diagnostics.
 
 **Character leakage.** Splits are by **character, never by pair**. Every image derived from a given canonical
@@ -387,22 +416,14 @@ what each can and cannot do.
 
 ### 6.1 The expert-validation instrument (Objective 3)
 
-The generated picture books are presented to the expert validators (§3.3) using a **written, open-ended
-interview form**. The validators examine the outputs against five established criteria:
+Each expert (§3.3) reviews the original child-written story and the picture book generated from it, then
+answers a **written, open-ended questionnaire** of seven questions, one questionnaire per book, with its
+Story ID. There is no rating scale. The questions and the consent terms are in
+`docs/capstone/expert-evaluation-questionnaire.md` (D-05, D-21).
 
-- **narrative coherence**,
-- **story faithfulness**,
-- **visual presentation**,
-- **visual style consistency**, and
-- **suitability for classroom use**.
-
-**How it is evaluated — content analysis.** Before analysis, pre-set categories are defined from the five
-criteria. Each validator's written response is reviewed and coded into **positive feedback**, **negative
-feedback**, or **suggestion for improvement**, then tallied per criterion to produce a structured summary of
-expert judgments. This determines the level of acceptability and classroom suitability of the generated books
-as perceived by the validators, from the recurring patterns across their written responses. This instrument
-is **qualitative** — it replaces the earlier ordinal feature-rubric (dropped, ADR-008). The full instrument
-and its criteria wording are finalized in `docs/capstone/research_instruments.md`.
+**How it is evaluated.** The written answers are analysed by **content analysis or thematic analysis**. The
+method is not yet chosen (O-04). This instrument is **qualitative** — it replaces the earlier ordinal
+feature-rubric (dropped, ADR-008) and the five-criteria interview (superseded 2026-11-21).
 
 ### 6.2 The Consistency-Judge classification evaluation (Objective 4)
 
@@ -413,46 +434,18 @@ that produced it; its validity rests on the calibration and reliability discipli
 
 ### 6.3 The system-evaluation questionnaire (Objective 5, ISO/IEC 25010) ⚠️
 
-**Confirm the evaluator profile with your adviser before administering this.**
+The form is final as the owner supplied it (D-06, D-27). The text is in
+`docs/capstone/iso-25010-questionnaire.md`.
 
-> ⚠️ **Pending adviser approval (raised 2026-09-04).** The functional-suitability item read
-> *"analyze, segment, illustrate, narrate, export"*. At that date, narration and PDF export were **cut** (ADR-058)
-> and had never been built, so the item asked evaluators to rate two capabilities that do not exist. The
-> wording below is corrected to what ships. **This is an instrument change and it must be signed off
-> before administration** — it cannot be relabelled after collection.
+The software artifact is evaluated with a questionnaire of **23 Likert items** on **six ISO/IEC 25010
+characteristics**: Functional Suitability (items 1–5), Interaction Capability (6–9), Reliability (10–14),
+Performance Efficiency (15–17), Security (18–21) and Compatibility (22–23). Each item is rated 1–5, where
+**5 = Strongly Agree**, so a higher mean is better. It goes to **at least 30 respondents** from IT experts,
+IT students, teachers and education students, not split equally. Each signs a consent form first.
 
-
-**2026-10-21 update (ADR-071):** PDF download is restored; narration stays excluded. The revised functional-suitability item below remains a proposal pending adviser approval and deployed-feature verification. Never relabel collected ratings or historical compose-only results.
-
-The software artifact is evaluated with a structured questionnaire administered to the designated
-software-quality evaluators, following **ISO/IEC 25010** software product quality characteristics. Five
-applicable characteristics are assessed on a **5-point Likert scale (1 = Poor to 5 = Excellent)**:
-
-| Characteristic | What is asked about |
-|---|---|
-| Functional Suitability | Proposed 2026-10-21, pending adviser sign-off: Does the system analyze, segment, illustrate, assemble a book, and download a teacher-approved classroom book as a PDF? |
-| Performance Efficiency | Is generation time acceptable in a classroom period? |
-| Usability | Can a Grade 5–6 student and a teacher operate it without instruction? |
-| Reliability | Does it recover from a stalled or failed generation without losing work? |
-| Security | Are classroom data isolation and asset access controls effective? |
-
-**How it is evaluated.** For each characteristic, the **weighted mean** determines the overall level of
-acceptability and the **standard deviation** the consistency of ratings among evaluators. The weighted mean is
-interpreted against the descriptive rating scale:
-
-| Weighted mean range (5-point Likert) | Descriptive rating |
-|---|---|
-| 4.20 – 5.00 | Excellent |
-| 3.40 – 4.19 | Very Good |
-| 2.60 – 3.39 | Good |
-| 1.80 – 2.59 | Fair |
-| 1.00 – 1.79 | Poor |
-
-**Content validity precedes administration.** Before any evaluator sees it, the questionnaire is reviewed for
-clarity and relevance of each item to the characteristic it claims to measure; a **Content Validity Index
-(CVI)** is computed and sub-threshold items are revised or removed. The validated questionnaire is then
-**piloted** on a small group held out from the reported sample, with **internal consistency reported
-(Cronbach's α, floor ≥ 0.70)** per characteristic before the instrument is used for real.
+**How it is evaluated.** Descriptive statistics only: the mean and standard deviation per characteristic. There
+is no Content Validity Index and no Cronbach's α pilot. The paper consent form disagrees with the
+questionnaire in places (O-12); the questionnaire's own values stand.
 
 ### 6.4 What each instrument can and cannot do — and the trap to avoid
 
@@ -463,7 +456,7 @@ three different questions and are never substituted for one another:
 
 | Question | Instrument (Objective) | What it can support |
 |---|---|---|
-| Are the generated books acceptable? | Expert validation, open-ended + content analysis (Obj 3) | The **acceptability** of the outputs — presentation quality and classroom suitability, as experts judge them; not a causal claim |
+| Are the generated books acceptable? | Expert questionnaire, seven open-ended questions (Obj 3) | The **acceptability** of the outputs — presentation quality and classroom suitability, as experts judge them; not a causal claim |
 | Can the judge measure consistency automatically? | Judge classification evaluation (Obj 4) | The judge's **classification performance** against human labels (precision/recall/F1) |
 | Is the software any good? | ISO/IEC 25010 questionnaire (Obj 5) | **Perceived software quality.** Not efficacy |
 
@@ -481,13 +474,11 @@ defensive move available, and it converts a null result from a failure into a fi
 
 ### 7.1 Objective 3 — acceptability (expert validation)
 
-- **Design.** The generated picture books are validated **directly** by the expert panel (§6.1); there is no
+- **Design.** The generated picture books are evaluated **directly** by the expert panel (§6.1); there is no
   control condition and no ON/OFF contrast (the ablation is dropped, ADR-008).
-- **Analysis.** Content analysis: written responses coded into positive / negative / suggestion categories
-  against the five pre-set criteria (narrative coherence, story faithfulness, visual presentation, visual
-  style consistency, classroom suitability), then tallied per criterion.
-- **Reporting.** A structured per-criterion summary of the coded categories, with representative excerpts, that
-  determines the level of acceptability and classroom suitability of the generated books.
+- **Analysis.** Content analysis or thematic analysis of the seven open-ended answers (to be decided, O-04).
+- **Reporting.** A structured summary of the coded answers, with representative excerpts, that
+  determines the level of acceptability of the generated books as the experts judge it.
 - **What it cannot support.** No causal "the pipeline caused this quality" claim — there is no control arm. It
   reports what the outputs are, as experts validate them.
 
@@ -526,17 +517,16 @@ reliability reported**, and the **held-out set is read exactly once** (§5.1).
 
 ### 7.3 Objective 5 — software quality (ISO/IEC 25010)
 
-Weighted mean and standard deviation per characteristic (Functional Suitability, Performance Efficiency,
-Usability, Reliability, Security), interpreted against the Table in §6.3, with Content Validity Index and
-Cronbach's α reported for the instrument.
+Mean and standard deviation per characteristic (Functional Suitability, Interaction Capability, Reliability,
+Performance Efficiency, Security, Compatibility), as descriptive statistics only (§6.3).
 
 ### 7.4 Non-circularity — the constraint that governs everything above
 
 > **The expert validation is never scored using the judge.**
 
 The judge drives regeneration inside the pipeline. Using that same judge as the acceptability outcome would be
-the system grading its own homework. The Objective-3 outcome is the **expert validators' content-analysed
-judgments**; the Objective-5 outcome is the ISO/IEC 25010 questionnaire. The judge's own accuracy is the
+the system grading its own homework. The Objective-3 outcome is the **experts' written
+answers**; the Objective-5 outcome is the ISO/IEC 25010 questionnaire. The judge's own accuracy is the
 separate Objective-4 question, measured on a human-labeled, character-disjoint held-out set it never trained
 on, and its results are never substituted for the expert validation.
 
@@ -581,6 +571,7 @@ Detail: `docs/capstone/ethics_and_safety.md` and `docs/product/adr/ADR-011-moder
 | **Perceived quality mistaken for efficacy** | §6.4. The ISO/IEC 25010 result is never presented as an answer to Objective 3 or 4. |
 | **No causal or comparative claim** | By design: no control/comparison group. The study does not claim superiority over other picture-book generation methods, and makes **no learning-gain claim** — creativity, literacy, writing ability, and long-term outcomes are outside scope. |
 | **Generalizability** | One grade band, one country, one language regime, one source school. A delimitation derived from the study's scope, not an apology. |
+| **Translated stories** | Some donated stories were translated into English by the team (ADR-084); the count and any second-person check were not recorded. | Faithfulness in Objective 3 is judged against the English text the pipeline received, and the paper says so. |
 
 **No formal power analysis precedes Phase 0.5**, because the effect size of reference conditioning in this
 regime is unpublished — that is precisely the gap the study addresses. Phase 0.5 supplies the first

@@ -31,6 +31,23 @@ and the honest account of what the resulting agreement number measures.
 
 ---
 
+## 1a. Why the team built its own labelling tool (owner-stated, 2026-11-21)
+
+The owner gave four reasons for building a labelling surface instead of using spreadsheets or an off-the-shelf
+tool (D-24 of `docs/specs/research-page-refresh.md`). They are stated here so the research pages can cite a tracked
+doc:
+
+1. It saves time.
+2. Both raters can label in parallel.
+3. Every label saves to the cloud as it is made.
+4. It is easy for teammates to use.
+
+The reasons the repo already documents are in ADR-026 and §3 below: images stay in a private bucket and open only
+through short-lived signed links, no training data sits on a shared lab PC, and independent labelling is enforced
+by database rules so a rater cannot see the other rater's labels.
+
+---
+
 ## 2. Contract slice (Story Memory — MASTER_SPEC §3)
 
 This surface does not touch `StoryMemory`. It reads already-generated, already-moderated assets and writes to

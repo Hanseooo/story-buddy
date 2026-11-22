@@ -129,3 +129,109 @@ describe("limitations page data", () => {
     }
   });
 });
+
+// Ticket 08: the November state, with every count pinned to the file that holds it (SH-02).
+const probes = flat(read(data.SOURCES.probes));
+const adr056 = flat(read(data.SOURCES.adr056));
+const adr082 = flat(read(data.SOURCES.adr082));
+const referenceJudge = flat(read(data.SOURCES.referenceJudge));
+const readiness = flat(read(data.SOURCES.readiness));
+const changelog = flat(read(data.SOURCES.changelog));
+const stageAudit = flat(read(data.SOURCES.stageAudit));
+const adr068 = flat(read(data.SOURCES.adr068));
+
+describe("limitations page November data", () => {
+  it("adds up the page-check totals: 77 + 71 + 2 = 150", () => {
+    const a = data.AUDIT;
+
+    expect([a.defective, a.acceptable, a.uncertain]).toEqual([77, 71, 2]);
+    expect(77 + 71 + 2).toBe(a.pages);
+    states(stageAudit, `${a.defective} of ${a.pages} have at least one major defect, ${a.acceptable} are acceptable, ${a.uncertain} uncertain.`);
+    expect(data.CHECK_SENTENCES.totals).toBe("77 of 150 have a major defect, 71 are acceptable and 2 are uncertain.");
+  });
+
+  it("states the reference check as the stage audit and ADR-082 do", () => {
+    states(adr082, "The reference checker wrongly fails about 4 in 10 clean references.");
+    states(stageAudit, "`char_bible` ships the best failing draw, so every detected defect still reached the pages.");
+    expect(data.CHECK_SENTENCES.reference).toBe(
+      "The check fails most bad references (15 of 17), but it also fails about 4 in 10 good ones (15 of 38). The pipeline then ships the best of the failing draws, so every defect it found still reached the pages."
+    );
+  });
+
+  it("states the page check with its wasted redraws", () => {
+    states(stageAudit, "23 of the 71 rejected first draws were acceptable");
+    expect(data.CHECKS.page.rejectedFirstDrafts).toEqual({ whole: 71, acceptable: 23 });
+    expect(data.CHECK_SENTENCES.page).toContain("29 of the 77 defective pages through");
+    expect(data.CHECK_SENTENCES.page).toContain("28 of the 71 acceptable ones");
+    expect(data.CHECK_SENTENCES.page).toContain("23 of the 71 redrawn first drafts were already acceptable");
+  });
+
+  it("counts duplicates on redrawn drafts and on finished pages", () => {
+    states(probes, "| Duplicate character | 28 of 221 (13%);");
+    states(stageAudit, "`duplicate_character` 15");
+    expect(data.LIMITATIONS[0].body).toContain("About 13% of page images, counting redrawn drafts (28 of 221), show a character twice. On finished pages it is 15 of 150.");
+  });
+
+  it("adds the klein action count and names the one rater", () => {
+    states(probes, "| Action | 2 | 8 |");
+    expect(data.KLEIN.action).toEqual({ qwen: 2, klein: 8 });
+    states(probes, "one rater (the assistant, looking at each image)");
+    expect(data.KLEIN_NOTES.rater).toBe("Scored by one rater, the AI assistant, with the editor's name hidden.");
+  });
+
+  it("records the November probe that failed, and the magic pencil as shipped and on by default", () => {
+    states(probes, "an edit with only the chip's wording fixed 2 of 9 count misses, against 5 of 9 with hand-written change instructions");
+    states(probes, "failed the 6-of-9 rule");
+    states(changelog, "are now on by default");
+    states(changelog, "Every use is logged with redacted text only");
+    const chip = data.TRIED.find((t) => t.tried.startsWith("Editing the reference with only the tapped chip"))!;
+    expect(chip).toMatchObject({ outcome: "Rejected" });
+    expect(chip.result).toContain("2 of 9 fixed, against 5 of 9 with hand-written instructions");
+    const counts = data.LIMITATIONS.find((l) => l.title === "Stated body counts")!;
+    expect(counts.body).toContain("only 2 of 9 with the chip's own words");
+    expect(counts.body).toContain("on by default since 2026-11-21");
+    expect(counts.body).toContain("unmeasured");
+  });
+
+  it("says generation versions 6 and 7 and 500-word stories are unmeasured", () => {
+    states(changelog, "generation version 6");
+    states(changelog, "Generation version 7");
+    states(changelog, "Quality at the larger input ceiling is unmeasured");
+    states(adr068, "500 words");
+    expect(data.AUDIT_NOTE).toContain("generation versions 6 and 7");
+    expect(data.AUDIT_NOTE).toContain("500-word");
+    expect(data.AUDIT_NOTE).toContain("magic pencil");
+  });
+
+  it("adds the reference check's blind spot as two new limitations, with its measured cause", () => {
+    const l = data.LIMITATIONS.find((x) => x.title === "The reference check cannot verify stated details")!;
+    expect(data.LIMITATIONS).toHaveLength(11);
+    expect(l.body).toContain("metal comb");
+    states(referenceJudge, "demands *metal beak and comb*");
+    states(referenceJudge, "bright yellow beak");
+    states(adr056, "it listed `\"six legs\"` in `attributes_present`");
+    states(adr056, "The gap is what the task compares.");
+  });
+
+  it("states the backstop's measured stop count and nothing about human review (D-23)", () => {
+    const l = data.LIMITATIONS.find((x) => x.title === "Safety checks sometimes refuse harmless stories")!;
+    expect(l.body).toContain("4 of 30 synthetic stories");
+    states(readiness, "All four `output_moderation_failed` quarantines carry the same shape: `backstop (primary said safe) after retry`.");
+    states(readiness, "The primary classifier cleared every one of them.");
+    states(readiness, "On the fourth round s0 passed moderation unaided");
+    expect(JSON.stringify(data)).not.toMatch(/human review|reviewed the stored images|operator/i);
+  });
+
+  it("gives the groups-with-no-reference limit its measured rate", () => {
+    states(probes, "17 of 150 scenes direct them; those scenes ship a duplicate or extra on 24% of pages, against 10% elsewhere");
+    states(probes, "dust-bunny soldiers came out as human boys");
+    const l = data.LIMITATIONS.find((x) => x.title === "Characters with no reference")!;
+    expect(l.body).toContain("24% of pages, against 10% elsewhere");
+  });
+
+  it("names a stable id and a PNG for each outcome chart", () => {
+    expect(data.CHARTS.map((c) => c.id)).toEqual(["reference-check-outcomes", "page-check-outcomes"]);
+    for (const c of data.CHARTS) expect(c.png).toBe(`/research/diagrams/${c.id}.png`);
+    expect(data.CHARTS_AS_OF).toBe(data.AUDIT.date);
+  });
+});

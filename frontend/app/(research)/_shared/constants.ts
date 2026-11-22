@@ -76,17 +76,18 @@ export const TAXONOMY_LABELS: Record<
   },
 };
 
-// The research header's tabs. Dataset, Results, Limitations and Docs are public static pages (ADR-065, ADR-066, ADR-067).
+// The research header's tabs (D-24, SH-04): three for every viewer, plus the role-gated Annotate and Adjudicate.
+// Dataset, Results and Limitations are reached from the hub and Previous/Next (readingOrder.ts), not from here.
+// `exact`: the home tab is current only on the hub itself, since every research page sits under /research.
 export const RESEARCH_TABS: {
   label: string;
   href: string;
+  exact?: boolean;
   visibleTo: (viewer: ResearchViewer | null) => boolean;
 }[] = [
-  { label: "Runs", href: "/research/metrics", visibleTo: () => true },
-  { label: "Dataset", href: "/research/dataset", visibleTo: () => true },
-  { label: "Results", href: "/research/results", visibleTo: () => true },
-  { label: "Limitations", href: "/research/limitations", visibleTo: () => true },
+  { label: "Research home", href: "/research", exact: true, visibleTo: () => true },
   { label: "Docs", href: "/research/docs", visibleTo: () => true },
+  { label: "Runs", href: "/research/metrics", visibleTo: () => true },
   {
     label: "Annotate",
     href: "/annotate",

@@ -1,13 +1,19 @@
 # Research Instruments and Their Validation
 
+> **Superseded in part, 2026-11-21 (D-05, D-06, D-21, D-27).** Objective 3 is now the expert questionnaire
+> (seven open-ended questions, three evaluators; text in [`expert-evaluation-questionnaire.md`](expert-evaluation-questionnaire.md)).
+> Objective 5 is now 23 Likert items on six characteristics, at least 30 respondents, descriptive statistics
+> only (text in [`iso-25010-questionnaire.md`](iso-25010-questionnaire.md)). The five-criteria interview, the
+> Arts/Education student validators, the five-characteristic scale, the CVI review and the Cronbach's α pilot
+> below are superseded and stay as history. Objective 4 is unchanged.
+>
 > **Manuscript-prose section.** Written in the formal register of the manuscript, intended to be pasted into
 > the Methodology chapter after *Data Collection* and *Data Set*. It is the prose realization of
 > `docs/capstone/methodology.md` §5.2 and §6, and it inherits the separation of instrument families declared
 > there. Where this section and `methodology.md` disagree, `methodology.md` is authoritative and this is a
 > defect. Items marked ⚠️ require adviser sign-off before administration.
 >
-> **This section is also where the two things `methodology.md` §6.2 defers are finalized:** the three named
-> expert validators, and the five content-analysis criteria their interview form covers.
+> **Objective 3 panel and form:** see the banner above (D-05, D-21). Names are not recorded in docs.
 
 ---
 
@@ -20,8 +26,9 @@ instruments are therefore described and reported separately, and the division of
 explicitly at the end of this section.
 
 The first leg is **expert validation** — the acceptability of the generated digital picture books in terms of
-presentation quality and classroom suitability, determined by purposively selected expert validators through a
-written, open-ended interview form, analysed by content analysis (Objective 3). The second leg is **judge
+presentation quality and classroom suitability, determined by three experts through a
+seven-question, open-ended questionnaire, analysed by content analysis or thematic analysis (to be decided,
+O-04) (Objective 3). The second leg is **judge
 classification** — the character-consistency classification performance of the fine-tuned vision-language
 consistency judge against human-established reference labels, reported with standard classification metrics
 (Objective 4). The third leg is the **system-evaluation questionnaire** — the perceived quality of the
@@ -31,23 +38,15 @@ delivered software artifact against ISO/IEC 25010 (Objective 5).
 
 The acceptability of the generated digital picture books — in terms of presentation quality and classroom
 suitability — is determined through **expert validation**: a **written, open-ended interview form**
-administered to a small, purposively selected panel of validators from the Arts and Education colleges. Each
-brings a distinct lens, mapped explicitly onto the criteria they are best placed to judge: the
-**Dean/Professor of the Arts College** and **one Arts student/intern** judge the visual and artistic
-presentation of the delivered books, while **one Education student/intern** judges educational suitability.
-Books are presented with provenance stripped: opaque filenames and shuffled order.
+administered to three experts: **two BEEd professors and one Arts professor** (D-05). Each signs the informed
+consent form first, reviews the original child-written story and its generated book, and fills in one
+questionnaire per book, with its Story ID. The form has **seven open-ended questions** (text in
+`expert-evaluation-questionnaire.md`, D-21). There is no ordinal scale and no numeric score — the instrument
+collects written responses, not ratings.
 
-The interview form asks each validator to respond, in their own words, against **five pre-set criteria**:
-**narrative coherence, story faithfulness, visual presentation, visual style consistency, and suitability for
-classroom use.** There is no ordinal scale and no numeric score — the instrument collects written responses,
-not ratings.
-
-**Analysis: content analysis.** Each written response is coded against the five pre-set categories, and within
-each category coded as **positive feedback, negative feedback, or a suggestion for improvement**. Codes are
-tallied per criterion, producing a qualitative-but-systematic account of what validators judged to be working,
-not working, and improvable, criterion by criterion. This is a coding procedure suited to a three-person
-validator panel, where a numeric scale and its accompanying statistics (Content Validity Index,
-Krippendorff's α) are not statistically meaningful.
+**Analysis: content analysis or thematic analysis (to be decided, O-04).** The written answers are coded by
+one of these two methods, which suit a three-person panel where a numeric scale and its accompanying
+statistics (Content Validity Index, Krippendorff's α) are not statistically meaningful.
 
 This instrument carries the acceptability claim of Objective 3. It is a qualitative acceptability measure, not
 a causal one — there is no control or comparison arm.
@@ -84,8 +83,8 @@ regeneration inside the pipeline and using it to score the outputs it helped pro
 
 Separately from Objectives 3 and 4, the delivered **software artifact** is evaluated with a structured
 questionnaire administered to **designated software-quality evaluators** — a group separate from the expert
-validators of Objective 3 — following the **ISO/IEC 25010** software product quality model, restricted to the
-five applicable characteristics below. This is the operator-facing *software* leg, kept as a separate
+validators of Objective 3 — following the **ISO/IEC 25010** software product quality model, with the
+six characteristics below. This is the operator-facing *software* leg, kept as a separate
 instrument from expert validation (defense-panel note 11): Objective 3 judges the artifacts the system
 produces; this questionnaire judges the system itself.
 
@@ -95,24 +94,12 @@ administration; it cannot be relabelled after collection.
 
 **2026-10-21 update (ADR-071):** PDF download is restored; narration stays excluded. The revised item below remains a proposal until adviser sign-off and deployed-feature verification. No collected ratings or historical compose-only results may be relabelled.
 
-| Characteristic | What the items ask about |
-|---|---|
-| Functional suitability | Proposed 2026-10-21, pending adviser sign-off: Does the system analyze, segment, illustrate, assemble a book, and download a teacher-approved classroom book as a PDF? |
-| Performance efficiency | Is generation time acceptable within a classroom period? |
-| Usability | Can a Grade 5–6 student and a teacher operate it without instruction? |
-| Reliability | Does it recover from a stalled or failed generation without losing work? |
-| Security | Are classroom data isolation and asset-access controls effective? |
-
-Items use a **five-point Likert scale (1 = Poor … 5 = Excellent)**. Results are reported as the **weighted
-mean and standard deviation** per characteristic, interpreted against the following bands:
-
-| Range | Interpretation |
-|---|---|
-| 4.20–5.00 | Excellent |
-| 3.40–4.19 | Very Good |
-| 2.60–3.39 | Good |
-| 1.80–2.59 | Fair |
-| 1.00–1.79 | Poor |
+The form is final as the owner supplied it (D-06, D-27; text in `iso-25010-questionnaire.md`). It has **23
+Likert items on six characteristics**: Functional Suitability, Interaction Capability, Reliability,
+Performance Efficiency, Security and Compatibility. Items use a **five-point Likert scale where 5 = Strongly
+Agree**. It goes to **at least 30 respondents** from IT experts, IT students, teachers and education students,
+not split equally. Results are reported as **descriptive statistics only**: the mean and standard deviation
+per characteristic. There is no Content Validity Index and no Cronbach's α pilot.
 
 This questionnaire measures **perceived software quality only.** It does not, and is not presented to, answer
 whether the generated outputs are acceptable (Objective 3) or how well the consistency judge classifies
@@ -122,28 +109,10 @@ whether the generated outputs are acceptable (Objective 3) or how well the consi
 
 ## Validation of the Instruments
 
-An instrument is not trustworthy merely because it exists. Two properties are established before any
-instrument's results are reported: that it measures the right thing (**validity**) and that it measures
-consistently (**reliability**). The procedure differs between the questionnaire and the human-scored
-instruments, and both are described below.
-
-### Content and face validity of the questionnaire ⚠️
-
-Before administration, the ISO/IEC 25010 system-evaluation questionnaire is reviewed by a panel of **content-
-validity reviewers** — practitioners with relevant software-engineering or educational-technology background —
-who judge whether each item is clear, relevant to the quality characteristic it claims to measure, and free of
-ambiguity. Item-level and scale-level agreement is quantified with a **Content Validity Index (CVI)**, and
-items falling below the accepted threshold are revised or removed. The questionnaire is not administered to
-real evaluators until this review is complete. This step establishes that the questionnaire measures the
-ISO/IEC 25010 characteristics it claims to, rather than assuming it.
-
-### Reliability pilot of the questionnaire
-
-The validated questionnaire is then piloted with a small group of evaluators who are not part of the reported
-sample. The **internal consistency** of each subscale is computed as **Cronbach's α**, with a conventional
-floor of **α ≥ 0.70**. A subscale that falls below the floor is revised — by clarifying or replacing items —
-and the pilot is repeated before the questionnaire is used for real. The final internal-consistency figures are
-reported alongside the questionnaire results.
+An instrument is not trustworthy merely because it exists. The human-scored instruments are calibrated before
+their results are reported, as described below. The two questionnaires (Objectives 3 and 5) are the owner's
+final forms: there is no CVI review and no Cronbach's α pilot for the ISO/IEC 25010 questionnaire (D-06), and
+the expert questionnaire is qualitative.
 
 ### Calibration and reliability of the human reference labels ⚠️
 
@@ -176,7 +145,7 @@ advance:
 
 | Question | Instrument | What it can support |
 |---|---|---|
-| Are the generated books acceptable in presentation quality and classroom suitability? | Expert validation interview (A) | **Qualitative acceptability**, coded per criterion via content analysis (Objective 3) |
+| Are the generated books acceptable in presentation quality and classroom suitability? | Expert validation interview (A) | **Qualitative acceptability**, from seven open-ended answers (Objective 3) |
 | Does the fine-tuned judge classify character consistency to a usable standard? | Judge classification (Objective 4) | **Classification performance** against human-established reference labels — precision, recall, F1 (F1 primary); optionally compared against zero-shot and prompted baselines |
 | Is the delivered software any good? | ISO/IEC 25010 questionnaire (D) | **Perceived software quality** — explicitly *not* output quality or classification performance (Objective 5) |
 

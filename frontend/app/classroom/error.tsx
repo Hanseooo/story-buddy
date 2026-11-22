@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { WarningCircle, ArrowsClockwise, ChalkboardTeacher } from "@phosphor-icons/react";
-import * as Sentry from "@sentry/nextjs";
 
 export default function ClassroomError({
   error,
@@ -13,11 +12,7 @@ export default function ClassroomError({
   reset: () => void;
 }) {
   useEffect(() => {
-    if (process.env.NODE_ENV === "production") {
-      Sentry.captureException(error);
-    } else {
-      console.error("Classroom error caught:", error);
-    }
+    console.error("Classroom error caught:", error);
   }, [error]);
 
   return (

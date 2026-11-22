@@ -212,7 +212,7 @@ These are not all code defects. They are missing proof needed for a quality clai
 
 | Evidence package | Minimum acceptable artifact |
 |---|---|
-| Functional suitability | Execute the approved Tool A matrix against the final declared feature scope; retain results and defect disposition. |
+| Functional suitability | Run the functional checks against the final declared feature scope; retain results and defect disposition. (The planned per-stage verification matrix was dropped, D-28.) |
 | Performance efficiency | Approved p50/p95 latency, queue delay, end-to-end completion, resource/cost, and concurrency thresholds plus a reproducible workload and results. |
 | Compatibility | Supported browser/device/service matrix with pass/fail results; include degraded provider and realtime behavior. |
 | Interaction capability | Keyboard-only, focus/modal, reduced-motion, screen-reader, responsive, failure/moderation, and child/teacher task checks with accepted criteria. |
@@ -298,7 +298,7 @@ Owner: product owner and research adviser where study instruments change.
 2. Decide export: retain and implement, or approve a new superseding ADR that formally invokes the roadmap
    de-scope rung. Never edit the accepted ADR in place to reverse it.
 3. Reconcile the PRD, ADR index/new ADR if required, roadmap, master spec, methodology, research instruments, public
-   policy pages, and Tool A in one change.
+   policy pages, and the planned verification matrix in one change.
 
 **Exit gate:** one approved list of required capabilities, with no contradictory promise in repository search.
 

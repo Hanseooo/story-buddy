@@ -8,7 +8,7 @@
 
 Create one standalone, researcher-facing HTML brief that explains StoryBuddy's evaluation design,
 assesses whether an exact questionnaire from prior research can validly be reused, documents the evidence
-and limitations behind the recommendation, and includes a printable draft of Tool B. The draft instrument is
+and limitations behind the recommendation, and includes a printable draft of the expert questionnaire. The draft instrument is
 clearly marked **pending adviser and ethics approval** and does not change a frozen ADR.
 
 Success means a researcher can answer five questions after reading it:
@@ -57,7 +57,7 @@ The HTML includes a source-status ledger with direct links and four labels: **ex
   an internal reporting inconsistency, not a resolved sample size.
 - **Reuse:** the arXiv page declares CC BY 4.0. Prompt concepts may be attributed and adapted with a change
   notice; the artifact does not reproduce long copyrighted passages.
-- **Decision:** adaptable construct source, not an exact Tool B questionnaire.
+- **Decision:** adaptable construct source, not an exact expert questionnaire.
 
 ### Picture-book rating-scale study
 
@@ -116,7 +116,7 @@ The page follows a decision-first sequence:
 8. **Use / Adapt / Reject matrix.**
 9. **Edge-case laboratory:** difficult cases and instrument handling rules.
 10. **Recommended evaluation procedure.**
-11. **Printable Tool B draft.**
+11. **Printable expert questionnaire draft.**
 12. **Researcher coding guide.**
 13. **Approval gates and next actions.**
 14. **References and evidence notes.**
@@ -157,7 +157,7 @@ It states that:
 - the runtime judge compares each page with canonical references and structured scene constraints, not with
   adjacent pages using PropCons.
 
-## 7. Tool B draft
+## 7. Expert questionnaire draft
 
 The printable appendix contains:
 
@@ -225,7 +225,7 @@ Each edge-case card contains the risk, decision rule, and rationale:
 
 - Validators receive only anonymized, redacted source stories and finished books.
 - They do not see runtime judge scores, retry history, provider/model details, or internal provenance.
-- The artifact never labels an unapproved Tool B as validated.
+- The artifact never labels an unapproved expert questionnaire as validated.
 - It distinguishes factual verification, inference, recommendation, and unresolved question.
 - Exact questionnaire reuse remains blocked until the complete primary instrument, validation population,
   scoring instructions, and reuse terms are verified.
@@ -245,11 +245,11 @@ The finished artifact must pass:
 1. HTML parse and balanced-tag checks.
 2. Unique IDs and valid internal navigation targets.
 3. Link inventory with every external source labelled by verification status.
-4. Text scans for prohibited claims: Tool B “validated,” CANVAS “questionnaire,” PropCons as the outcome,
+4. Text scans for prohibited claims: the expert questionnaire “validated,” CANVAS “questionnaire,” PropCons as the outcome,
    population percentages from three validators, and implemented export.
 5. Responsive browser inspection at desktop and mobile widths.
 6. Keyboard navigation, visible focus, reduced-motion, contrast, and JavaScript-disabled content checks.
-7. Print preview inspection for A4 pagination and complete Tool B fields.
+7. Print preview inspection for A4 pagination and complete expert questionnaire fields.
 8. Repository diff and whitespace checks.
 
 No application test suite is required because the artifact is standalone documentation, but browser and parser

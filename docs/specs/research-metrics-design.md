@@ -21,7 +21,7 @@ No new auth role. No account provisioning. Access model: **public route** at `/r
 ## 2. What this is NOT
 
 - Not a live monitoring dashboard (ADR-026 rejected that)
-- Not a replacement for Tool A (`functional-verification-matrix.md`) — Tool A runs offline over Langfuse exports for Objectives 1–2
+- Not a replacement for the dropped verification matrix (`functional-verification-matrix.md`, D-28), which would have run offline over Langfuse exports for Objectives 1–2
 - Not a per-model cost breakdown on the page itself — that lives in Langfuse, one click away per run
 
 ---
@@ -231,7 +231,7 @@ No `RESEARCH_TOKEN` — the page is public (§5.2).
 
 This spec requires a new ADR written as ADR-030 — its own file under `docs/product/adr/` plus a row in the `docs/product/ADRs.md` index — covering the LangSmith → Langfuse decision. The ADR is written in the same change as this feature — not after. See §7 of the implementation plan for the exact content. The amendment is to ADR-014 (LangSmith, 2026-07-22).
 
-**Summary of the decision:** LangSmith → Langfuse cloud. Reason: Langfuse maintains a model pricing table and computes per-model USD costs automatically from token counts, covering the research team's need to see "cost for the image model vs cost for the judge" without instrumenting `providers.py`. LangSmith reports tokens only. Langfuse is open-source with a cloud free tier; the integration adds one `CallbackHandler` instantiation per job rather than env-var-only zero-code (minor wiring increase, acceptable). Tool A's evaluation methodology (offline scripts over trace exports) is unchanged.
+**Summary of the decision:** LangSmith → Langfuse cloud. Reason: Langfuse maintains a model pricing table and computes per-model USD costs automatically from token counts, covering the research team's need to see "cost for the image model vs cost for the judge" without instrumenting `providers.py`. LangSmith reports tokens only. Langfuse is open-source with a cloud free tier; the integration adds one `CallbackHandler` instantiation per job rather than env-var-only zero-code (minor wiring increase, acceptable). The offline-scripts-over-trace-exports approach is unchanged.
 
 ---
 

@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import * as Sentry from "@sentry/nextjs";
 
 export default function GlobalError({
   error,
@@ -12,11 +11,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    if (process.env.NODE_ENV === "production") {
-      Sentry.captureException(error);
-    } else {
-      console.error("GlobalError caught root layout exception:", error);
-    }
+    console.error("GlobalError caught root layout exception:", error);
   }, [error]);
 
   return (

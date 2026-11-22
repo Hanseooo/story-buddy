@@ -35,7 +35,7 @@ export default function Home() {
               href="/research"
               className="hidden min-h-11 items-center text-sm font-bold text-on-primary/85 transition-opacity hover:opacity-70 md:flex"
             >
-              Methodology
+              Research
             </Link>
             <Link
               href="/welcome?action=login"
@@ -346,20 +346,14 @@ export default function Home() {
                 The science behind the magic.
               </h2>
               <p className="mt-6 max-w-xl text-lg leading-8 text-foreground/70">
-                StoryBuddy is built on a transparent, open-weight AI pipeline. From reason-then-score validation to strict safety guardrails, explore our pre-registered methodology and live performance metrics.
+                StoryBuddy is built on a transparent, open-weight AI pipeline. From reason-then-score validation to strict safety guardrails, explore our pre-registered methodology and results.
               </p>
               <div className="mt-8 flex flex-col gap-4 sm:flex-row">
                 <Link
                   href="/research"
                   className="inline-flex min-h-13 items-center justify-center rounded-xl bg-primary px-6 py-3 font-extrabold text-surface shadow-[0_5px_0_var(--color-primary-deep)] transition-transform duration-150 hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-[0_2px_0_var(--color-primary-deep)]"
                 >
-                  Read Methodology
-                </Link>
-                <Link
-                  href="/research/metrics"
-                  className="inline-flex min-h-13 items-center justify-center rounded-xl border-2 border-primary/20 bg-surface/50 px-6 py-3 font-extrabold text-primary transition-all duration-150 hover:-translate-y-0.5 hover:bg-surface active:translate-y-0.5"
-                >
-                  View Live Metrics
+                  Read the research
                 </Link>
               </div>
             </div>

@@ -1,0 +1,134 @@
+{
+  "exportedOn": "2026-11-21",
+  "figures": [
+    {
+      "png": "dataset_build_and_annotation_flow.png",
+      "kind": "diagram",
+      "source": "docs/diagrams/drawio/dataset_build_and_annotation_flow.drawio.svg",
+      "sourceSha256": "fea6cce64e4589b619d66eaea7c603abcc7a161c2eaea7c4864e81f0d1b18b5c",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "ipo_model.png",
+      "kind": "diagram",
+      "source": "docs/diagrams/drawio/ipo_model.drawio.svg",
+      "sourceSha256": "30a3b11250ee4aecb96f267199d82e68fac2f68098f6c531ad8f2f62d997dd2a",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "langgraph_pipeline_after_2026-10.png",
+      "kind": "diagram",
+      "source": "docs/diagrams/drawio/langgraph_pipeline_after_2026-10.drawio.svg",
+      "sourceSha256": "718a82e7a151165e3ea3815846a96aef21568085b617d909b3e474f8ef382ce9",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "langgraph_pipeline_before_2026-07.png",
+      "kind": "diagram",
+      "source": "docs/diagrams/drawio/langgraph_pipeline_before_2026-07.drawio.svg",
+      "sourceSha256": "b0a6a33b842f9acd10bcb2c0ea73b4e48644915469d119c7f8249d46e32bfd7c",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "sdlc_spiral.png",
+      "kind": "diagram",
+      "source": "docs/diagrams/drawio/sdlc_spiral.drawio.svg",
+      "sourceSha256": "d40b3cfae87c5378aacea91d274abd0fe3b181445e82771388fc052b9cec4750",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "sdlc_spiral_simple.png",
+      "kind": "diagram",
+      "source": "docs/diagrams/drawio/sdlc_spiral_simple.drawio.svg",
+      "sourceSha256": "35caea4085678d74f7f8d471248f3a1cae916f656332ad4b31c906d25ca72049",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "student_journey.png",
+      "kind": "diagram",
+      "source": "docs/diagrams/drawio/student_journey.drawio.svg",
+      "sourceSha256": "2199039c1099b50030b64383ba93fbddfb01b0e14e31bdb231dd831fca7d5c63",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "system_architecture.png",
+      "kind": "diagram",
+      "source": "docs/diagrams/drawio/system_architecture.drawio.svg",
+      "sourceSha256": "f4f6331767dbc00337dadc6f0e0b885316da6a1f4bcade974106363707f6159e",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "teacher_journey.png",
+      "kind": "diagram",
+      "source": "docs/diagrams/drawio/teacher_journey.drawio.svg",
+      "sourceSha256": "71f8236d042d49c9b26a7c555cce91accc4319cfe52684506b20318a83760fcf",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "judge-confusion-matrices.png",
+      "kind": "chart",
+      "source": {
+        "page": "/research/results",
+        "chartId": "judge-confusion-matrices",
+        "dataFile": "frontend/app/(research)/research/(reference)/results/data.ts"
+      },
+      "sourceSha256": "8a40f719fa4f00f1d6fbbb4c225e876952c4dc2fb57c34e539dc5523da640a54",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "judge-f1-precision-recall.png",
+      "kind": "chart",
+      "source": {
+        "page": "/research/results",
+        "chartId": "judge-f1-precision-recall",
+        "dataFile": "frontend/app/(research)/research/(reference)/results/data.ts"
+      },
+      "sourceSha256": "8a40f719fa4f00f1d6fbbb4c225e876952c4dc2fb57c34e539dc5523da640a54",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "judge-catches-false-alarms.png",
+      "kind": "chart",
+      "source": {
+        "page": "/research/results",
+        "chartId": "judge-catches-false-alarms",
+        "dataFile": "frontend/app/(research)/research/(reference)/results/data.ts"
+      },
+      "sourceSha256": "8a40f719fa4f00f1d6fbbb4c225e876952c4dc2fb57c34e539dc5523da640a54",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "judge-validation-checkpoints.png",
+      "kind": "chart",
+      "source": {
+        "page": "/research/results",
+        "chartId": "judge-validation-checkpoints",
+        "dataFile": "frontend/app/(research)/research/(reference)/results/data.ts"
+      },
+      "sourceSha256": "8a40f719fa4f00f1d6fbbb4c225e876952c4dc2fb57c34e539dc5523da640a54",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "reference-check-outcomes.png",
+      "kind": "chart",
+      "source": {
+        "page": "/research/limitations",
+        "chartId": "reference-check-outcomes",
+        "dataFile": "frontend/app/(research)/research/(reference)/limitations/data.ts"
+      },
+      "sourceSha256": "fb895abf7035ecb4f90c8e49e6b05ebcc924403851877a2fd48e9cc27e64e01a",
+      "exportedOn": "2026-11-21"
+    },
+    {
+      "png": "page-check-outcomes.png",
+      "kind": "chart",
+      "source": {
+        "page": "/research/limitations",
+        "chartId": "page-check-outcomes",
+        "dataFile": "frontend/app/(research)/research/(reference)/limitations/data.ts"
+      },
+      "sourceSha256": "fb895abf7035ecb4f90c8e49e6b05ebcc924403851877a2fd48e9cc27e64e01a",
+      "exportedOn": "2026-11-21"
+    }
+  ]
+}

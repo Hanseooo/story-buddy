@@ -1,6 +1,6 @@
 # StoryBuddy: Start Here (Group Guide)
 
-**Last updated:** 2026-10-11 · **For:** group members who need the research context without reading
+**Last updated:** 2026-11-21 · **For:** group members who need the research context without reading
 the code. Every statement below stands on its own. The repository paths in brackets are where the
 evidence lives, for anyone who wants to check it.
 
@@ -31,9 +31,9 @@ three-eyed hedgehog, and whether experts find the books acceptable.
 |---|---|---|
 | 1 | Implement the AI pipeline | Build the system that makes the books |
 | 2 | Produce picture books | Run it on real and synthetic stories |
-| 3 | Determine acceptability through expert validation | Validators from the Arts and Education colleges judge the books' presentation and classroom suitability |
+| 3 | Determine acceptability through expert validation | Two BEEd professors and one Arts professor review each original story and its book through a seven-question open-ended questionnaire |
 | 4 | Evaluate the fine-tuned judge | Measure how well a trained AI model tells "same character" from "different character", using precision, recall and F1 (F1 is the main number) |
-| 5 | Evaluate software quality | IT practitioners and teachers rate the system on ISO/IEC 25010 qualities |
+| 5 | Evaluate software quality | At least 30 IT experts, IT students, teachers and education students rate the system on ISO/IEC 25010 qualities |
 
 The study makes no claim that StoryBuddy is better than other methods and no claim about learning
 gains. [`docs/capstone/research_direction_and_goals.md`, Objectives and §5]
@@ -45,16 +45,21 @@ Each step runs automatically, in this order:
 | Step | What it does |
 |---|---|
 | Input gate | Checks the story is safe and usable |
+| Optional themes (teacher-review mode) | Groups the optional themes once on the submitted text, before any paid drawing |
 | Analyze | A text model reads the story and lists the characters, objects and places |
 | Segment | Splits the story into scenes (pages) and writes a short drawing direction for each |
 | Character bible | Draws one reference picture per main character, at most two characters |
 | Reference moderation | Checks those pictures are safe |
-| Reveal | Shows the references before the pages are drawn |
+| Reveal | Shows the references before the pages are drawn. The child can tap "try again" up to three times, write a short change with the magic pencil, or pick an earlier version of a picture |
 | Generate scene | Draws each page, using the reference pictures so characters look the same |
 | Consistency check | An AI judge compares each page with the references |
 | Regenerate | If the judge finds a mismatch, the page is redrawn with the reasons fed back, up to twice. The best of the (at most three) attempts is kept |
 | Output moderation | Checks the pages are safe |
-| Compose | Assembles the book |
+| Moderation review (teacher-review mode) | At the first flag the job waits for the teacher, who can allow exact content under a written policy, ask for one replacement picture, or stop it |
+| Moderation replace (teacher-review mode) | Draws the one replacement picture the teacher asked for |
+| Compose | Assembles the book. Once the teacher approves it, a classmate or the author can download it as a PDF, made on demand |
+
+Teacher-review mode (ADR-080) adds the three steps marked above, so the graph has 14 steps instead of the 11 of baseline mode. It has been on by default since 2026-11-21, along with the magic pencil (ADR-082) and teacher notes the child can read (ADR-081). The 42 study books were made in baseline mode. [`backend/pipeline/graph.py`, `backend/app/config.py:90,92`, ADR-071, ADR-072, ADR-080, ADR-081, ADR-082]
 
 **The models used today:**
 
@@ -68,14 +73,15 @@ All of them are open-weight models.
 
 [`backend/app/config.py`, `backend/pipeline/graph.py`, `docs/product/adr/ADR-001-*`]
 
-## 4. Where each objective stands (2026-10-08)
+## 4. Where each objective stands (2026-10-08; Objective 1 updated 2026-11-21)
 
 | Objective | Status |
 |---|---|
-| 1–2 | Built. The research corpus holds 42 generated books: 30 from synthetic stories and 12 from donated stories. |
-| 3 | Planned (Tool B, a written open-ended interview form). The repository records no completed session yet. |
+| 1 | **Achieved** (owner, 2026-11-21, D-20). The pipeline is built as a LangGraph graph, its automated tests pass, and it produced the 42 books end to end. The per-stage success-rate script once planned for Objectives 1–2 was never built and is dropped (D-28). |
+| 2 | Built. The research corpus holds 42 generated books: 30 from synthetic stories and 12 from donated stories. |
+| 3 | Planned (the expert questionnaire: seven open-ended questions, three evaluators). The repository records no completed session yet. |
 | 4 | Training done on three seeds. A **partial** held-out result exists (below). Paid evaluation stopped on 2026-10-07 for budget, and the Gemma baseline failed authentication, so the full registered report is incomplete. Since then the main work has been the page-drawing pipeline. |
-| 5 | Planned (Tool C, the ISO/IEC 25010 questionnaire). The repository records no completed session yet. |
+| 5 | Planned (the ISO/IEC 25010 questionnaire: 23 Likert items, at least 30 respondents). The repository records no completed session yet. |
 
 [`docs/product/ROADMAP.md` Phase 3 and C3-02, `docs/capstone/research_runbook.md` "Held-out resume context"]
 
@@ -108,19 +114,29 @@ ranks each judge by how well it catches those 47.
 
 An unreadable answer is output that did not parse. It is scored as "same character", so on a
 different-character pair it counts as a miss. Seeds 0 and 1 gave unreadable answers on about one
-pair in eight, which is part of why their recall is low.
+pair in eight. An unreadable answer on a Different pair counts as a miss, so this may lower their
+recall. How many of them fell on Different pairs was not counted.
 
 **In plain words:**
 
-- The trained judge is more careful. When it says "different", it is usually right (high precision).
-- It misses most of the real differences (low recall).
-- On F1, the main number, it is lower than the untrained model.
+- The fine-tuned judge raises far fewer false alarms (2 vs 47) because it rarely says 'different' at
+  all. As a result it misses most real character changes (38 of 47 vs 18 of 47), and 12% of its
+  answers could not be read. On the main score, F1, it is worse (0.31 vs 0.47).
 - The gap's 95% interval runs from −0.36 to +0.003, so it just touches zero.
 - This is a partial result. It does not say fine-tuning can never work. It says this training run
   did not improve the judge under these data and settings.
 - Dropping the characters whose references were ambiguous (a check registered in advance; one
   of them is in the test set, 20 pairs) does not change the picture: untrained F1 0.48, trained
   seed 1 0.35.
+
+**What we recommend.** Items 2 to 4 come from measured facts. Whether they would fix the result is
+untested.
+
+1. Keep prompted Gemma, a no-change decision. Gemma was not scored on this test set.
+2. Reject checkpoints with many unreadable answers, and enlarge validation's Different class.
+3. Record the judge's full answer text.
+4. Fix the constructed-pair sentence shared by 104 training pairs.
+5. Report the result in the bounded wording of research-changelog.md section 1 item 4.
 
 **How much the two human raters agreed.** On the 329 test pairs, the two groupmates gave the same
 "same or different" answer 89.7% of the time; Cohen's κ, which corrects for chance agreement, is
@@ -172,27 +188,34 @@ as provisional.
 | Adding a character the direction names by species ("the moth") | Fixed the one story it targets. Merged on 2026-10-09 (PR #101). |
 | Other reference-picture models for stated body counts | None drew counts like "six legs" correctly. Already a stated limitation (ADR-056). |
 | Editing the finished reference to fix the count (October 11) | 5 of 9 fixed with the character unchanged, 1 borderline, 3 missed. Pages redrawn from the fixed references then showed the right count on 5 of 6 (1 borderline). One try each, with instructions written by hand. Not adopted yet: it needs a test with automatic instructions and an ADR. |
+| Editing the reference with only the tapped chip's words (November 1) | 2 of 9 fixed, against 5 of 9 with hand-written instructions. It failed its 6-of-9 rule. A tap stays a fresh draw. |
 
 [`docs/capstone/model-probes-2026-10.md`, top table]
 
 ## 6. Limitations to say out loud at the defense
 
-1. **Duplicate characters.** About 13% of page images show a character twice. Two different scene
-   editors do this at the same rate, and four fixes failed. It is a limitation of this kind of edit
-   model, measured on two of them, and it remains open.
-2. **Stated body counts.** "Six legs" or "seven stripes" usually come out wrong. No tested model
-   draws them from text (ADR-056). Editing the finished reference fixed 5 of 9 in one small test,
-   and pages redrawn from those references kept the fix. It is a lead and not yet a fix: one try
-   each, with instructions written by hand.
+1. **Duplicate characters.** About 13% of page images, counting redrawn drafts (28 of 221), show a
+   character twice. On finished pages it is 15 of 150. Two different scene editors do this at the
+   same rate, and four fixes failed. It is a limitation of this kind of edit model, measured on two
+   of them, and it remains open.
+2. **Stated body counts.** "Six legs" or "seven stripes" usually come out wrong, and no tested model
+   draws them from text (ADR-056). The reference check cannot reliably catch them either: it once
+   listed "six legs" as present on a four-legged drawing. Editing the finished reference fixed 5 of
+   9 with hand-written instructions, but only 2 of 9 with the chip's own words. The magic pencil
+   (ADR-082) lets a child request such an edit in their own words, and it has been on by default
+   since 2026-11-21. Whether children's wording works is unmeasured, and every use is logged.
 3. **Characters with no reference.** Background groups like "his six dust-bunny soldiers" have no
-   reference picture. The model guesses what they look like, and once drew them as human boys.
+   reference picture. The model guesses what they look like: dust-bunny soldiers came out as human
+   boys in one draw and as helmeted humanoid soldiers in another. Scenes that call for such a group
+   ship a duplicate or extra character on 24% of pages, against 10% elsewhere.
 4. **Actions.** Some pages miss the action, or give it to the wrong character. Describing only what
    is visible helped where the text mentioned something absent or pretend. That kind is about 3
    pages in 150, too few to measure a fix before the defense.
 5. **How the image findings were sampled.** Most October probes used pages chosen because they
    had failed, with one or two draws each. Only the klein screen was blinded and used random pages.
-6. **The judge result.** Objective 4's result is partial, and the trained judge scored lower F1
-   than the untrained one.
+6. **The judge result.** Objective 4's result is partial: the prompted Gemma baseline was not
+   scored. The trained judge raised fewer false alarms but missed most real differences, and scored
+   lower F1 than the untrained model (0.31 vs 0.47).
 7. **The labels.** Two groupmates labelled every pair and the owner settled disagreements. Pairs
    both raters got wrong were never re-checked, apart from ten audited ones. Hair length is not a
    rule, so raters could split on it. Object characters (such as a tin can) lean toward
@@ -203,6 +226,13 @@ as provisional.
    stories, with 117 of 150 pages tagged as containing non-human characters, including mixed
    casts. Human-only pages did better (11 of 33 against 66 of 117), but 33
    pages is too few to call a rate, and no donated story was reviewed.
+10. **The reference check cannot verify stated details.** Off-the-shelf vision models tested in
+   September could not tell that a "metal comb" was drawn red, and one listed "six legs" as present
+   on a four-legged drawing. The trained judge would not fix this: it compares pages with
+   references, not references with the story text.
+11. **Safety checks sometimes refuse harmless stories.** In the corpus run, the stricter of the two
+   image checks stopped 4 of 30 synthetic stories that the main check had cleared. The same scene
+   could pass on a later try with no change.
 
 [`docs/capstone/model-probes-2026-10.md` "Limitations to carry into the write-up",
 `docs/product/PREREGISTRATION_OBJ4.md`, `docs/capstone/methodology.md` §9]

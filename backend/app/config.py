@@ -14,7 +14,6 @@ class Settings(BaseSettings):
     redis_url: str
     openrouter_api_key: str
     fal_key: str
-    sentry_dsn_backend: str | None = None
     frontend_origin: str = "http://localhost:3000"
 
     langfuse_secret_key: str | None = None

@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { WarningCircle, ArrowsClockwise, ArrowLeft } from "@phosphor-icons/react";
-import * as Sentry from "@sentry/nextjs";
 
 export default function AdjudicateError({
   error,
@@ -13,11 +12,7 @@ export default function AdjudicateError({
   reset: () => void;
 }) {
   useEffect(() => {
-    if (process.env.NODE_ENV === "production") {
-      Sentry.captureException(error);
-    } else {
-      console.error("Adjudicate error caught:", error);
-    }
+    console.error("Adjudicate error caught:", error);
   }, [error]);
 
   return (

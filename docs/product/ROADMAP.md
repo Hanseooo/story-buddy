@@ -30,7 +30,8 @@ is solo; the research track is not. They run in parallel and meet at Phase 2.5 a
 
 One hardcoded story flows end-to-end through real infrastructure and produces one real slideshow.
 `POST /storybooks` → job row → RQ worker → LangGraph stub nodes → image in Supabase Storage →
-slideshow live via Realtime. Langfuse + Sentry on from the first commit.
+slideshow live via Realtime. Langfuse on from the first commit. (Sentry was scaffolded then, never initialised on the frontend, and
+removed on 2026-11-22.)
 
 **Status:** ✅ complete. Originally built against Gemini + Nano Banana; the open-weight swap
 (ADR-001, ADR-002, ADR-015) landed with `backend/providers.py`, and `google-genai` is out of the
@@ -136,7 +137,7 @@ load. They are **not** the corpus (RESEARCH_PROTOCOL §8).
 
 - **Story Memory contract** — the Pydantic schema. Written first; freezes MASTER_SPEC §3. ✅ **built 2026-07-29** (`feat/story-memory-contract`; `job_state.py` deleted; seven nodes on partial-return; `input_gate` entry point wired).
 - **Story Analyzer** — structured output (`json_schema`, strict) + Pydantic. Entity + coreference extraction tolerant of messy kid text, including light Taglish code-switching.
-- **Scene Segmentation** — select up to 10–15 scenes; **floor behavior** for short stories (≥3, never invent content).
+- **Scene Segmentation** — select 3 to 10 scenes (ADR-037); **floor behavior** for short stories (≥3, never invent content).
 - **Character Bible + canonical reference image** — ≤2 canonical characters in the fixed style.
 - **Style Presets** — author three style fragments once (config, not a module). Chosen before the canonical
   reference is generated; frozen for the storybook. Story Memory carries `style.style_preset_id` (ADR-022).
@@ -167,7 +168,7 @@ fallback means Phase 1 wobbles rather than collapses.
 **Entry:** probe 4 green (§0.5). **Check the worker's RAM tier now, not at the end** — see the warning below.
 
 - **Moderation stack:** input text (meta-llama/llama-guard-4-12b on the worker + `gpt-oss-safeguard-20b` OpenRouter backstop, ADR-011c) → PII redaction (Presidio)
-  → output image moderation (NSFW ViT on CPU + VLM safety rubric) on every image **including the canonical
+  → output image moderation (Mistral Small 3.2 primary + gemma-3-27b-it backstop via OpenRouter, ADR-032; the local NSFW ViT is gone) on every image **including the canonical
   reference before reveal**. The open image model ships **no built-in safety filter** and the proprietary
   backstop is gone — this gate is load-bearing (ADR-011).
 - **Filipino PII recognizers** — custom Presidio recognizers for Filipino names, `Barangay`/`Purok`/`Sitio`
@@ -198,8 +199,8 @@ fallback means Phase 1 wobbles rather than collapses.
 stories all degrade gracefully; a teacher can sign up, see only their own classroom, approve a book into
 the gallery and delete data. Probe 4 (Filipino moderation) is green.
 
-**⚠️ Worker RAM.** Presidio+spaCy, the NSFW ViT, and the CPU text gate are resident in one
-container (~2–3 GB). Check the plan tier at the *start* of this phase, not the end.
+**⚠️ Worker RAM.** Presidio+spaCy is resident in the worker container (the NSFW ViT and CPU text gate this note once listed were replaced by API calls, ADR-032).
+(~2–3 GB was the original estimate.) Check the plan tier at the *start* of this phase, not the end.
 
 ---
 
@@ -218,7 +219,7 @@ the step-by-step order of operations.**
 *prompted* judge until the registered product gate decides whether a fine-tuned judge ships.
 
 - **Data.** There is **no dataset to download** — it is manufactured from Phase 1's own output over the
-  Stage-1 corpus (**15 stories collected → 10 primary + 5 backup**, Grade 5–6, Matina Aplaya Elementary
+  Stage-1 corpus (**15 stories collected → 10 primary + 5 backup**, Grade 5–6, Vicente Hizon, Sr. Elementary
   School — RESEARCH_PROTOCOL §8). Positives are **human-confirmed** by the researchers, except for ten
   owner-approved AI-assisted audit labels disclosed in `PREREGISTRATION_OBJ4.md`; auto-labelling them
   trains a detector for *"was a reference used?"*. Hard negatives are constructed for free and go into
@@ -330,25 +331,23 @@ git tag `technical-defense-2026-10`.
 
 ## Phase 3 — Evaluation Instrumentation & Study *(~3–4 weeks; overlaps the ethics window)*
 
-- **Functional verification matrix (Objectives 1–2, Tool A)** — per-stage pass/fail success rates across the
+- **Functional verification matrix (Objectives 1–2; dropped 2026-11-21, D-28, never built)** — per-stage pass/fail success rates across the
   six functional categories, `Successful ÷ Total × 100`, computed by an **offline script over tracing
   exports** (`docs/specs/functional-verification-matrix.md`; no dashboard and no new table — ADR-026).
   A Pass means *the stage emitted valid output*, **never** *the judge approved it* — scoring outputs with the
   judge would break non-circularity (ADR-004). It runs on **fixture stories**, so it carries no ethics load
   and is valid October-defense material.
-- **Expert-validation harness (Objective 3)** — the Dean/Professor of the Arts College, one Arts
-  student/intern, and one Education student/intern respond to a written, open-ended interview form
-  (Tool B); responses coded positive / negative / suggestion per criterion (narrative coherence,
-  story faithfulness, visual presentation, visual style consistency, classroom suitability) via content
-  analysis (ADR-008, RESEARCH_PROTOCOL §5). Stimuli are served by
+- **Expert-validation harness (Objective 3)** — two BEEd professors and one Arts professor respond to a
+  seven-question, written, open-ended questionnaire (the expert questionnaire); analysis by content or
+  thematic analysis, to be decided (ADR-008, RESEARCH_PROTOCOL §5). Stimuli are served by
   `frontend/app/(research)/books/` — provenance stripped, order shuffled per validator, so blinding holds in
   code rather than by discipline (ADR-026). The **responses themselves stay on paper**: the instrument is
   open-ended prose, not a form.
 - **Story corpus** assembled from **Stage-1 story donation** (below): 15 stories collected → 10 primary +
   5 backup, provenance documented.
-- **Software-quality harness (Objective 5)** — ISO/IEC 25010 questionnaire (Tool C), five
-  characteristics, 5-point Likert, weighted mean + SD, administered to **designated software-quality
-  evaluators** (IT practitioners and teachers) — never to the expert validators (RESEARCH_PROTOCOL §6).
+- **Software-quality harness (Objective 5)** — ISO/IEC 25010 questionnaire, 23 items on six
+  characteristics, 5 = Strongly Agree, mean + SD only, administered to **at least 30 designated
+  software-quality respondents** (IT experts, IT students, teachers, education students) — never to the expert evaluators (RESEARCH_PROTOCOL §6).
 - **Metrics export** — generation time, image/regen counts, cost from tracing. Objective 4's
   precision/recall/F1 is computed in Phase 2.5, against the judge's held-out set.
 
@@ -394,7 +393,7 @@ for both stages regardless of who owns the account (**Data Privacy Act of 2012, 
 Removing parental controls from the product did not remove parental consent from the research; adding peer
 sharing made Stage 2 heavier.
 
-**Recruitment and locale.** Stories are collected at **Matina Aplaya Elementary School**, from qualified
+**Recruitment and locale.** Stories are collected at **Vicente Hizon, Sr. Elementary School**, from qualified
 Grade 5–6 learners. Expert validators (Objective 3) and the designated software-quality evaluators
 (Objective 5) are recruited through **Holy Cross of Davao College (HCDC)**, Davao City, Philippines —
 where system development and evaluation take place.

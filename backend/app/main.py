@@ -2,7 +2,6 @@ import logging
 import uuid
 from typing import Literal
 
-import sentry_sdk
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,9 +26,6 @@ from app.review_notes import child_notes_router
 from app.avatar import AvatarRequest, patch_avatar
 from providers import check_text
 import providers
-
-if settings.sentry_dsn_backend:
-    sentry_sdk.init(dsn=settings.sentry_dsn_backend, traces_sample_rate=0.1)
 
 _log = logging.getLogger(__name__)
 
@@ -63,8 +59,8 @@ async def _validation_error_without_request_values(
 ) -> JSONResponse:
     """FastAPI's default 422 body carries `input` — the rejected value verbatim.
 
-    For `/storybooks` that value is an unchecked title or story, and a 422 body is a log, a
-    trace, and a Sentry breadcrumb (CC-5, story-titles §4: "Do not log request values in
+    For `/storybooks` that value is an unchecked title or story, and a 422 body ends up in logs
+    and traces (CC-5, story-titles §4: "Do not log request values in
     validation errors"). The field location and message are what a client needs to show a
     field error; the value it just sent is not.
     """

@@ -27,7 +27,7 @@ The UI accommodates two distinct audiences through varied design languages: a vi
 
 The backend logic is strictly reserved for the heavy lifting of story generation.
 
-- **Web Service:** A lightweight FastAPI application running on Northflank that accepts storybook generation requests and enqueues them.
+- **Web Service:** A lightweight FastAPI application running on Northflank (North America region, free tier; D-07 of `docs/specs/research-page-refresh.md`) that accepts storybook generation requests and enqueues them.
 - **RQ Worker & Redis Broker:** A separate worker service processes the generative LangGraph pipeline. Running this asynchronously isolates long-running model inference from web traffic.
 - **Checkpointing and Resumability:** The worker checkpoints pipeline state to Postgres after every completed scene. If a generation job stalls, fails, or is interrupted, it resumes from the exact scene it left off. This prevents wasteful re-generation of already-completed scenes, tightly controlling API costs.
 
@@ -41,8 +41,10 @@ The process is modeled as a directed graph with explicit nodes:
 2. **Analyze & Segment:** Extracts characters, locations, and narrative arcs, chunking the text into discrete scenes.
 3. **Character Bible:** Generates canonical reference images for the identified characters.
 4. **Generate Scene:** Conditionally edits the canonical references to fit the scene narrative and art style.
-5. **Consistency Check & Regenerate:** A Vision-Language Model (VLM) evaluates the generated scene for character consistency. If it fails, the pipeline performs one targeted regeneration using the VLM's extracted failure reasons, eventually falling back to the "best-of" attempt.
+5. **Consistency Check & Regenerate:** A Vision-Language Model (VLM) evaluates the generated scene for character consistency. If it fails, the pipeline performs up to two targeted regenerations using the VLM's extracted failure reasons (three attempts in all, `max_scene_attempts = 3`, `backend/app/config.py:100`; ADR-037), eventually falling back to the "best-of" attempt.
 6. **Compose:** Assembles the approved scenes into the in-app book. On-demand PDF export is a separate authenticated API action after completion and teacher approval (ADR-071), outside the generation graph.
+
+**Teacher-review mode (ADR-080, on by default since 2026-11-21, `backend/app/config.py:90`).** Jobs captured in `teacher_review_v1` run three extra nodes, which makes the graph 14 nodes instead of the baseline 11 (`backend/pipeline/graph.py`): `optional_themes` (groups the optional themes once on the submitted text before paid image generation), `moderation_review` (a second `interrupt()`, the teacher hold, entered at the first moderation flag) and `moderation_replace` (one bounded picture replacement the teacher can request). In baseline mode a flag fails the job and `reveal` holds the only `interrupt()`.
 
 **Manuscript's ten logical modules ↔ implementation nodes:** the capstone manuscript describes the pipeline
 as ten logical modules. They reconcile with the six flow groups above (and the frozen node graph in
@@ -89,7 +91,7 @@ Rather than relying on proprietary filters, StoryBuddy integrates robust open cl
   (backstop, via OpenRouter) — two independent open-weight classifiers, both Apache-2.0. *(IBM Granite
   Guardian was the originally named backstop; it is not routable on OpenRouter — ADR-011, revised
   2026-07-21c.)*
-- **Output images** are evaluated by an NSFW ViT and a safety rubric running on `gemma-3-27b-it`. 
+- **Output images** are screened by `mistralai/mistral-small-3.2-24b-instruct` (primary, OpenRouter) with `google/gemma-3-27b-it` as the backstop (`backend/app/config.py:68,73`). ADR-032 replaced the local NSFW ViT with these API calls. 
 This guarantees independence between filters and prevents unsafe or off-topic content from reaching a child.
 
 ### VLM-as-Judge Control Loop

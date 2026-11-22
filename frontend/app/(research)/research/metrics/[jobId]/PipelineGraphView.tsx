@@ -20,11 +20,13 @@ const pct = (value: number, of: number) => `${(value / of) * 100}%`;
 const RING: Record<EndedOn["kind"], string> = {
   failed: "ring-3 ring-destructive",
   waiting: "ring-3 ring-warning",
+  teacher: "ring-3 ring-warning",
   running: "ring-3 ring-info",
 };
 const ENDED_TONE: Record<EndedOn["kind"], string> = {
   failed: "text-destructive",
   waiting: "text-foreground",
+  teacher: "text-foreground",
   running: "text-info",
 };
 
@@ -57,11 +59,11 @@ export default function PipelineGraph({
         <h2 id="graph-heading" className="font-display text-2xl font-bold">Path through the pipeline</h2>
         <p className="text-xs text-foreground/70">Solid steps ran. Faded steps did not. ×N is how many times. Select a step for details.</p>
       </div>
-      <p className="text-xs text-foreground/70 sm:hidden">Swipe sideways to see the redraw loop.</p>
+      <p className="text-xs text-foreground/70 md:hidden">Swipe sideways to see the redraw loop and the teacher-review column.</p>
 
-      <div className="overflow-x-auto rounded-3xl bg-surface p-3 neo-border neo-shadow-sm">
+      <div tabIndex={0} role="region" aria-label="Pipeline map, scrolls sideways" className="overflow-x-auto rounded-3xl bg-surface p-3 neo-border neo-shadow-sm focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3">
         <div
-          className="relative mx-auto min-w-[528px] max-w-[570px]"
+          className="relative mx-auto min-w-[700px] max-w-[790px]"
           style={{ aspectRatio: `${GRAPH_WIDTH} / ${GRAPH_HEIGHT}` }}
         >
           <svg viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`} className="absolute inset-0 size-full" aria-hidden>

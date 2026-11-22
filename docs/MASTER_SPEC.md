@@ -60,9 +60,9 @@ pair materialization, annotation reconciliation, manifest export, and training c
 `frontend/app/(research)/` owns the researcher annotation and adjudication routes (ADR-026).
 
 **Not built yet** (listed so it is not invented elsewhere): `backend/eval/` — Phase 3 offline eval scripts,
-starting with `functional_verification.py` (Tool A). *(`.github/workflows/ci.yml` is built; see §6.)*
+starting with `functional_verification.py` (dropped, D-28; not built). *(`.github/workflows/ci.yml` is built; see §6.)*
 
-**The research track gets two screens and one table, and no more.** No metrics dashboard (Tool A is a script
+**The research track gets two screens and one table, and no more.** No metrics dashboard (the dropped verification script was to be a script
 — §4's "offline scripts + tracing exports"), no run-trace viewer (that is Langfuse, ADR-030), and no separate
 researcher application. Objectives 3 and 5 are collected on paper and by form, not in-app. ADR-026.
 
@@ -213,18 +213,18 @@ Product/architecture choices are in the ADRs; this is the working reference, **i
 | Layer | Choice | Notes / ADR |
 |---|---|---|
 | Frontend | Next.js (React) + Tailwind 4 + Cobalt Playroom components + framer-motion | Vercel, SSR landing. §9,§12 |
-| Backend web | FastAPI | Northflank (Singapore). ADR-031 |
+| Backend web | FastAPI | Northflank (North America, free tier; D-07). ADR-031 |
 | Worker / queue | RQ worker + Redis broker | Separate service. ADR-005 |
 | Pipeline engine | LangGraph (deterministic) + `langgraph-checkpoint-postgres`. Checkpoints go over the **direct** Postgres connection (5432), not the 6543 transaction pooler | ADR-003,005,033 |
 | LLM / VLM | `mistralai/mistral-small-3.2-24b-instruct` (nodes; ~~`qwen/qwen3-32b`~~ until 2026-08-11) + prompted judge `gemma-3-27b-it`; fine-tuned `Qwen3.5-9B` is the amended Objective 4 candidate and ships only if its product gate passes | ADR-002 (amended 2026-08-11),004,015,018,061 |
 | Image model | `fal-ai/qwen-image` (text→image refs & fallback) + `fal-ai/qwen-image-edit-2511` (reference-conditioned scenes) via fal.ai | ADR-001, ADR-015 |
-| Judge serving | vLLM on a scale-to-zero GPU container (Modal). OpenAI-compatible — `JUDGE_BASE_URL` is the swap | ADR-019 |
+| Judge serving | Planned: vLLM on a scale-to-zero GPU container (Modal). OpenAI-compatible — `JUDGE_BASE_URL` is the swap. **Not deployed:** the product uses the prompted judge on OpenRouter (`docs/capstone/hardware_and_hosting.md` §2) | ADR-019 |
 | Model access layer | `backend/providers.py` — thin functions, one impl each. **The only file naming a *provider*** (model *ids* are env vars read in `app/config.py` — ADR-015: "swapping a model is an env var; swapping a provider is one file") | ADR-015 |
 | Data / auth / storage / realtime | Supabase (Postgres + Auth + Storage + Realtime + RLS). **Classroom-scoped** | ADR-006, ADR-017 |
 | Structured extraction | `json_schema` (strict) + `require_parameters` (OpenRouter only) + Pydantic | §12, §3, ADR-002 |
 | Moderation | **meta-llama/llama-guard-4-12b** (OpenRouter) **+ gpt-oss-safeguard-20b** (OpenRouter backstop) (text) + Presidio **+ Filipino recognizers** (structured identifiers only — persons off by default, ADR-045) + **mistral-small-3.2-24b** (NSFW gate via OpenRouter) & **gemma-3-27b-it** safety rubric (image) | ADR-011, ADR-032, ADR-045, ADR-002 (amended) |
 | Fine-tuning | **The consistency judge only.** Identity = reference conditioning; style = ADR-007 constant; safety = never | ADR-018 (supersedes ADR-016) |
-| Observability | **Langfuse** (tracing, ADR-030 — supersedes LangSmith/ADR-014) + Sentry (errors) | ADR-030, §16 |
+| Observability | **Langfuse** (tracing, ADR-030 — supersedes LangSmith/ADR-014). Errors are logged by the services and read in the host's logs; there is no error-tracking service | ADR-030, §16 |
 | Rate limiting | ⚙️`slowapi` + cost circuit-breaker; **per-classroom** daily cap deferred to Phase 2 (ADR-025) | §14,§15, ADR-025 |
 | **Testing — FE unit** | **vitest** | mock model calls; component + logic |
 | **Testing — BE unit** | **pytest** | mock every `providers.py` call (via the node helper — §6 seam); node logic, contracts, RLS, routing |
@@ -299,7 +299,7 @@ pipeline behaviours exercised here, not standalone evaluation legs):
 - **Judge classification** — precision/recall/F1 (F1 primary) against human-established reference labels on
   the held-out set (**Objective 4**; an optional secondary comparison vs. the zero-shot base model and the
   existing prompted baseline is permitted, ADR-008 rev. 2026-07-25), VLM–human agreement.
-- **Software quality** — ISO/IEC 25010 characteristics, 5-point Likert, weighted mean + SD (**Objective 5**).
+- **Software quality** — ISO/IEC 25010 characteristics, 23 Likert items on six characteristics, descriptive statistics only (**Objective 5**).
 - **Is the same instrumentation as the Phase 3 study** (Langfuse) — build once, use for
   both dev feedback and research data. Costs money and is non-deterministic; that's why it's not CI.
 
@@ -341,7 +341,7 @@ mark done. Behavior change later → update the spec in the same change (CLAUDE.
 | 1 (core) | `story-memory-contract`, `story-analyzer`, `scene-segmentation`, `character-bible`, `style-presets`, `prompt-optimizer`, `image-generator`, `consistency-checker`, `regeneration-controller`, `compose` |
 | 2 (safety/classroom) | `moderation-stack`, `input-gate-hardening` (absorbed `filipino-pii-recognizers` + `length-guard`), `self-refusal-fallback`, `repeated-failure-offramp` (split out of it 2026-08-02 — counts across job submissions, needs a cross-run counter), `auth-identity-and-classroom-schema` (S1), `auth-session-model` (S2), `auth-authorization-surface` (S3), `auth-routes-and-account-ux` (S4) (the former `auth-and-classroom` row, decomposed by docket `docs/specs/auth-and-classroom-docket.md` — all four specced and built 2026-08-05/06; S3's 33-test isolation suite in `backend/tests/test_rls_isolation.py`), `teacher-dashboard`, ✅ `classroom-sharing` *(built 2026-08-09)* (display-only gallery — no `peer-reflection`/`story-map`, both cut per ADR-021), ~~`narration`~~ *(cut — ADR-058)*, `export-pdf` *(restored 2026-10-21 — ADR-071; see its spec for implementation/release status)*, `rate-limiting`, `storybook-deletion` *(draft 2026-08-24; ADR-044 per-book slice)*, `data-deletion` *(account/classroom deletion and abandoned-pause retention)*, `kid-flow-book-persistence` (S1), `kid-flow-pause-lifecycle` (S2), `kid-flow-failure-semantics` (S3), `kid-flow-reader-and-wait-states` (S4), ✅ `visual-continuity` *(S1/S2 replacement)*, ✅ `pose-viewpoint-composition` (S3), ✅ `setting-consistency` (S4), ✅ `spend-and-retry-economics` (S5) *(docket `docs/specs/pipeline-consistency-docket.md` — DONE 2026-08-15; S1 and S2 WAIVED, S3–S5 specced and built)* |
 | 2.5 (fine-tune) | ✅ `judge-finetune` *(written)*, `annotation-surface` (ADR-026) |
-| 3 (eval) | `functional-verification-matrix` (Tool A), `metrics-export` |
+| 3 (eval) | `functional-verification-matrix` (dropped, D-28), `metrics-export` |
 
 `story-memory-contract` is written **first** — it freezes §3 for everything downstream.
 The **failure-reason taxonomy** (`judge-finetune` §4) is shared by `regeneration-controller` and the

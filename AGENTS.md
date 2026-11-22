@@ -105,6 +105,11 @@ Two projects, no shared root tooling. Run each from its directory.
   with "Commit could not be built".
 - Lint: `uv run ruff check .` (`ruff format` is deliberately not adopted; see `pyproject.toml`)
 - Unit tests: `uv run pytest`
+  The 6 tests in `tests/test_pdf_export.py` need WeasyPrint's system libraries (Pango, HarfBuzz),
+  which the Dockerfile and CI install. Without them, as on a plain Windows machine, the log says
+  "WeasyPrint could not import some external libraries", the endpoint returns 503, and those 6
+  fail. That is the local setup, not a regression. On Windows, install Pango per WeasyPrint's
+  Windows installation docs, or rely on CI for those 6.
 - Single test: `uv run pytest tests/test_x.py -k "case_name"`
 - Provider smoke tests, before any deploy that changes a model ID, base URL, or provider:
   `uv run pytest -m "smoke and not smoke_image"` (free pings), `uv run pytest -m smoke` (adds one
