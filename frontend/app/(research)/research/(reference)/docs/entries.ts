@@ -200,7 +200,7 @@ export const DOC_CHAPTERS: DocChapter[] = [
       {
         path: "docs/product/ADRs.md",
         answers: "Which architecture decisions were made, and which are still in force?",
-        lastChanged: "2026-11-21",
+        lastChanged: "2026-11-22",
       },
       {
         path: "docs/product/adr/ADR-083-research-pages-hub-chapter-routes-and-png-diagram-export.md",
