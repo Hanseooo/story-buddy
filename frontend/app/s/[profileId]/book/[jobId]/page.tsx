@@ -679,6 +679,9 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   const [changingPage, setChangingPage] = useState(false); // SH-07: one page change per book at a time
   const downloadRequest = useRef<AbortController | null>(null);
   const imageRequest = useRef<AbortController | null>(null);
+  // Page URLs collected for the current imageRequest. Blobs here die with that controller, so a new
+  // controller starts empty (image-loading AC-13, AC-15).
+  const collectedUrls = useRef<Record<string, string>>({});
   const ownsBook = Boolean(profileId && row?.profile_id === profileId);
   // RLS supplies readable classroom books; the PDF endpoint rechecks active membership/approval.
   const canDownload = Boolean(profileId && row?.approved_at) && !row?.rejected_at;
@@ -766,9 +769,13 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
     const pagesList = row.pages;
     const paths = pagesList.map(p => p.image_path);
     const controller = imageRequest.current;
+    const signed = collectedUrls.current;
     async function doSign(att: number): Promise<void> {
-      const signed = await signPaths(paths, [{id: jobId, moderation_mode: row?.moderation_mode, pages: pagesList}], controller?.signal);
+      // Only pages still missing are fetched again; the book still needs every page (SH-05).
+      const missing = paths.filter(p => !signed[p]);
+      const got = await signPaths(missing, [{id: jobId, moderation_mode: row?.moderation_mode, pages: pagesList}], controller?.signal);
       if (controller?.signal.aborted) return;
+      Object.assign(signed, got);
       if (paths.some(p => !signed[p])) {
         if (att < 2) {
           console.log("sb:action", { action: "re-sign" });
@@ -795,6 +802,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
     if (bucket !== "terminal-success") return;
     const controller = new AbortController();
     imageRequest.current = controller;
+    collectedUrls.current = {};
     signPages(1);
     return () => { controller.abort(); };
   }, [bucket, signPages]);
