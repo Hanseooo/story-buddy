@@ -8,13 +8,16 @@ import { displayTitle } from "@/lib/displayTitle";
 import { signPaths } from "@/lib/signedUrls";
 import { motion } from "framer-motion";
 import { MagicWand, Users, FileDashed, Books, PencilSimple } from "@phosphor-icons/react";
+import Loading from "./loading";
 
 type JobCard = {
   id: string;
   bucket: JobBucket;
   title: string;
-  coverUrl: string | null;
 };
+
+// Per-card cover state (spec §5.9): no key = still loading, null = no cover, string = ready.
+type Covers = Record<string, string | null>;
 
 export default function BookshelfPage({
   params,
@@ -23,6 +26,7 @@ export default function BookshelfPage({
 }) {
   const [profileId, setProfileId] = useState<string | null>(null);
   const [cards, setCards] = useState<JobCard[]>([]);
+  const [covers, setCovers] = useState<Covers>({});
   const [loading, setLoading] = useState(true);
   const [unreadNotes, setUnreadNotes] = useState<string[]>([]);
 
@@ -88,7 +92,7 @@ export default function BookshelfPage({
     (async () => {
       const { data: jobs } = await supabase
         .from("jobs")
-        .select("id, status, moderation_mode, current_stage, failure_reason, input_text, title, pages, reveal")
+        .select("id, status, moderation_mode, input_text, title, pages")
         // ponytail: explicit filter required — RLS also grants classmates' approved jobs (spec §7.2)
         .eq("profile_id", profileId)
         .order("created_at", { ascending: false });
@@ -98,24 +102,33 @@ export default function BookshelfPage({
         return;
       }
 
-      const imagePaths = (jobs as JobRow[])
-        .map((j) => j.pages?.[0]?.image_path)
-        .filter((p): p is string => Boolean(p));
-
-      const signedMap = imagePaths.length > 0 ? await signPaths(imagePaths, jobs as JobRow[], imageController.signal) : {};
-      if (cancelled) return;
-
+      const rows = jobs as JobRow[];
+      // Cards render now; covers fill in as signing finishes (spec AC-02, AC-03).
       setCards(
-        (jobs as JobRow[]).map((j) => ({
+        rows.map((j) => ({
           id: j.id,
           bucket: classify(j),
           title: displayTitle(j.title, j.input_text),
-          coverUrl: j.pages?.[0]?.image_path
-            ? (signedMap[j.pages[0].image_path] ?? null)
-            : null,
         }))
       );
+      setCovers(Object.fromEntries(rows.filter((j) => !j.pages?.[0]?.image_path).map((j) => [j.id, null])));
       setLoading(false);
+
+      const imagePaths = rows
+        .map((j) => j.pages?.[0]?.image_path)
+        .filter((p): p is string => Boolean(p));
+      if (imagePaths.length === 0) return;
+
+      const signedMap = await signPaths(imagePaths, rows, imageController.signal).catch(() => ({} as Record<string, string>));
+      if (cancelled) return;
+      setCovers((prev) => {
+        const next = { ...prev };
+        for (const j of rows) {
+          const path = j.pages?.[0]?.image_path;
+          if (path) next[j.id] = signedMap[path] ?? null;
+        }
+        return next;
+      });
     })();
 
     return () => {
@@ -126,6 +139,18 @@ export default function BookshelfPage({
   }, [profileId]);
 
   if (!profileId) return null;
+
+  // Same skeleton as the route loading file (spec §5.7), so the heading never sits over an empty grid.
+  if (loading) {
+    return (
+      <>
+        <p role="status" aria-live="polite" className="sr-only">Loading your bookshelf</p>
+        <div aria-hidden="true">
+          <Loading />
+        </div>
+      </>
+    );
+  }
 
   // Failed jobs are permanent (terminal jobs are immutable — kid-flow S3), so they are
   // tucked away instead of deleted; keeps the shelf tidy with no delete surface.
@@ -183,7 +208,7 @@ export default function BookshelfPage({
             }}
           >
             {shelfCards.map((card, idx) => (
-              <BookCard key={card.id} card={card} profileId={profileId} index={idx} hasNote={unreadNotes.includes(card.id)} />
+              <BookCard key={card.id} card={card} cover={covers[card.id]} profileId={profileId} index={idx} hasNote={unreadNotes.includes(card.id)} />
             ))}
           </motion.div>
 
@@ -195,7 +220,7 @@ export default function BookshelfPage({
               </summary>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 sm:gap-8 lg:gap-10 mt-6">
                 {failedCards.map((card, idx) => (
-                  <BookCard key={card.id} card={card} profileId={profileId} index={idx} />
+                  <BookCard key={card.id} card={card} cover={covers[card.id]} profileId={profileId} index={idx} />
                 ))}
               </div>
             </details>
@@ -219,11 +244,13 @@ export default function BookshelfPage({
 
 function BookCard({
   card,
+  cover,
   profileId,
   index,
   hasNote = false,
 }: {
   card: JobCard;
+  cover: string | null | undefined;
   profileId: string;
   index: number;
   hasNote?: boolean;
@@ -244,9 +271,9 @@ function BookCard({
   const rotations = [-3, 2, -1, 4, -2];
   const defaultRotation = rotations[index % rotations.length];
 
-  const coverBg = card.coverUrl && card.bucket === "terminal-success" 
-    ? "bg-background" 
-    : card.bucket === "paused" || card.bucket === "teacher-held" ? "bg-secondary/10"
+  const [coverLoaded, setCoverLoaded] = useState(false);
+
+  const coverBg = card.bucket === "paused" || card.bucket === "teacher-held" ? "bg-secondary/10"
     : (card.bucket === "terminal-failure" || card.bucket === "not-found") ? "bg-destructive/5"
     : card.bucket === "in-flight" ? "bg-primary/5"
     : "bg-background";
@@ -275,15 +302,21 @@ function BookCard({
       >
         {/* Cover Image or Status Graphic */}
         <div className={`relative w-full aspect-[4/5] ${coverBg}`}>
-          {card.coverUrl && card.bucket === "terminal-success" ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={card.coverUrl}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              className="w-full h-full object-cover"
-            />
+          {card.bucket === "terminal-success" && cover !== null ? (
+            <>
+              {!coverLoaded && <div className="absolute inset-0 animate-pulse bg-muted/50" />}
+              {cover && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={cover}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  onLoad={() => setCoverLoaded(true)}
+                  className={`relative w-full h-full object-cover transition-opacity duration-500 ${coverLoaded ? "opacity-100" : "opacity-0"}`}
+                />
+              )}
+            </>
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center border-b-2 border-primary/5">
               {card.bucket === "in-flight" && (
@@ -301,9 +334,9 @@ function BookCard({
                   <FileDashed weight="fill" className="w-8 h-8 text-destructive" aria-hidden="true" />
                 </div>
               )}
-              {card.bucket === "terminal-success" && !card.coverUrl && (
+              {card.bucket === "terminal-success" && (
                 <div className="w-16 h-16 rounded-3xl bg-primary/10 flex items-center justify-center mb-3">
-                  <span className="text-3xl font-display font-extrabold text-primary">?</span>
+                  <Books weight="duotone" className="w-8 h-8 text-primary" aria-hidden="true" />
                 </div>
               )}
             </div>
