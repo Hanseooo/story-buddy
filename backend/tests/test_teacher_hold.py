@@ -170,7 +170,20 @@ def test_optional_themes_capture_grouped_review_before_paid_work(monkeypatch, he
             app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=child)
             assert client.post(f"/jobs/{job}/confirm", json={"action": "confirm"}).status_code == 200
             app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=teacher)
-            run_review_storybook_job(job, {"action": "confirm"}, expected_epoch=epoch)
+            # Record every stage the worker writes; the child's progress screen reads "n/m" from it.
+            conn.execute("create table test_stage_log(stage text)")
+            conn.execute("""create function test_log_stage() returns trigger language plpgsql as
+                $$ begin insert into test_stage_log values (new.current_stage); return new; end $$""")
+            conn.execute(f"""create trigger test_log_stage after update of current_stage on jobs for each row
+                when (new.id = '{job}') execute function test_log_stage()""")
+            try:
+                run_review_storybook_job(job, {"action": "confirm"}, expected_epoch=epoch)
+                stages = [r["stage"] for r in conn.execute("select stage from test_stage_log").fetchall()]
+            finally:
+                conn.execute("drop trigger test_log_stage on jobs")
+                conn.execute("drop function test_log_stage()")
+                conn.execute("drop table test_stage_log")
+            assert "generate_scene:1/2" in stages and "generate_scene:2/2" in stages, stages
             later = client.get(review_route).json()
             assert later["kind"] == "scene_image" and later["subject_id"] == "s1"
             assert later["origin"] == "shared_safety" and later["ready"]

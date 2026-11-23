@@ -243,13 +243,18 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                     assert_current(conn, job_id, epoch)
                     conn.execute("update jobs set status='running' where id=%s", (job_id,))
                 # No callbacks, trace URL or public Langfuse publication in this mode.
+                latest, last_stage = None, None
                 for mode, chunk in graph.stream(graph_input, config, stream_mode=["updates", "values"]):
                     fence()
-                    if mode == "updates":
+                    if mode == "values":
+                        latest = chunk
+                    else:
                         node = next((k for k in chunk if k != "__interrupt__"), None)
-                        if node:
+                        stage = _stage_string(node, latest) if node else None
+                        if stage and stage != last_stage:
                             conn.execute("update jobs set current_stage=%s where id=%s and generation_epoch=%s",
-                                         (node, job_id, epoch))
+                                         (stage, job_id, epoch))
+                            last_stage = stage
                 # Read back the committed checkpoint, never trust an ephemeral stream event.
                 config["configurable"].pop("checkpoint_id", None)
                 snapshot = graph.get_state(config)
