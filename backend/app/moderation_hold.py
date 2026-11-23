@@ -4,6 +4,7 @@ Teacher decisions are separate slices. No browser can read this table
 or choose a Storage path through these product routes.
 """
 import hashlib
+import threading
 from uuid import UUID, uuid5
 from typing import Literal
 
@@ -12,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from langgraph.checkpoint.postgres import PostgresSaver
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+from psycopg_pool import ConnectionPool, PoolTimeout
 from pydantic import BaseModel, ConfigDict, Field
 
 import providers
@@ -663,6 +665,27 @@ def connect():
     return psycopg.connect(settings.supabase_db_url, autocommit=True, row_factory=dict_row)
 
 
+_image_pool: tuple[str, ConnectionPool] | None = None
+_image_pool_lock = threading.Lock()
+
+
+def image_pool() -> ConnectionPool:
+    """`job_image`'s shared pool (image-loading spec §5.5). Created on first use, never at import, for the
+    current `settings.supabase_db_url`; a changed URL (tests set one per test) closes the old pool first.
+    Every other caller keeps `connect()`."""
+    global _image_pool
+    with _image_pool_lock:
+        url = settings.supabase_db_url
+        if _image_pool and _image_pool[0] == url:
+            return _image_pool[1]
+        if _image_pool:
+            _image_pool[1].close()
+        pool = ConnectionPool(url, kwargs={"autocommit": True, "row_factory": dict_row}, min_size=1, max_size=5,
+                              timeout=5.0, check=ConnectionPool.check_connection, open=True)
+        _image_pool = (url, pool)
+        return pool
+
+
 def active_author(conn, job: dict) -> bool:
     return conn.execute("""select 1 from profiles where id=%s and role='student'
       and classroom_id=%s and removed_at is null
@@ -923,15 +946,18 @@ def authorized_asset(conn, job_id: str, asset_id: str, user_id: str) -> tuple[st
 
 @hold_router.get("/jobs/{job_id}/images/{asset_id}")
 def job_image(job_id: UUID, asset_id: str, user=Depends(get_current_user)):
-    with connect() as conn:
-        selected = authorized_asset(conn, str(job_id), asset_id, str(user.id))
     try:
-        contents = providers.download_book_image(selected[0])
-    except Exception:
+        with image_pool().connection() as conn:
+            selected = authorized_asset(conn, str(job_id), asset_id, str(user.id))
+        try:
+            contents = providers.download_book_image(selected[0])
+        except Exception:
+            raise HTTPException(503, "image_unavailable", headers=PRIVATE) from None
+        with image_pool().connection() as conn:
+            if authorized_asset(conn, str(job_id), asset_id, str(user.id)) != selected:
+                raise HTTPException(404, "image_unavailable", headers=PRIVATE)
+    except PoolTimeout:
         raise HTTPException(503, "image_unavailable", headers=PRIVATE) from None
-    with connect() as conn:
-        if authorized_asset(conn, str(job_id), asset_id, str(user.id)) != selected:
-            raise HTTPException(404, "image_unavailable", headers=PRIVATE)
     return Response(contents, media_type="image/png", headers=PRIVATE)
 
 
