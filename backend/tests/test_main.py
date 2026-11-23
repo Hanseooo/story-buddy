@@ -814,6 +814,12 @@ def test_no_authorization_header_returns_401():
     assert r.status_code == 401
 
 
+def test_get_current_user_is_sync_so_it_runs_in_threadpool():
+    """image-loading-ux AC-17: a sync dependency keeps the Supabase calls off the event loop."""
+    import inspect
+    assert not inspect.iscoroutinefunction(_auth_get_current_user)
+
+
 def test_teacher_own_classroom_returns_row():
     """spec §6 test 13."""
     fake_supabase = MagicMock()
