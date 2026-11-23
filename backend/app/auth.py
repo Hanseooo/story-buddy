@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Path, Request
 from app.db import get_supabase_client
 
 
-async def get_current_user(request: Request, authorization: str | None = Header(None)):
+def get_current_user(request: Request, authorization: str | None = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "missing token")
     jwt = authorization.removeprefix("Bearer ")
