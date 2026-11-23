@@ -8,6 +8,7 @@ const mockRemoveChannel = vi.hoisted(() => vi.fn());
 const mockCreateSignedUrls = vi.hoisted(() => vi.fn());
 const mockGetSession = vi.hoisted(() => vi.fn());
 const mockSelectColumns = vi.hoisted(() => vi.fn());
+const realtime = vi.hoisted(() => ({ emit: (() => {}) as (payload: { new: unknown }) => void }));
 
 vi.mock("@/lib/supabaseClient", () => ({
   supabase: {
@@ -26,7 +27,10 @@ vi.mock("@/lib/supabaseClient", () => ({
       from: () => ({ createSignedUrls: mockCreateSignedUrls }),
     },
     channel: () => ({
-      on: () => ({ subscribe: mockChannel }),
+      on: (_event: string, _filter: unknown, handler: (payload: { new: unknown }) => void) => {
+        realtime.emit = handler;
+        return { subscribe: mockChannel };
+      },
     }),
     removeChannel: mockRemoveChannel,
   },
@@ -279,6 +283,96 @@ describe("Bookshelf — §9.11–12", () => {
     expect(coverSignal?.aborted).toBe(false);
     view.unmount();
     expect(coverSignal?.aborted).toBe(true);
+  });
+
+  it("AC-07/AC-08 — retries only the failed cover in one call, then shows the book icon in a working link", async () => {
+    mockCreateSignedUrls
+      .mockResolvedValueOnce({ data: [{ path: "j1/p1.png", signedUrl: "https://cdn.test/j1.png" }] })
+      .mockResolvedValueOnce({ data: [{ path: "j2/p1.png", signedUrl: null, error: "Object not found" }] });
+    mockSelect.mockResolvedValueOnce({ data: [
+      makeJob({ id: "j1", title: "Dragon Book", pages: [{ scene_id: "s1", caption: "c", image_path: "j1/p1.png" }] }),
+      makeJob({ id: "j2", title: "Robot Book", pages: [{ scene_id: "s1", caption: "c", image_path: "j2/p1.png" }] }),
+    ] });
+    render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+    const robot = await screen.findByRole("link", { name: "Robot Book" });
+    await waitFor(() => expect(mockCreateSignedUrls).toHaveBeenCalledTimes(2));
+    expect(mockCreateSignedUrls.mock.calls[0][0]).toEqual(["j1/p1.png", "j2/p1.png"]);
+    expect(mockCreateSignedUrls.mock.calls[1][0]).toEqual(["j2/p1.png"]);
+    await waitFor(() => expect(robot.querySelector(".animate-pulse")).toBeNull());
+    expect(robot.querySelector("img")).toBeNull();
+    expect(robot.querySelector("svg[aria-hidden='true']")).not.toBeNull();
+    expect(robot).toHaveAttribute("href", `/s/${PROFILE_ID}/book/j2`);
+    expect(robot.querySelectorAll("a, button")).toHaveLength(0);
+    expect(screen.getByRole("link", { name: "Dragon Book" }).querySelector("img")).toHaveAttribute("src", "https://cdn.test/j1.png");
+  });
+
+  it("AC-10 — an issued cover whose image fails goes straight to the book icon, with no retry", async () => {
+    mockCreateSignedUrls.mockResolvedValueOnce({ data: [{ path: "j1/p1.png", signedUrl: "https://cdn.test/j1.png" }] });
+    mockSelect.mockResolvedValueOnce({ data: [makeJob({ id: "j1", title: "Dragon Book", pages: [{ scene_id: "s1", caption: "c", image_path: "j1/p1.png" }] })] });
+    render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+    const link = await screen.findByRole("link", { name: "Dragon Book" });
+    await waitFor(() => expect(link.querySelector("img")).not.toBeNull());
+    fireEvent.error(link.querySelector("img")!);
+    await waitFor(() => expect(link.querySelector("img")).toBeNull());
+    expect(link.querySelector(".animate-pulse")).toBeNull();
+    expect(link.querySelector("svg[aria-hidden='true']")).not.toBeNull();
+    expect(mockCreateSignedUrls).toHaveBeenCalledTimes(1);
+  });
+
+  describe("AC-05 — a book that finishes while the shelf is open", () => {
+    const finished = (pageId: string) => ({ ...makeJob({
+      id: "tr1", title: "Held Book", status: "complete", moderation_mode: "teacher_review_v1",
+      pages: [{ scene_id: pageId, caption: "c", image_path: `tr1/${pageId}.png` }],
+    }) });
+
+    function stubPictures() {
+      mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+      const pictures: { url: string; signal: AbortSignal; finish: (r: Response) => void }[] = [];
+      vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => {
+        if (url.includes("/me/notes")) return Promise.resolve(new Response("[]"));
+        return new Promise<Response>(resolve => pictures.push({ url, signal: init!.signal!, finish: resolve }));
+      }));
+      let n = 0;
+      URL.createObjectURL = vi.fn(() => `blob:synthetic-${++n}`);
+      URL.revokeObjectURL = vi.fn();
+      return pictures;
+    }
+
+    async function renderInFlight() {
+      mockSelect.mockResolvedValueOnce({ data: [makeJob({
+        id: "tr1", title: "Held Book", status: "running", moderation_mode: "teacher_review_v1", pages: [],
+      })] });
+      const view = render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+      await screen.findByText("Writing...");
+      return view;
+    }
+
+    it("loads its cover from the updated row through the picture endpoint, pulsing first", async () => {
+      const pictures = stubPictures();
+      await renderInFlight();
+      act(() => realtime.emit({ new: finished("s1") }));
+      const link = await screen.findByRole("link", { name: "Held Book" });
+      expect(link).toHaveAttribute("href", `/s/${PROFILE_ID}/book/tr1`);
+      expect(link.querySelector(".animate-pulse.bg-muted\\/50")).not.toBeNull();
+      await waitFor(() => expect(pictures).toHaveLength(1));
+      expect(pictures[0].url).toContain("/jobs/tr1/images/scene-s1");
+      expect(mockCreateSignedUrls).not.toHaveBeenCalled();
+      await act(async () => { pictures[0].finish(new Response("png")); });
+      await waitFor(() => expect(link.querySelector("img")).toHaveAttribute("src", "blob:synthetic-1"));
+    });
+
+    it("aborts a superseded cover request and the latest one on unmount", async () => {
+      const pictures = stubPictures();
+      const view = await renderInFlight();
+      act(() => realtime.emit({ new: finished("s1") }));
+      await waitFor(() => expect(pictures).toHaveLength(1));
+      act(() => realtime.emit({ new: finished("s2") }));
+      await waitFor(() => expect(pictures).toHaveLength(2));
+      expect(pictures[0].signal.aborted).toBe(true);
+      expect(pictures[1].signal.aborted).toBe(false);
+      view.unmount();
+      expect(pictures[1].signal.aborted).toBe(true);
+    });
   });
 
   it("shows empty state when no jobs", async () => {
