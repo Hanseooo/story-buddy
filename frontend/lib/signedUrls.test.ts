@@ -48,6 +48,90 @@ describe("signPaths", () => {
     expect(mockCreateSignedUrls).not.toHaveBeenCalled();
     fetchMock.mockRestore();
   });
+  describe("parallel protected fetch (image-loading SH-01, SH-02)", () => {
+    const sixPages = [{id: "j", moderation_mode: "teacher_review_v1", pages: ["s0", "s1", "s2", "s3", "s4", "s5"].map(s => (
+      {scene_id: s, image_path: `j/${s}.png`}
+    ))}];
+    const sixPaths = sixPages[0].pages.map(p => p.image_path);
+    const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
+
+    it("keeps more than 1 and at most 4 picture requests in flight", async () => {
+      mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
+      const held: Array<() => void> = [];
+      let inFlight = 0;
+      let peak = 0;
+      const fetchMock = vi.spyOn(global, "fetch").mockImplementation(() => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        return new Promise<Response>(resolve => held.push(() => {
+          inFlight--;
+          resolve({ok: true, blob: async () => new Blob(["image"])} as Response);
+        }));
+      });
+      vi.stubGlobal("URL", Object.assign(URL, {createObjectURL: vi.fn(() => `blob:${Math.random()}`), revokeObjectURL: vi.fn()}));
+      const pending = signPaths(sixPaths, sixPages, new AbortController().signal);
+      await flush();
+      expect(peak).toBeGreaterThan(1);
+      expect(peak).toBeLessThanOrEqual(4);
+      while (held.length) { held.shift()!(); await flush(); }
+      expect(Object.keys(await pending)).toHaveLength(6);
+      expect(peak).toBeLessThanOrEqual(4);
+      fetchMock.mockRestore();
+    });
+
+    it("reads the session once per call, and leaves every picture out without one", async () => {
+      mockSession.mockReset().mockResolvedValue({data: {session: {access_token: "test-token"}}});
+      const fetchMock = vi.spyOn(global, "fetch").mockImplementation(async () => ({ok: true, blob: async () => new Blob(["image"])} as Response));
+      vi.stubGlobal("URL", Object.assign(URL, {createObjectURL: vi.fn(() => `blob:${Math.random()}`), revokeObjectURL: vi.fn()}));
+      await signPaths(sixPaths, sixPages, new AbortController().signal);
+      expect(mockSession).toHaveBeenCalledTimes(1);
+
+      fetchMock.mockClear();
+      mockSession.mockResolvedValue({data: {session: null}});
+      expect(await signPaths(sixPaths, sixPages, new AbortController().signal)).toEqual({});
+      expect(fetchMock).not.toHaveBeenCalled();
+      fetchMock.mockRestore();
+    });
+
+    it("leaves out a picture that fails and returns the others", async () => {
+      mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
+      const fetchMock = vi.spyOn(global, "fetch").mockImplementation(async (url) => {
+        if (String(url).endsWith("/scene-s1")) return new Response("server error", {status: 500});
+        if (String(url).endsWith("/scene-s2")) throw new TypeError("network");
+        return {ok: true, blob: async () => new Blob(["image"])} as Response;
+      });
+      vi.stubGlobal("URL", Object.assign(URL, {createObjectURL: vi.fn(() => `blob:${Math.random()}`), revokeObjectURL: vi.fn()}));
+      const urls = await signPaths(sixPaths, sixPages, new AbortController().signal);
+      expect(Object.keys(urls).sort()).toEqual(["j/s0.png", "j/s3.png", "j/s4.png", "j/s5.png"]);
+      expect(sessionStorage.getItem("sb:signed") ?? "").not.toContain("j/s0.png");
+      fetchMock.mockRestore();
+    });
+
+    it("never hands out a blob that arrives after the abort, and revokes the ones it handed out", async () => {
+      mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
+      let release!: () => void;
+      const late = new Promise<void>(resolve => { release = resolve; });
+      const fetchMock = vi.spyOn(global, "fetch").mockImplementation(async (url) => ({ok: true, blob: async () => {
+        if (String(url).endsWith("/scene-s1")) await late;
+        return new Blob(["image"]);
+      }} as Response));
+      let n = 0;
+      const create = vi.fn(() => `blob:${++n}`);
+      const revoke = vi.fn();
+      vi.stubGlobal("URL", Object.assign(URL, {createObjectURL: create, revokeObjectURL: revoke}));
+      const controller = new AbortController();
+      const pending = signPaths(["j/s0.png", "j/s1.png"], sixPages, controller.signal);
+      await flush();
+      controller.abort();
+      release();
+      const urls = await pending;
+      expect(urls["j/s1.png"]).toBeUndefined();
+      expect(create.mock.results.map(r => r.value).sort()).toEqual(revoke.mock.calls.map(([u]) => u).sort());
+      expect(revoke).toHaveBeenCalledWith(urls["j/s0.png"]);
+      fetchMock.mockRestore();
+    });
+  });
+
   it("returns a path -> url map", async () => {
     mockCreateSignedUrls.mockResolvedValue({
       data: [{ path: "a.png", signedUrl: "https://cdn/a?token=1", error: null }],

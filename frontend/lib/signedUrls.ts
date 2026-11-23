@@ -33,6 +33,41 @@ function save(cache: Record<string, Entry>) {
   }
 }
 
+// Per call, never shared across calls (image-loading spec §5.6, an assumed value).
+const CONCURRENCY = 4;
+
+async function fetchProtected(work: Array<[string, {jobId: string; assetId: string}]>, out: Record<string, string>, signal: AbortSignal) {
+  let session;
+  try {
+    ({ data: { session } } = await supabase.auth.getSession());
+  } catch {
+    return;
+  }
+  if (!session || signal.aborted) return;
+  const token = session.access_token;
+  let next = 0;
+  const worker = async () => {
+    // Each worker takes the next item synchronously, so requests start in path order.
+    while (next < work.length) {
+      const [p, selected] = work[next++];
+      if (signal.aborted) return;
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${selected.jobId}/images/${encodeURIComponent(selected.assetId)}`, {
+          headers: {Authorization: `Bearer ${token}`}, cache: "no-store", signal,
+        });
+        if (!response.ok) continue;
+        const bytes = await response.blob();
+        // A listener added after the abort never fires, so a late blob gets no URL at all (SH-02).
+        if (signal.aborted) continue;
+        const url = URL.createObjectURL(bytes);
+        signal.addEventListener("abort", () => URL.revokeObjectURL(url), {once: true});
+        out[p] = url;
+      } catch { /* Caller retains its established image error/retry state. */ }
+    }
+  };
+  await Promise.all(Array.from({length: Math.min(CONCURRENCY, work.length)}, worker));
+}
+
 /**
  * Sign `paths`, reusing any still-fresh URL from sessionStorage.
  *
@@ -59,25 +94,13 @@ export async function signPaths(paths: string[], jobs: ImageJob[] = [], signal?:
     for (const v of job.page_versions ?? []) protectedPaths.set(v.image_path, {jobId: job.id, assetId: `page-version-${v.version_id}`});
   }
 
+  const work: Array<[string, {jobId: string; assetId: string}]> = [];
   for (const p of new Set(paths)) {
     // No cached Storage link, signing request or sessionStorage blob for feature jobs.
     const selected = protectedPaths.get(p);
     if (selected) {
       delete cache[p];
-      if (!signal || signal.aborted) continue;
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session || signal.aborted) continue;
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${selected.jobId}/images/${encodeURIComponent(selected.assetId)}`, {
-          headers: {Authorization: `Bearer ${session.access_token}`}, cache: "no-store", signal,
-        });
-        if (!response.ok) continue;
-        const bytes = await response.blob();
-        if (signal.aborted) continue;
-        const url = URL.createObjectURL(bytes);
-        signal.addEventListener("abort", () => URL.revokeObjectURL(url), {once: true});
-        out[p] = url;
-      } catch { /* Caller retains its established image error/retry state. */ }
+      if (signal && !signal.aborted) work.push([p, selected]);
       continue;
     }
     if (jobs.some(j => j.moderation_mode === "teacher_review_v1" && p.startsWith(`${j.id}/`))) continue;
@@ -85,6 +108,8 @@ export async function signPaths(paths: string[], jobs: ImageJob[] = [], signal?:
     if (hit && hit.exp > now) out[p] = hit.url;
     else missing.push(p);
   }
+
+  if (work.length > 0 && signal) await fetchProtected(work, out, signal);
 
   save(cache);
 
