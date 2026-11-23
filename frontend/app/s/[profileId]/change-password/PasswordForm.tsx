@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { changePassword, passwordLengthError } from "@/lib/password";
 
 export default function PasswordForm({ profileId, displayNickname }: { profileId: string; displayNickname: string }) {
-  const router = useRouter();
   const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -22,8 +20,9 @@ export default function PasswordForm({ profileId, displayNickname }: { profileId
     const root = `/s/${profileId}`;
     if (path !== root && path !== `${root}/introduction`) throw new Error("Incomplete password change");
     setCurrent(""); setPassword(""); setConfirmation(""); setVisible(false);
-    router.replace(path);
-    router.refresh();
+    // Full page load: the student layout changes shape once the password is done (header, tab bar),
+    // and a soft navigation keeps the cached password-only layout, which showed a blank screen.
+    window.location.replace(path);
   }
 
   async function checkState() {

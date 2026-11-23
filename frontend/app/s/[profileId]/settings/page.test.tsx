@@ -4,8 +4,10 @@ import SettingsPage from "./page";
 import { AVATAR_IDS } from "@/lib/avatars";
 
 // Mock next/navigation for useParams
+const mockRefresh = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({
   useParams: () => ({ profileId: "student-123" }),
+  useRouter: () => ({ refresh: mockRefresh }),
 }));
 
 const mockUpdateUser = vi.hoisted(() => vi.fn());
@@ -164,6 +166,28 @@ it("fires PATCH /me/avatar with bearer token on selection", async () => {
       })
     );
   });
+  // The header avatar comes from the server layout, so a saved choice must refresh it.
+  await waitFor(() => expect(mockRefresh).toHaveBeenCalled());
+
+  vi.unstubAllGlobals();
+});
+
+it("saves once when the child taps an avatar picture", async () => {
+  mockGetSession.mockResolvedValue({ data: { session: { access_token: "my-token" } } });
+  setupDefaultFrom(null);
+  mockRefresh.mockClear();
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+  vi.stubGlobal("fetch", fetchMock);
+
+  render(<SettingsPage />);
+  await waitFor(() => screen.getAllByRole("radio"));
+  const picture = screen.getAllByRole("radio")[1].closest("label")!.querySelector("img")!;
+  fireEvent.click(picture);
+
+  await waitFor(() => expect(screen.getAllByRole("radio")[1]).toBeChecked());
+  await waitFor(() => expect(mockRefresh).toHaveBeenCalled());
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(mockRefresh).toHaveBeenCalledTimes(1);
 
   vi.unstubAllGlobals();
 });
@@ -221,6 +245,7 @@ it("filters visible avatar options when category tab is clicked", async () => {
 });
 
 it("reverts selection and surfaces message when fetch throws a network exception", async () => {
+  mockRefresh.mockClear();
   mockGetSession.mockResolvedValue({ data: { session: { access_token: "tok" } } });
   setupDefaultFrom("peeps-01");
 
@@ -238,6 +263,7 @@ it("reverts selection and surfaces message when fetch throws a network exception
     expect(checked.getAttribute("value")).toBe("peeps-01");
     expect(screen.getByRole("status")).toHaveTextContent(/couldn't save your avatar/i);
   });
+  expect(mockRefresh).not.toHaveBeenCalled();
 
   vi.unstubAllGlobals();
 });

@@ -1,14 +1,17 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import PasswordForm from "./PasswordForm";
 
-const { replace, refresh, getSession } = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn(), getSession: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace, refresh }) }));
+const { replace, getSession } = vi.hoisted(() => ({ replace: vi.fn(), getSession: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("@/lib/supabaseClient", () => ({ supabase: { auth: { getSession } } }));
 beforeEach(() => {
   vi.clearAllMocks();
   getSession.mockResolvedValue({ data: { session: { access_token: "student-session" } } });
+  // A full page load, so the student layout is rebuilt with its header (soft navigation kept the stale one).
+  vi.stubGlobal("location", { ...window.location, replace });
 });
+afterEach(() => vi.unstubAllGlobals());
 
 it("identifies the child, sends exact input once and enters the introduction", async () => {
   const request = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ next_path: "/s/student-1/introduction" }) });

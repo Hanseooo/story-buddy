@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { AVATAR_IDS } from "@/lib/avatars";
 import { Avatar } from "@/components/Avatar";
@@ -20,6 +20,7 @@ type CategoryId = (typeof CATEGORIES)[number]["id"];
 
 export default function SettingsPage() {
   const { profileId } = useParams<{ profileId: string }>();
+  const router = useRouter();
 
   // Avatar state
   const [avatarId, setAvatarId] = useState<string | null>(null);
@@ -76,7 +77,10 @@ export default function SettingsPage() {
       if (!res.ok) {
         setAvatarId(previous); // revert
         setAvatarMessage("Couldn't save your avatar. Try again.");
+        return;
       }
+      router.refresh(); // the header avatar is rendered by the server layout
+
     } catch {
       setAvatarId(previous); // revert on network exception
       setAvatarMessage("Couldn't save your avatar. Try again.");
@@ -204,8 +208,7 @@ export default function SettingsPage() {
             >
               {visibleAvatars.map((id, i) => (
                 <motion.label 
-                  key={id} 
-                  onClick={() => handleAvatarSelect(id)}
+                  key={id}
                   className="cursor-pointer relative flex justify-center touch-manipulation select-none"
                   variants={{
                     hidden: { opacity: 0, scale: 0.8 },
