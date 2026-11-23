@@ -7,16 +7,20 @@ const mockChannel = vi.hoisted(() => vi.fn());
 const mockRemoveChannel = vi.hoisted(() => vi.fn());
 const mockCreateSignedUrls = vi.hoisted(() => vi.fn());
 const mockGetSession = vi.hoisted(() => vi.fn());
+const mockSelectColumns = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/supabaseClient", () => ({
   supabase: {
     auth: { getSession: mockGetSession },
     from: () => ({
-      select: () => ({
-        eq: () => ({
-          order: mockSelect,
-        }),
-      }),
+      select: (columns: string) => {
+        mockSelectColumns(columns);
+        return {
+          eq: () => ({
+            order: mockSelect,
+          }),
+        };
+      },
     }),
     storage: {
       from: () => ({ createSignedUrls: mockCreateSignedUrls }),
@@ -34,6 +38,7 @@ const makeJob = (overrides: Partial<{
   id: string;
   status: string;
   profile_id: string;
+  moderation_mode: string;
   input_text: string;
   title: string | null;
   pages: { scene_id: string; caption: string; image_path: string }[];
@@ -55,6 +60,7 @@ describe("Bookshelf — §9.11–12", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+    sessionStorage.clear();
     mockGetSession.mockResolvedValue({ data: { session: null } });
     mockChannel.mockReturnValue({ unsubscribe: vi.fn() });
     mockCreateSignedUrls.mockResolvedValue({ data: [] });
@@ -111,6 +117,8 @@ describe("Bookshelf — §9.11–12", () => {
     await waitFor(() => expect(screen.getByText("My story")).toBeDefined());
     // Three links: desktop write CTA, the book card, and mobile write CTA
     expect(screen.getAllByRole("link")).toHaveLength(3);
+    // §5.8 — the shelf reads only what classify, displayTitle and signPaths use
+    expect(mockSelectColumns).toHaveBeenCalledWith("id, status, moderation_mode, input_text, title, pages");
   });
 
   it("shows the stored title on a bookshelf card", async () => {
@@ -200,6 +208,77 @@ describe("Bookshelf — §9.11–12", () => {
       (el) => el.getAttribute("href") === `/s/${PROFILE_ID}/book/ok1`
     );
     expect(okLink?.closest("details")).toBeNull();
+  });
+
+  it("AC-01 — shows the route skeleton, not the heading, while the book list loads", async () => {
+    mockSelect.mockReturnValueOnce(new Promise(() => {}));
+    render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Loading your bookshelf"));
+    expect(screen.queryByRole("heading", { name: "Your Bookshelf" })).toBeNull();
+  });
+
+  it("AC-02/AC-03 — cards render while covers sign, then each cover appears in its card", async () => {
+    let finishSigning!: (value: { data: { path: string; signedUrl: string }[] }) => void;
+    mockCreateSignedUrls.mockReturnValueOnce(new Promise(resolve => { finishSigning = resolve; }));
+    mockSelect.mockResolvedValueOnce({ data: [
+      makeJob({ id: "j1", title: "Dragon Book", pages: [{ scene_id: "s1", caption: "c", image_path: "j1/p1.png" }] }),
+      makeJob({ id: "j2", title: "Robot Book", pages: [{ scene_id: "s1", caption: "c", image_path: "j2/p1.png" }] }),
+    ] });
+    const { container } = render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+    await waitFor(() => expect(screen.getByText("Dragon Book")).toBeVisible());
+    await waitFor(() => expect(screen.getByText("Robot Book")).toBeVisible());
+    expect(container.querySelectorAll("img")).toHaveLength(0);
+    const dragonLink = screen.getByRole("link", { name: "Dragon Book" });
+    expect(dragonLink).toHaveAttribute("href", `/s/${PROFILE_ID}/book/j1`);
+    expect(dragonLink.querySelector(".animate-pulse.bg-muted\\/50")).not.toBeNull();
+
+    await act(async () => {
+      finishSigning({ data: [
+        { path: "j1/p1.png", signedUrl: "https://cdn.test/j1.png" },
+        { path: "j2/p1.png", signedUrl: "https://cdn.test/j2.png" },
+      ] });
+    });
+    await waitFor(() => expect(dragonLink.querySelector("img")).toHaveAttribute("src", "https://cdn.test/j1.png"));
+    expect(dragonLink.querySelector("img")).toHaveAttribute("alt", "");
+    expect(screen.getByRole("link", { name: "Robot Book" }).querySelector("img"))
+      .toHaveAttribute("src", "https://cdn.test/j2.png");
+  });
+
+  it("AC-09 — a finished book with no first-page image or no signed cover shows the book icon, not '?'", async () => {
+    mockSelect.mockResolvedValueOnce({ data: [
+      makeJob({ id: "j1", title: "No Picture", pages: [{ scene_id: "s1", caption: "c", image_path: "" }] }),
+      makeJob({ id: "j2", title: "Unsigned", pages: [{ scene_id: "s1", caption: "c", image_path: "j2/p1.png" }] }),
+    ] });
+    render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+    await waitFor(() => expect(mockCreateSignedUrls).toHaveBeenCalled());
+    for (const name of ["No Picture", "Unsigned"]) {
+      const link = await screen.findByRole("link", { name });
+      await waitFor(() => expect(link.querySelector(".animate-pulse")).toBeNull());
+      expect(link.querySelector("img")).toBeNull();
+      expect(link.querySelector("svg[aria-hidden='true']")).not.toBeNull();
+      expect(link).not.toHaveTextContent("?");
+      expect(link.querySelectorAll("a, button")).toHaveLength(0);
+    }
+  });
+
+  it("aborts the cover download on unmount", async () => {
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+    let coverSignal: AbortSignal | undefined;
+    const network = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes("/me/notes")) return Promise.resolve(new Response("[]"));
+      coverSignal = init?.signal ?? undefined;
+      return new Promise<Response>(() => {});
+    });
+    vi.stubGlobal("fetch", network);
+    mockSelect.mockResolvedValueOnce({ data: [makeJob({
+      id: "tr1", title: "Held Book", moderation_mode: "teacher_review_v1",
+      pages: [{ scene_id: "s1", caption: "c", image_path: "tr1/p1.png" }],
+    })] });
+    const view = render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+    await waitFor(() => expect(coverSignal).toBeDefined());
+    expect(coverSignal?.aborted).toBe(false);
+    view.unmount();
+    expect(coverSignal?.aborted).toBe(true);
   });
 
   it("shows empty state when no jobs", async () => {
