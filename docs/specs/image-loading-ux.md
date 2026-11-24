@@ -7,7 +7,8 @@
 **Derived from:** performance audit and grill, 2026-11-23 (this conversation; no ticket yet) ·
 **Constrained by:** [ADR-080](../product/adr/ADR-080-teacher-held-moderation-and-exact-content-clearance.md)
 §72-75 (no-store delivery, re-check before response, no signed links to children; no-store for
-picture GETs superseded by [ADR-085](../product/adr/ADR-085-teacher-review-pictures-may-be-browser-cached-for-an-hour.md)),
+picture GETs superseded by [ADR-085](../product/adr/ADR-085-teacher-review-pictures-may-be-browser-cached-for-an-hour.md);
+no signed links superseded by [ADR-086](../product/adr/ADR-086-teacher-review-pictures-are-served-by-backend-signed-links.md)),
 [ADR-025](../product/adr/ADR-025-provider-resilience-failure-mode-policy-d-c.md) (never a partial
 book), ADR-033 (worker checkpointer connection), [`kid-flow-book-persistence.md`](kid-flow-book-persistence.md)
 §4.4, [`kid-flow-reader-and-wait-states.md`](kid-flow-reader-and-wait-states.md) §4.3, §4.5
@@ -19,6 +20,8 @@ loading, not a measured speed target. Success is judged by the owner's own obser
 
 Since 2026-11-21 new books are `teacher_review_v1` by default. Their pictures cannot use signed links
 (ADR-080), so the browser downloads each one from `GET /jobs/{job_id}/images/{asset_id}`. Today:
+*(Since 2026-11-25, [ADR-086](../product/adr/ADR-086-teacher-review-pictures-are-served-by-backend-signed-links.md): `signPaths` gets backend-signed links from
+`GET /jobs/{job_id}/image-links` instead, one call per book.)*
 
 - `signPaths` downloads those pictures **one after another** and reads the session once per picture
   (`frontend/lib/signedUrls.ts:63-89`).
@@ -37,6 +40,7 @@ Since 2026-11-21 new books are `teacher_review_v1` by default. Their pictures ca
 
 **Excluded:**
 - **Browser caching of protected pictures and signed links for them.** ADR-080 forbids both.
+  Superseded 2026-11-25 by ADR-085 (caching) and [ADR-086](../product/adr/ADR-086-teacher-review-pictures-are-served-by-backend-signed-links.md) (backend-signed links).
 - **A batch "all covers" endpoint.** It would change the API, and US-04 already removes most of the
   per-request cost.
 - **Cover thumbnails or WebP covers.** They would change pipeline assets.
@@ -143,7 +147,8 @@ Applies: SH-02
 
 ## 3. Shared behaviour
 
-- **SH-01 — Parallel protected fetch in `signPaths`.**
+- **SH-01 — Parallel protected fetch in `signPaths`.** Superseded 2026-11-25 by [ADR-086](../product/adr/ADR-086-teacher-review-pictures-are-served-by-backend-signed-links.md):
+  one `GET /jobs/{job_id}/image-links` call per book, books in parallel; no per-picture downloads.
   - Teacher-review pictures are downloaded with at most **4** requests in flight per `signPaths` call.
   - The session is read once per call. No session means every protected path is left out of the
     result, as today.
@@ -157,6 +162,8 @@ Applies: SH-02
     a picture GET whose `?v=` matches the authorized path is `private, max-age=3600`.
   - No signed Storage link reaches the child.
   - Protected pictures never enter the sessionStorage cache.
+    Both superseded 2026-11-25 by [ADR-086](../product/adr/ADR-086-teacher-review-pictures-are-served-by-backend-signed-links.md): the backend signs exact authorized paths for 3600 s
+    and `signPaths` caches them in sessionStorage like baseline links. No blob URLs for these pictures.
   - Blob URLs are revoked when the caller's signal aborts. This includes a blob created after the
     abort; it is never handed out.
   - The after-download re-check in `job_image` keeps the full `authorized_asset` call.
@@ -223,6 +230,8 @@ Applies: SH-02
    links to children. Changing that needs a new ADR.
    **Superseded 2026-11-25 by ADR-085:** picture GETs that name their exact picture (`?v=<path>`,
    or the teacher context route) are browser-cached for an hour. Signed links stay forbidden.
+   **Superseded 2026-11-25 by ADR-086:** the backend signs exact authorized paths; links are cached
+   in sessionStorage until shortly before they expire.
 4. **Cover retry rules.** A sign or fetch failure gets one retry because it is usually transient. An
    `<img>` error does not, because `signPaths` would return the same sessionStorage URL for a
    baseline cover (*inferred rationale*; no cache bypass exists and adding one is out of scope).
@@ -322,7 +331,7 @@ Applies: SH-02
 | Grill Q5 A (reopened): parallel, retry only failed, all-or-nothing | AC-12–AC-16, SH-05 |
 | Audit #7: leaner shelf query | §5.8 |
 | Seams 1–4 confirmed | §6 |
-| ADR-080: no-store (pictures: ADR-085), re-check, no signed links | SH-02, AC-20, §5.3 |
+| ADR-080: no-store (pictures: ADR-085), re-check, no signed links (backend-signed since ADR-086) | SH-02, AC-20, §5.3 |
 | ADR-025 / book-persistence §4.4: never partial | SH-05, AC-16 |
 | Reader spec §4.3 / §4.5: read-failed screen, counter | AC-14, AC-15 |
 | Exclusions: caching, batch endpoint, thumbnails, getClaims, lazy covers | §1 Excluded |

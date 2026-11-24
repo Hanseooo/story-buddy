@@ -1390,6 +1390,17 @@ def test_get_signed_url_defaults_to_300_seconds_and_accepts_an_override():
     assert second.kwargs["expires_in"] == 3600
 
 
+def test_get_signed_urls_signs_in_one_call_and_leaves_out_a_path_storage_refused():
+    with patch("providers.get_supabase_client") as client:
+        bucket = client.return_value.storage.from_.return_value
+        bucket.create_signed_urls.return_value = [
+            {"path": "j/a.png", "signedURL": "https://signed/a", "error": None},
+            {"path": "j/b.png", "signedURL": None, "error": "Either the object does not exist or you do not have access to it"},
+        ]
+        assert providers.get_signed_urls(["j/a.png", "j/b.png"], 3600) == {"j/a.png": "https://signed/a"}
+    bucket.create_signed_urls.assert_called_once_with(["j/a.png", "j/b.png"], expires_in=3600)
+
+
 @pytest.fixture
 def pdf_image_server(monkeypatch):
     """Real HTTP/SDK calls, with only Storage replaced by a local server."""

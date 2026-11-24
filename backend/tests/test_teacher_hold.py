@@ -2540,3 +2540,49 @@ def test_a_teacher_context_picture_is_cacheable_but_the_held_reveal_is_not(monke
         app.dependency_overrides.pop(get_current_user, None)
     assert (context.status_code, context.headers["cache-control"], context.headers["vary"]) == (200, "private, max-age=3600", "Authorization")
     assert (held.status_code, held.headers["cache-control"]) == (200, "private, no-store")
+
+
+def _link_route(monkeypatch, *checks):
+    """ADR-086. Each call of the stubbed `authorized_assets` returns the next of `checks`; no test database runs
+    here or in CI (see `_picture_route`). The Storage signer is the outer boundary."""
+    answers = iter(checks)
+    monkeypatch.setattr("app.moderation_hold.image_pool", lambda: SimpleNamespace(connection=_no_database))
+    monkeypatch.setattr("app.moderation_hold.authorized_assets", lambda conn, job, assets, user: next(answers))
+    sign = MagicMock(side_effect=lambda paths, expires_in: {p: f"https://signed.invalid/{p}?token=t" for p in paths})
+    monkeypatch.setattr("providers.get_signed_urls", sign)
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
+    return sign
+
+
+def test_image_links_sign_only_authorized_paths_and_drop_one_that_moved(monkeypatch):
+    first = {"scene-s0": "j/s0-a1.png", "scene-s1": "j/s1-a0.png"}
+    sign = _link_route(monkeypatch, (first, 3), ({"scene-s0": "j/s0-a1.png", "scene-s1": "j/s1-a2.png"}, 3))
+    try:
+        response = TestClient(app).get(f"/jobs/{uuid4()}/image-links",
+                                       params={"asset": ["scene-s0", "scene-s1", "scene-s9"]})
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "private, no-store"
+    # scene-s9 was never authorized and scene-s1 changed between the two checks.
+    assert response.json() == {"links": [
+        {"asset_id": "scene-s0", "path": "j/s0-a1.png", "url": "https://signed.invalid/j/s0-a1.png?token=t"}]}
+    sign.assert_called_once_with(["j/s0-a1.png", "j/s1-a0.png"], 3600)
+
+
+@pytest.mark.parametrize("assets, sign_error, status", [
+    ([], None, 422),
+    ([f"scene-s{n}" for n in range(56)], None, 422),  # more than IMAGE_BUDGET (55) pictures a book can hold
+    (["scene-s0"], RuntimeError("storage down"), 503),
+])
+def test_image_links_refuse_a_bad_list_and_a_signing_failure_privately(monkeypatch, assets, sign_error, status):
+    sign = _link_route(monkeypatch, ({"scene-s0": "j/s0-a1.png"}, 3), ({"scene-s0": "j/s0-a1.png"}, 3))
+    if sign_error:
+        sign.side_effect = sign_error
+    try:
+        response = TestClient(app).get(f"/jobs/{uuid4()}/image-links", params={"asset": assets})
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert (response.status_code, response.headers["cache-control"]) == (status, "private, no-store")
+    if status == 422:
+        sign.assert_not_called()

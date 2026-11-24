@@ -17,146 +17,98 @@ beforeEach(() => {
 });
 
 describe("signPaths", () => {
-  it("feature pictures use authenticated bytes and revoke their blob on exit", async () => {
-    sessionStorage.setItem("sb:signed", JSON.stringify({"j/s0-1.png": {url: "https://old-link", exp: Date.now() + 100000}}));
-    mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
-    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue({ok: true, blob: async () => new Blob(["image"])} as Response);
-    const create = vi.fn(() => "blob:feature-image");
-    const revoke = vi.fn();
-    vi.stubGlobal("URL", Object.assign(URL, {createObjectURL: create, revokeObjectURL: revoke}));
-    const controller = new AbortController();
-    const urls = await signPaths(["j/s0-1.png"], [{id: "j", moderation_mode: "teacher_review_v1", pages: [
-      {scene_id: "s0", image_path: "j/s0-1.png"},
-    ]}], controller.signal);
-    expect(urls).toEqual({"j/s0-1.png": "blob:feature-image"});
-    expect(mockCreateSignedUrls).not.toHaveBeenCalled();
-    // ADR-085: the picture path in `v` names the exact bytes, so the browser may cache them for an hour.
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/jobs\/j\/images\/scene-s0\?v=j%2Fs0-1\.png$/), expect.objectContaining({
-      cache: "default", headers: {Authorization: "Bearer test-token"},
-    }));
-    controller.abort();
-    expect(revoke).toHaveBeenCalledWith("blob:feature-image");
-    fetchMock.mockRestore();
-  });
-  it("a kept version is fetched by its own asset id, never as the current reference", async () => {
-    mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
-    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue({ok: true, blob: async () => new Blob(["image"])} as Response);
-    vi.stubGlobal("URL", Object.assign(URL, {createObjectURL: vi.fn(() => "blob:version"), revokeObjectURL: vi.fn()}));
-    await signPaths(["j/ref-c0-1.png"], [{id: "j", moderation_mode: "teacher_review_v1", reveal: {characters: [
-      {char_id: "c0", image_path: "j/ref-c0-2.png", versions: [{version_id: "ref-c0-1", image_path: "j/ref-c0-1.png"}]},
-    ]}}], new AbortController().signal);
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/jobs/j/images/version-ref-c0-1"), expect.anything());
-    expect(mockCreateSignedUrls).not.toHaveBeenCalled();
-    fetchMock.mockRestore();
-  });
-  describe("parallel protected fetch (image-loading SH-01, SH-02)", () => {
-    const sixPages = [{id: "j", moderation_mode: "teacher_review_v1", pages: ["s0", "s1", "s2", "s3", "s4", "s5"].map(s => (
-      {scene_id: s, image_path: `j/${s}.png`}
-    ))}];
-    const sixPaths = sixPages[0].pages.map(p => p.image_path);
+  // ADR-086: teacher-review pictures come as backend-signed links, one /image-links call per job.
+  describe("teacher-review links (ADR-086)", () => {
+    const link = (asset_id: string, path: string) => ({asset_id, path, url: `https://cdn/${path}?token=t`});
+    const reply = (...links: unknown[]) => new Response(JSON.stringify({links}), {status: 200});
+    const twoJobs = [
+      {id: "j", moderation_mode: "teacher_review_v1", pages: [{scene_id: "s0", image_path: "j/s0.png"}, {scene_id: "s1", image_path: "j/s1.png"}]},
+      {id: "k", moderation_mode: "teacher_review_v1", pages: [{scene_id: "s0", image_path: "k/s0.png"}]},
+    ];
     const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
-    const { createObjectURL, revokeObjectURL } = URL;
-    beforeEach(() => { mockSession.mockReset(); });
-    afterEach(() => {
-      vi.restoreAllMocks();
-      Object.assign(URL, { createObjectURL, revokeObjectURL });
-    });
+    beforeEach(() => { mockSession.mockReset(); mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}}); });
+    afterEach(() => { vi.restoreAllMocks(); });
 
-    it("keeps more than 1 and at most 4 picture requests in flight", async () => {
-      mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
-      const held: Array<() => void> = [];
-      let inFlight = 0;
-      let peak = 0;
-      vi.spyOn(global, "fetch").mockImplementation(() => {
-        inFlight++;
-        peak = Math.max(peak, inFlight);
-        return new Promise<Response>(resolve => held.push(() => {
-          inFlight--;
-          resolve({ok: true, blob: async () => new Blob(["image"])} as Response);
-        }));
-      });
-      vi.stubGlobal("URL", Object.assign(URL, {createObjectURL: vi.fn(() => `blob:${Math.random()}`), revokeObjectURL: vi.fn()}));
-      const pending = signPaths(sixPaths, sixPages, new AbortController().signal);
-      await flush();
-      expect(peak).toBeGreaterThan(1);
-      expect(peak).toBeLessThanOrEqual(4);
-      while (held.length) { held.shift()!(); await flush(); }
-      expect(Object.keys(await pending)).toHaveLength(6);
-      expect(peak).toBeLessThanOrEqual(4);
-    });
-
-    it("reads the session once per call, and leaves every picture out without one", async () => {
-      mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
-      const fetchMock = vi.spyOn(global, "fetch").mockImplementation(async () => ({ok: true, blob: async () => new Blob(["image"])} as Response));
-      vi.stubGlobal("URL", Object.assign(URL, {createObjectURL: vi.fn(() => `blob:${Math.random()}`), revokeObjectURL: vi.fn()}));
-      await signPaths(sixPaths, sixPages, new AbortController().signal);
-      expect(mockSession).toHaveBeenCalledTimes(1);
+    it("asks once per job for the requested assets and returns the signed links, then reuses them", async () => {
+      sessionStorage.setItem("sb:signed", JSON.stringify({"k/s0.png": {url: "https://cdn/cached-k", exp: Date.now() + 100000}}));
+      const fetchMock = vi.spyOn(global, "fetch").mockImplementation(async () => reply(link("scene-s0", "j/s0.png"), link("scene-s1", "j/s1.png")));
+      const urls = await signPaths(["j/s0.png", "j/s1.png", "k/s0.png"], twoJobs, new AbortController().signal);
+      expect(urls).toEqual({"j/s0.png": "https://cdn/j/s0.png?token=t", "j/s1.png": "https://cdn/j/s1.png?token=t", "k/s0.png": "https://cdn/cached-k"});
+      expect(mockCreateSignedUrls).not.toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/jobs\/j\/image-links\?asset=scene-s0&asset=scene-s1$/),
+        expect.objectContaining({headers: {Authorization: "Bearer test-token"}}));
 
       fetchMock.mockClear();
-      mockSession.mockResolvedValue({data: {session: null}});
-      expect(await signPaths(sixPaths, sixPages, new AbortController().signal)).toEqual({});
+      expect(await signPaths(["j/s0.png", "j/s1.png"], twoJobs, new AbortController().signal)).toEqual({
+        "j/s0.png": "https://cdn/j/s0.png?token=t", "j/s1.png": "https://cdn/j/s1.png?token=t"});
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it("leaves out a picture that fails and returns the others", async () => {
-      mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
-      vi.spyOn(global, "fetch").mockImplementation(async (url) => {
-        if (String(url).includes("/scene-s1?")) return new Response("server error", {status: 500});
-        if (String(url).includes("/scene-s2?")) throw new TypeError("network");
-        return {ok: true, blob: async () => new Blob(["image"])} as Response;
-      });
-      vi.stubGlobal("URL", Object.assign(URL, {createObjectURL: vi.fn(() => `blob:${Math.random()}`), revokeObjectURL: vi.fn()}));
-      const urls = await signPaths(sixPaths, sixPages, new AbortController().signal);
-      expect(Object.keys(urls).sort()).toEqual(["j/s0.png", "j/s3.png", "j/s4.png", "j/s5.png"]);
+    it("a kept version is asked for by its own asset id, never as the current reference", async () => {
+      const fetchMock = vi.spyOn(global, "fetch").mockImplementation(async () => reply());
+      await signPaths(["j/ref-c0-1.png"], [{id: "j", moderation_mode: "teacher_review_v1", reveal: {characters: [
+        {char_id: "c0", image_path: "j/ref-c0-2.png", versions: [{version_id: "ref-c0-1", image_path: "j/ref-c0-1.png"}]},
+      ]}}], new AbortController().signal);
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/jobs\/j\/image-links\?asset=version-ref-c0-1$/), expect.anything());
+      expect(mockCreateSignedUrls).not.toHaveBeenCalled();
+    });
+
+    it("leaves out a failed job and any link for a path it did not ask for", async () => {
+      vi.spyOn(global, "fetch").mockImplementation(async (url) => String(url).includes("/jobs/k/")
+        ? new Response("server error", {status: 500})
+        : reply(link("scene-s0", "j/s0.png"), link("scene-s1", "j/other.png")));
+      const urls = await signPaths(["j/s0.png", "j/s1.png", "k/s0.png"], twoJobs, new AbortController().signal);
+      expect(urls).toEqual({"j/s0.png": "https://cdn/j/s0.png?token=t"});
+      expect(sessionStorage.getItem("sb:signed") ?? "").not.toContain("j/other.png");
+    });
+
+    it("reads the session once per call, and leaves every picture out without one", async () => {
+      const fetchMock = vi.spyOn(global, "fetch").mockImplementation(async () => reply());
+      await signPaths(["j/s0.png", "k/s0.png"], twoJobs, new AbortController().signal);
+      expect(mockSession).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+
+      fetchMock.mockClear();
+      mockSession.mockResolvedValue({data: {session: null}});
+      expect(await signPaths(["j/s0.png"], twoJobs, new AbortController().signal)).toEqual({});
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("hands nothing out and caches nothing for links that arrive after the abort", async () => {
+      let release!: (r: Response) => void;
+      vi.spyOn(global, "fetch").mockImplementation(() => new Promise<Response>(resolve => { release = resolve; }));
+      const onUrl = vi.fn();
+      const controller = new AbortController();
+      const pending = signPaths(["j/s0.png"], twoJobs, controller.signal, onUrl);
+      await flush();
+      controller.abort();
+      release(reply(link("scene-s0", "j/s0.png")));
+      expect(await pending).toEqual({});
+      expect(onUrl).not.toHaveBeenCalled();
       expect(sessionStorage.getItem("sb:signed") ?? "").not.toContain("j/s0.png");
     });
 
-    it("never hands out a blob that arrives after the abort, and revokes the ones it handed out", async () => {
-      mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
-      let release!: () => void;
-      const late = new Promise<void>(resolve => { release = resolve; });
-      vi.spyOn(global, "fetch").mockImplementation(async (url) => ({ok: true, blob: async () => {
-        if (String(url).includes("/scene-s1?")) await late;
-        return new Blob(["image"]);
-      }} as Response));
-      let n = 0;
-      const create = vi.fn(() => `blob:${++n}`);
-      const revoke = vi.fn();
-      vi.stubGlobal("URL", Object.assign(URL, {createObjectURL: create, revokeObjectURL: revoke}));
-      const controller = new AbortController();
-      const pending = signPaths(["j/s0.png", "j/s1.png"], sixPages, controller.signal);
-      await flush();
-      controller.abort();
-      release();
-      const urls = await pending;
-      expect(urls["j/s1.png"]).toBeUndefined();
-      expect(create.mock.results.map(r => r.value).sort()).toEqual(revoke.mock.calls.map(([u]) => u).sort());
-      expect(revoke).toHaveBeenCalledWith(urls["j/s0.png"]);
-    });
     it("hands each URL to onUrl as it arrives, before the call resolves", async () => {
       sessionStorage.setItem("sb:signed", JSON.stringify({"cached.png": {url: "https://cdn/cached", exp: Date.now() + 100000}}));
-      mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
       mockCreateSignedUrls.mockResolvedValue({data: [{path: "fresh.png", signedUrl: "https://cdn/fresh", error: null}], error: null});
       let release!: (r: Response) => void;
-      vi.spyOn(global, "fetch").mockImplementation(async (url) => String(url).includes("/scene-s1?")
+      vi.spyOn(global, "fetch").mockImplementation(async (url) => String(url).includes("/jobs/k/")
         ? new Promise<Response>(resolve => { release = resolve; })
-        : ({ok: true, blob: async () => new Blob(["image"])} as Response));
-      let n = 0;
-      vi.stubGlobal("URL", Object.assign(URL, {createObjectURL: vi.fn(() => `blob:${++n}`), revokeObjectURL: vi.fn()}));
+        : reply(link("scene-s0", "j/s0.png")));
       const onUrl = vi.fn();
       let settled = false;
-      const pending = signPaths(["cached.png", "j/s0.png", "j/s1.png", "fresh.png"], sixPages, new AbortController().signal, onUrl)
+      const pending = signPaths(["cached.png", "j/s0.png", "k/s0.png", "fresh.png"], twoJobs, new AbortController().signal, onUrl)
         .then(urls => { settled = true; return urls; });
       await flush();
       expect(settled).toBe(false);
-      // The baseline link does not wait for the held teacher-review picture (mixed shelf, journey 1).
+      // The baseline link and one book's links do not wait for another book (mixed shelf, journey 1).
       expect(new Map(onUrl.mock.calls)).toEqual(new Map([
-        ["cached.png", "https://cdn/cached"], ["j/s0.png", "blob:1"], ["fresh.png", "https://cdn/fresh"],
+        ["cached.png", "https://cdn/cached"], ["j/s0.png", "https://cdn/j/s0.png?token=t"], ["fresh.png", "https://cdn/fresh"],
       ]));
-      release({ok: true, blob: async () => new Blob(["image"])} as Response);
+      release(reply(link("scene-s0", "k/s0.png")));
       await pending;
-      expect(onUrl.mock.calls).toHaveLength(4);
-      expect(onUrl).toHaveBeenLastCalledWith("j/s1.png", "blob:2");
+      expect(onUrl).toHaveBeenLastCalledWith("k/s0.png", "https://cdn/k/s0.png?token=t");
     });
   });
 

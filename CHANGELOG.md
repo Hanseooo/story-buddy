@@ -14,6 +14,38 @@ instead of repeating it.
 
 ---
 
+## Teacher-review pictures load through signed links · 2026-11-25
+
+PR [#TBD](https://github.com/Hanseooo/story-buddy/pulls). Decision: [ADR-086](docs/product/adr/ADR-086-teacher-review-pictures-are-served-by-backend-signed-links.md), superseding ADR-080 Decision 7 and ADR-085 Decision 4 in part.
+
+### Code
+
+- **Backend.** New `GET /jobs/{id}/image-links?asset=<id>&asset=<id>...` (1 to `IMAGE_BUDGET` ids)
+  returns `{"links": [{asset_id, path, url}]}` with `Cache-Control: private, no-store`. It runs the
+  picture route's authorization once for the whole list (`authorized_assets`, one checkpoint load),
+  signs only the authorized paths for 3600 s in one Storage call (`providers.get_signed_urls`),
+  authorizes again and leaves out any asset whose path or epoch moved. `authorized_asset` is now a
+  wrapper over it, with the same 404s. The picture route is unchanged.
+- **Frontend.** `signPaths` asks for one book's teacher-review links in one call (books in
+  parallel) and caches them in sessionStorage like older books' links. No blob URLs for these
+  pictures. The teacher Books page drops its blob-revoke handling and now also warms a
+  teacher-review next book. Needs-help context pictures and the held reveal are unchanged.
+- A first view should take about as long as an older book's (estimated, not measured). A copied
+  link opens without logging in for up to an hour.
+
+### Docs
+
+- `docs/specs/image-loading-ux.md` (header, §1, SH-01, SH-02, §3 item 3, trace table),
+  `docs/specs/moderation-stack.md` (picture-route paragraph, routes list) and
+  `docs/capstone/ethics_and_safety.md` §5 point to ADR-086.
+
+### Checks
+
+- Seen failing first: `test_image_links_sign_only_authorized_paths_and_drop_one_that_moved`,
+  `test_image_links_refuse_a_bad_list_and_a_signing_failure_privately` (3 cases),
+  `test_get_signed_urls_signs_in_one_call_and_leaves_out_a_path_storage_refused`, and the
+  `signPaths` teacher-review link tests. Page tests that faked per-picture bytes now fake the link route.
+
 ## Teacher-review pictures stay in the browser cache for an hour · 2026-11-25
 
 PR [#143](https://github.com/Hanseooo/story-buddy/pull/143). Decision: [ADR-085](docs/product/adr/ADR-085-teacher-review-pictures-may-be-browser-cached-for-an-hour.md), superseding ADR-080 Decision 7 in part.
