@@ -437,4 +437,21 @@ describe("Bookshelf — §9.11–12", () => {
     render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
     await waitFor(() => expect(screen.getByText(/your shelf is empty/i)).toBeDefined());
   });
+
+  it("AC-06 — a failed book list read says so and Try again reads the list again", async () => {
+    mockSelect.mockResolvedValueOnce({ data: null, error: { message: "network" } });
+    render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+    const retry = await screen.findByRole("button", { name: "Try again" });
+    expect(screen.getByRole("alert")).toHaveTextContent("We couldn't open your bookshelf");
+    expect(screen.queryByText(/your shelf is empty/i)).toBeNull();
+
+    let finishList!: (r: unknown) => void;
+    mockSelect.mockReturnValueOnce(new Promise(resolve => { finishList = resolve; }));
+    fireEvent.click(retry);
+    expect(await screen.findByText("Loading your bookshelf")).toBeInTheDocument();
+    await act(async () => finishList({ data: [makeJob({ title: "Space Cats" })] }));
+    expect(await screen.findByText("Space Cats")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(mockSelect).toHaveBeenCalledTimes(2);
+  });
 });

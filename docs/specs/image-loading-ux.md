@@ -1,6 +1,6 @@
 # Feature Spec — Image loading UX (bookshelf, reader, picture endpoint)
 
-**Status:** draft (one open decision, OD-01) · **Phase:** Post technical defense · **Owner:**
+**Status:** approved (OD-01 decided 2026-11-24) · **Phase:** Post technical defense · **Owner:**
 `frontend/lib/signedUrls.ts`, `frontend/app/s/[profileId]/page.tsx`,
 `frontend/app/s/[profileId]/book/[jobId]/page.tsx`, `backend/app/auth.py`,
 `backend/app/moderation_hold.py` (`job_image` only)
@@ -75,7 +75,9 @@ Applies: SH-01, SH-02, SH-03, SH-04
 - **AC-05** — A card that becomes `terminal-success` through the Realtime UPDATE while the shelf is
   open starts loading its cover from the updated row. It shows the placeholder (AC-03) instead of
   today's "?" tile.
-- **AC-06** — The book list read fails → **OD-01** (today it falls through to the empty state).
+- **AC-06** — The book list read fails → the shelf shows "We couldn't open your bookshelf" with a
+  "Try again" button that shows the skeleton and reads the list again. An empty list still shows
+  the empty state (AC-04). Decided in OD-01.
 
 ### US-02 — A missing cover never looks like an error
 
@@ -176,7 +178,7 @@ Applies: SH-02
 | Shelf with 1 book | One card, cover placeholder then fade-in | AC-02, AC-03 |
 | Shelf with many books (e.g. 50) | All cards at once. Covers load at most 4 at a time per call (lazy below-the-fold loading is out of scope) | AC-02, SH-01 |
 | Mix of baseline and teacher-review books | Baseline covers come from cache or one signed batch. Teacher-review covers are fetched in parallel. Both feed the same per-card states | SH-01, AC-03 |
-| Book list read fails | Undecided; today shows the empty state | AC-06 → OD-01 |
+| Book list read fails | Error state with "Try again", which repeats the list read | AC-06, OD-01 |
 | Child leaves the shelf while covers load | All in-flight requests abort, blobs are revoked, no state is set after unmount | SH-02 |
 | Child taps a card before its cover arrives | Navigates normally | AC-11, SH-04 |
 | Cover fetch fails once (blip, 503 pool timeout) | One automatic retry for the failed covers only | AC-07, AC-19 |
@@ -291,9 +293,10 @@ Applies: SH-02
 
 ## 7. Open decisions and readiness
 
-- **OD-01 — The bookshelf list read fails** (blocks AC-06). Today the shelf shows "Your shelf is
-  empty!", which tells a child with books that they have none. Recommendation: show the shelf error
-  state with a "Try again" button that repeats the list read, following the `error.tsx` copy tone.
+- **OD-01 — The bookshelf list read fails. Decided 2026-11-24:** show the shelf error state with a
+  "Try again" button that repeats the list read, in the `error.tsx` copy tone. The empty state told a
+  child with books that they had none. Throwing to `error.tsx` was rejected: it logs to the console
+  and offers "Back to Bookshelf", a link to the page that just failed.
 - **OD-02 — Load the book state once in `job_image`** (not blocking, deferred). The grill agreed on
   it, but a lighter re-check is safe only if every input that can change the selected path also
   changes a cheaper fingerprint. Those inputs include checkpoint state, `job_picture_records`,
@@ -301,7 +304,7 @@ Applies: SH-02
   check stays. To revisit it, first list those inputs and show the fingerprint covers each one.
 - **Assumed values:** concurrency 4, pool `max_size` about 5, pool timeout about 5 s.
 
-**Readiness:** Draft until OD-01 is answered. Every other prerequisite is settled.
+**Readiness:** Ready. OD-01 decided 2026-11-24.
 
 ## 8. Sources and coverage
 

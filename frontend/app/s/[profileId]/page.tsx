@@ -7,7 +7,7 @@ import { classify, type JobRow, type JobBucket } from "@/lib/useJob";
 import { displayTitle } from "@/lib/displayTitle";
 import { signPaths } from "@/lib/signedUrls";
 import { motion } from "framer-motion";
-import { MagicWand, Users, FileDashed, Books, PencilSimple } from "@phosphor-icons/react";
+import { MagicWand, Users, FileDashed, Books, PencilSimple, WarningCircle, ArrowsClockwise } from "@phosphor-icons/react";
 import Loading from "./loading";
 
 type JobCard = {
@@ -52,6 +52,9 @@ export default function BookshelfPage({
   const [cards, setCards] = useState<JobCard[]>([]);
   const [covers, setCovers] = useState<Covers>({});
   const [loading, setLoading] = useState(true);
+  // The list read failed (spec AC-06, OD-01). Bumping `attempt` re-runs the load effect.
+  const [listFailed, setListFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [unreadNotes, setUnreadNotes] = useState<string[]>([]);
 
   useEffect(() => {
@@ -136,14 +139,16 @@ export default function BookshelfPage({
       .subscribe();
 
     (async () => {
-      const { data: jobs } = await supabase
+      const { data: jobs, error } = await supabase
         .from("jobs")
         .select("id, status, moderation_mode, input_text, title, pages")
         // ponytail: explicit filter required — RLS also grants classmates' approved jobs (spec §7.2)
         .eq("profile_id", profileId)
         .order("created_at", { ascending: false });
 
-      if (cancelled || !jobs) {
+      if (cancelled) return;
+      if (error || !jobs) {
+        setListFailed(true);
         setLoading(false);
         return;
       }
@@ -173,7 +178,7 @@ export default function BookshelfPage({
       for (const controller of liveCovers.values()) controller.abort();
       supabase.removeChannel(channel);
     };
-  }, [profileId]);
+  }, [profileId, attempt]);
 
   if (!profileId) return null;
 
@@ -192,6 +197,12 @@ export default function BookshelfPage({
       </>
     );
   }
+
+  const retryList = () => {
+    setListFailed(false);
+    setLoading(true);
+    setAttempt((n) => n + 1);
+  };
 
   // Failed jobs are permanent (terminal jobs are immutable — kid-flow S3), so they are
   // tucked away instead of deleted; keeps the shelf tidy with no delete surface.
@@ -215,7 +226,30 @@ export default function BookshelfPage({
         )}
       </div>
 
-      {!loading && cards.length === 0 && (
+      {listFailed && (
+        <div
+          role="alert"
+          className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-surface border border-primary/15 rounded-[32px] max-w-2xl mx-auto w-full my-auto"
+        >
+          <div className="size-20 bg-warning/15 text-warning rounded-2xl flex items-center justify-center mb-6">
+            <WarningCircle weight="duotone" className="size-10" aria-hidden="true" />
+          </div>
+          <h2 className="font-display text-3xl font-extrabold text-primary mb-3">We couldn&apos;t open your bookshelf</h2>
+          <p className="text-foreground/70 text-lg mb-8 max-w-[30ch]">
+            Don&apos;t worry, your stories are safe! Let&apos;s try that again.
+          </p>
+          <button
+            type="button"
+            onClick={retryList}
+            className="min-h-[56px] px-8 rounded-2xl bg-primary text-on-primary text-xl font-extrabold inline-flex items-center justify-center gap-2 hover:bg-primary-deep active:scale-[0.98] transition-all cursor-pointer focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+          >
+            <ArrowsClockwise weight="bold" className="size-5" aria-hidden="true" />
+            Try again
+          </button>
+        </div>
+      )}
+
+      {!listFailed && cards.length === 0 && (
         <motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
