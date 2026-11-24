@@ -185,10 +185,10 @@ Applies: SH-02
 |---|---|---|
 | Shelf with 0 books | Existing empty state | AC-04 |
 | Shelf with 1 book | One card, cover placeholder then fade-in | AC-02, AC-03 |
-| Shelf with many books (e.g. 50) | All cards at once. Covers load at most 4 at a time per call (lazy below-the-fold loading is out of scope) | AC-02, SH-01 |
-| Mix of baseline and teacher-review books | Baseline covers come from cache or one signed batch. Teacher-review covers are fetched in parallel. Both feed the same per-card states | SH-01, AC-03 |
+| Shelf with many books (e.g. 50) | All cards at once. Covers load at most 4 at a time per call (lazy below-the-fold loading is out of scope). *(Superseded by ADR-086: one link call per book.)* | AC-02, SH-01 |
+| Mix of baseline and teacher-review books | Baseline covers come from cache or one signed batch. Teacher-review covers are fetched in parallel. Both feed the same per-card states. *(Superseded by ADR-086: one link call per book.)* | SH-01, AC-03 |
 | Book list read fails | Error state with "Try again", which repeats the list read | AC-06, OD-01 |
-| Child leaves the shelf while covers load | All in-flight requests abort, blobs are revoked, no state is set after unmount | SH-02 |
+| Child leaves the shelf while covers load | All in-flight requests abort, blobs are revoked, no state is set after unmount. *(ADR-086: no blobs; links stay cached.)* | SH-02 |
 | Child taps a card before its cover arrives | Navigates normally | AC-11, SH-04 |
 | Cover fetch fails once (blip, 503 pool timeout) | One automatic retry for the failed covers only | AC-07, AC-19 |
 | Cover fails twice | Book-icon placeholder, no text, card still a link | AC-08 |
@@ -205,11 +205,11 @@ Applies: SH-02
 | Reader: one page fails once | Only that page is refetched. The book renders when it arrives | AC-13 |
 | Reader: a page fails twice | Read-failure screen, counter unchanged | AC-14 |
 | Reader: read-failure re-sign | Fetches only the still-missing pages | AC-15 |
-| Reader: child leaves mid-download | Aborts, revokes blobs | SH-02, AC-15 |
+| Reader: child leaves mid-download | Aborts, revokes blobs. *(ADR-086: no blobs; links stay cached.)* | SH-02, AC-15 |
 | Reader: baseline book, one path fails to sign | Retry signs only that path. The cache serves the rest | AC-13 |
 | Reader: book open longer than the signed-URL TTL | Unchanged existing behaviour (`kid-flow-book-persistence.md` §4.5) | Out of scope |
 | Teacher books page dialog switched mid-load | Existing abort per dialog, now with parallel fetch | SH-01 |
-| Two `signPaths` calls at once (e.g. shelf and a cover retry) | Each has its own limit of 4. No shared queue | SH-01 |
+| Two `signPaths` calls at once (e.g. shelf and a cover retry) | Each has its own limit of 4. No shared queue. *(Superseded by ADR-086: one link call per book.)* | SH-01 |
 | Pool exhausted under load | `503 image_unavailable` after the pool timeout | AC-19 |
 | Pooled connection dropped by Supabase while idle | Checked before reuse and replaced, never handed out broken | §5.5 |
 | Tests switch `settings.supabase_db_url` per test | The pool is created lazily for the current URL and recreated if the URL changes | §5.5 |
@@ -252,6 +252,7 @@ Applies: SH-02
      (*inferred*, not checked).
 6. **Concurrency of 4 per call** (*assumed value*). It keeps a 50-book shelf from opening 50
    simultaneous backend requests, which would each take a pool connection and threadpool worker.
+   *Superseded by ADR-086: one link call per book, so no per-picture limit.*
 7. **The skeleton is reused, not copied.** The page renders the route's `loading.tsx` component while
    loading, so there is one source of truth for the skeleton.
 8. **Leaner bookshelf query.** It drops `reveal`, `current_stage` and `failure_reason`, which the
@@ -266,7 +267,8 @@ Applies: SH-02
 **Confirmed seams (owner, 2026-11-23):**
 
 1. `signPaths`, `frontend/lib/signedUrls.test.ts`. Pattern: "feature pictures use authenticated
-   bytes and revoke their blob on exit".
+   bytes and revoke their blob on exit". *(ADR-086: the pattern is now "teacher-review pictures
+   come from one `/image-links` call per job and are cached".)*
 2. Bookshelf page, `frontend/app/s/[profileId]/page.test.tsx`.
 3. Reader page, `frontend/app/s/[profileId]/book/[jobId]/page.test.tsx`. The existing tests at :301,
    :474 and :486 stay and must pass unchanged.
@@ -278,7 +280,7 @@ Applies: SH-02
 
 - SH-01:
   - With 6 protected paths and fetch promises held open, more than 1 and at most 4 requests are in
-    flight together.
+    flight together. *(Superseded by ADR-086; the test was replaced by one call per job.)*
   - `auth.getSession` is called once.
   - One path returning 500 is left out while the others return.
 - AC-01–AC-03:
@@ -315,7 +317,7 @@ Applies: SH-02
   changes a cheaper fingerprint. Those inputs include checkpoint state, `job_picture_records`,
   reviews and profile state, and ADR-080 requires the re-check. This is unproven, so the double full
   check stays. To revisit it, first list those inputs and show the fingerprint covers each one.
-- **Assumed values:** concurrency 4, pool `max_size` about 5, pool timeout about 5 s.
+- **Assumed values:** concurrency 4 (unused since ADR-086), pool `max_size` about 5, pool timeout about 5 s.
 
 **Readiness:** Ready. OD-01 decided 2026-11-24.
 
