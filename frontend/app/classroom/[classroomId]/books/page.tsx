@@ -77,16 +77,14 @@ export default function BooksPage() {
     const unsigned = jobs.filter((j) => j.status === "complete" && j.pages?.[0]);
     if (!unsigned.length) return;
 
-    // One batch request, not one per thumbnail.
+    // One batch request, not one per thumbnail. Each thumbnail shows as it arrives,
+    // so baseline ones do not wait for teacher-review downloads.
     const controller = new AbortController();
-    signPaths(unsigned.map((j) => j.pages![0].image_path), unsigned, controller.signal).then((signed) => {
+    void signPaths(unsigned.map((j) => j.pages![0].image_path), unsigned, controller.signal, (path, url) => {
       if (controller.signal.aborted) return;
       setThumbnails((prev) => {
         const next = { ...prev };
-        for (const j of unsigned) {
-          const url = signed[j.pages![0].image_path];
-          if (url) next[j.id] = url;
-        }
+        for (const j of unsigned) if (j.pages![0].image_path === path) next[j.id] = url;
         return next;
       });
     });

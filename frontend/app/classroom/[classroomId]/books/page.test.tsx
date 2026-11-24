@@ -94,6 +94,34 @@ describe("teacher decision labels", () => {
     expect(screen.getByText("Not ready yet")).toBeDefined();
     vi.unstubAllGlobals();
   });
+
+  it("shows a baseline thumbnail while a teacher-review thumbnail is still downloading", async () => {
+    const jobs = [
+      makeJob({ id: "baseline-thumb", pages: [{ scene_id: "s1", caption: "Page 1", image_path: "baseline-thumb/s1.png" }] }),
+      makeJob({ id: "review-thumb", moderation_mode: "teacher_review_v1",
+        pages: [{ scene_id: "s1", caption: "Page 1", image_path: "review-thumb/s1.png" }],
+        profiles: { display_nickname: "Sam", avatar_id: null } }),
+    ];
+    const from = vi.fn((table: string) => ({
+      select: () => ({
+        eq: () => table === "jobs"
+          ? { order: async () => ({ data: jobs }) }
+          : { single: async () => ({ data: { review_notes_enabled: false } }) },
+      }),
+    }));
+    const createSignedUrls = vi.fn(async (paths: string[]) => ({
+      data: paths.map((path) => ({ path, signedUrl: `https://cdn.test/${path}`, error: null })),
+    }));
+    Object.assign(supabase, { from, storage: { from: () => ({ createSignedUrls }) } });
+    // The teacher-review download never answers.
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+
+    render(<BooksPage />);
+    const baseline = await screen.findByRole("button", { name: /Review story by Alex/ });
+    await waitFor(() => expect(baseline.querySelector("img")).toHaveAttribute("src", "https://cdn.test/baseline-thumb/s1.png"));
+    expect(screen.getByRole("button", { name: /Review story by Sam/ }).querySelector("img")).toBeNull();
+    vi.unstubAllGlobals();
+  });
 });
 
 vi.mock("next/navigation", () => ({ useParams: () => ({ classroomId: "synthetic-class" }) }));
