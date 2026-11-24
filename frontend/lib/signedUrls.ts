@@ -9,6 +9,8 @@ const SKEW_MS = 300_000;
 const KEY = "sb:signed";
 
 type Entry = { url: string; exp: number };
+type ProtectedAsset = {jobId: string; assetId: string};
+type OnUrl = (path: string, url: string) => void;
 export type ImageJob = {
   id: string;
   moderation_mode?: string;
@@ -36,7 +38,7 @@ function save(cache: Record<string, Entry>) {
 // Per call, never shared across calls (image-loading spec §5.6, an assumed value).
 const CONCURRENCY = 4;
 
-async function fetchProtected(work: Array<[string, {jobId: string; assetId: string}]>, out: Record<string, string>, signal: AbortSignal) {
+async function fetchProtected(work: Array<[string, ProtectedAsset]>, out: Record<string, string>, signal: AbortSignal, onUrl?: OnUrl) {
   let session;
   try {
     ({ data: { session } } = await supabase.auth.getSession());
@@ -62,6 +64,7 @@ async function fetchProtected(work: Array<[string, {jobId: string; assetId: stri
         const url = URL.createObjectURL(bytes);
         signal.addEventListener("abort", () => URL.revokeObjectURL(url), {once: true});
         out[p] = url;
+        onUrl?.(p, url);
       } catch { /* Caller retains its established image error/retry state. */ }
     }
   };
@@ -76,14 +79,15 @@ async function fetchProtected(work: Array<[string, {jobId: string; assetId: stri
  * browser cache miss. Caching the URL is what makes the image cacheable.
  *
  * Returns a path -> url map. A path is absent if signing failed; callers decide
- * whether that is fatal.
+ * whether that is fatal. `onUrl` receives each URL as soon as it is available,
+ * before the call resolves, so callers can show pictures one by one.
  */
-export async function signPaths(paths: string[], jobs: ImageJob[] = [], signal?: AbortSignal): Promise<Record<string, string>> {
+export async function signPaths(paths: string[], jobs: ImageJob[] = [], signal?: AbortSignal, onUrl?: OnUrl): Promise<Record<string, string>> {
   const cache = load();
   const now = Date.now();
   const out: Record<string, string> = {};
   const missing: string[] = [];
-  const protectedPaths = new Map<string, {jobId: string; assetId: string}>();
+  const protectedPaths = new Map<string, ProtectedAsset>();
   for (const job of jobs) {
     if (job.moderation_mode !== "teacher_review_v1") continue;
     for (const page of job.pages ?? []) protectedPaths.set(page.image_path, {jobId: job.id, assetId: `scene-${page.scene_id}`});
@@ -94,7 +98,7 @@ export async function signPaths(paths: string[], jobs: ImageJob[] = [], signal?:
     for (const v of job.page_versions ?? []) protectedPaths.set(v.image_path, {jobId: job.id, assetId: `page-version-${v.version_id}`});
   }
 
-  const work: Array<[string, {jobId: string; assetId: string}]> = [];
+  const work: Array<[string, ProtectedAsset]> = [];
   for (const p of new Set(paths)) {
     // No cached Storage link, signing request or sessionStorage blob for feature jobs.
     const selected = protectedPaths.get(p);
@@ -105,13 +109,16 @@ export async function signPaths(paths: string[], jobs: ImageJob[] = [], signal?:
     }
     if (jobs.some(j => j.moderation_mode === "teacher_review_v1" && p.startsWith(`${j.id}/`))) continue;
     const hit = cache[p];
-    if (hit && hit.exp > now) out[p] = hit.url;
-    else missing.push(p);
+    if (hit && hit.exp > now) {
+      out[p] = hit.url;
+      onUrl?.(p, hit.url);
+    } else missing.push(p);
   }
 
-  if (work.length > 0 && signal) await fetchProtected(work, out, signal);
-
+  // Protected paths only delete cache entries, so the cache can be saved before they download.
   save(cache);
+
+  if (work.length > 0 && signal) await fetchProtected(work, out, signal, onUrl);
 
   if (missing.length > 0) {
     const { data } = await supabase.storage.from(BUCKET).createSignedUrls(missing, TTL);
@@ -120,6 +127,7 @@ export async function signPaths(paths: string[], jobs: ImageJob[] = [], signal?:
       const path = s.path ?? missing[i];
       if (path && s.signedUrl && !s.error) {
         out[path] = s.signedUrl;
+        onUrl?.(path, s.signedUrl);
         cache[path] = { url: s.signedUrl, exp: now + TTL * 1000 - SKEW_MS };
       }
     });

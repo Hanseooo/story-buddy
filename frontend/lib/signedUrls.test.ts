@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const mockCreateSignedUrls = vi.fn();
 const mockSession = vi.fn();
@@ -54,13 +54,19 @@ describe("signPaths", () => {
     ))}];
     const sixPaths = sixPages[0].pages.map(p => p.image_path);
     const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
+    const { createObjectURL, revokeObjectURL } = URL;
+    beforeEach(() => { mockSession.mockReset(); });
+    afterEach(() => {
+      vi.restoreAllMocks();
+      Object.assign(URL, { createObjectURL, revokeObjectURL });
+    });
 
     it("keeps more than 1 and at most 4 picture requests in flight", async () => {
       mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
       const held: Array<() => void> = [];
       let inFlight = 0;
       let peak = 0;
-      const fetchMock = vi.spyOn(global, "fetch").mockImplementation(() => {
+      vi.spyOn(global, "fetch").mockImplementation(() => {
         inFlight++;
         peak = Math.max(peak, inFlight);
         return new Promise<Response>(resolve => held.push(() => {
@@ -76,11 +82,10 @@ describe("signPaths", () => {
       while (held.length) { held.shift()!(); await flush(); }
       expect(Object.keys(await pending)).toHaveLength(6);
       expect(peak).toBeLessThanOrEqual(4);
-      fetchMock.mockRestore();
     });
 
     it("reads the session once per call, and leaves every picture out without one", async () => {
-      mockSession.mockReset().mockResolvedValue({data: {session: {access_token: "test-token"}}});
+      mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
       const fetchMock = vi.spyOn(global, "fetch").mockImplementation(async () => ({ok: true, blob: async () => new Blob(["image"])} as Response));
       vi.stubGlobal("URL", Object.assign(URL, {createObjectURL: vi.fn(() => `blob:${Math.random()}`), revokeObjectURL: vi.fn()}));
       await signPaths(sixPaths, sixPages, new AbortController().signal);
@@ -90,12 +95,11 @@ describe("signPaths", () => {
       mockSession.mockResolvedValue({data: {session: null}});
       expect(await signPaths(sixPaths, sixPages, new AbortController().signal)).toEqual({});
       expect(fetchMock).not.toHaveBeenCalled();
-      fetchMock.mockRestore();
     });
 
     it("leaves out a picture that fails and returns the others", async () => {
       mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
-      const fetchMock = vi.spyOn(global, "fetch").mockImplementation(async (url) => {
+      vi.spyOn(global, "fetch").mockImplementation(async (url) => {
         if (String(url).endsWith("/scene-s1")) return new Response("server error", {status: 500});
         if (String(url).endsWith("/scene-s2")) throw new TypeError("network");
         return {ok: true, blob: async () => new Blob(["image"])} as Response;
@@ -104,14 +108,13 @@ describe("signPaths", () => {
       const urls = await signPaths(sixPaths, sixPages, new AbortController().signal);
       expect(Object.keys(urls).sort()).toEqual(["j/s0.png", "j/s3.png", "j/s4.png", "j/s5.png"]);
       expect(sessionStorage.getItem("sb:signed") ?? "").not.toContain("j/s0.png");
-      fetchMock.mockRestore();
     });
 
     it("never hands out a blob that arrives after the abort, and revokes the ones it handed out", async () => {
       mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
       let release!: () => void;
       const late = new Promise<void>(resolve => { release = resolve; });
-      const fetchMock = vi.spyOn(global, "fetch").mockImplementation(async (url) => ({ok: true, blob: async () => {
+      vi.spyOn(global, "fetch").mockImplementation(async (url) => ({ok: true, blob: async () => {
         if (String(url).endsWith("/scene-s1")) await late;
         return new Blob(["image"]);
       }} as Response));
@@ -128,9 +131,32 @@ describe("signPaths", () => {
       expect(urls["j/s1.png"]).toBeUndefined();
       expect(create.mock.results.map(r => r.value).sort()).toEqual(revoke.mock.calls.map(([u]) => u).sort());
       expect(revoke).toHaveBeenCalledWith(urls["j/s0.png"]);
-      fetchMock.mockRestore();
+    });
+    it("hands each URL to onUrl as it arrives, before the call resolves", async () => {
+      sessionStorage.setItem("sb:signed", JSON.stringify({"cached.png": {url: "https://cdn/cached", exp: Date.now() + 100000}}));
+      mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
+      mockCreateSignedUrls.mockResolvedValue({data: [{path: "fresh.png", signedUrl: "https://cdn/fresh", error: null}], error: null});
+      let release!: (r: Response) => void;
+      vi.spyOn(global, "fetch").mockImplementation(async (url) => String(url).endsWith("/scene-s1")
+        ? new Promise<Response>(resolve => { release = resolve; })
+        : ({ok: true, blob: async () => new Blob(["image"])} as Response));
+      let n = 0;
+      vi.stubGlobal("URL", Object.assign(URL, {createObjectURL: vi.fn(() => `blob:${++n}`), revokeObjectURL: vi.fn()}));
+      const onUrl = vi.fn();
+      let settled = false;
+      const pending = signPaths(["cached.png", "j/s0.png", "j/s1.png", "fresh.png"], sixPages, new AbortController().signal, onUrl)
+        .then(urls => { settled = true; return urls; });
+      await flush();
+      expect(settled).toBe(false);
+      expect(onUrl.mock.calls).toEqual([["cached.png", "https://cdn/cached"], ["j/s0.png", "blob:1"]]);
+      release({ok: true, blob: async () => new Blob(["image"])} as Response);
+      await pending;
+      expect(onUrl.mock.calls).toEqual([
+        ["cached.png", "https://cdn/cached"], ["j/s0.png", "blob:1"], ["j/s1.png", "blob:2"], ["fresh.png", "https://cdn/fresh"],
+      ]);
     });
   });
+
 
   it("returns a path -> url map", async () => {
     mockCreateSignedUrls.mockResolvedValue({

@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { expect, it, vi, beforeEach, describe } from "vitest";
+import { expect, it, vi, beforeEach, describe, onTestFinished } from "vitest";
 import BookshelfPage from "./page";
 
 const mockSelect = vi.hoisted(() => vi.fn());
@@ -58,6 +58,27 @@ const makeJob = (overrides: Partial<{
   reveal: null,
   profile_id: PROFILE_ID,
   ...overrides,
+});
+
+// Holds every picture request open until the test finishes it; blob URLs count up from 1.
+function stubPictures() {
+  mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+  const pictures: { url: string; signal: AbortSignal; finish: (r: Response) => void }[] = [];
+  vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => {
+    if (url.includes("/me/notes")) return Promise.resolve(new Response("[]"));
+    return new Promise<Response>(resolve => pictures.push({ url, signal: init!.signal!, finish: resolve }));
+  }));
+  const { createObjectURL, revokeObjectURL } = URL;
+  onTestFinished(() => { Object.assign(URL, { createObjectURL, revokeObjectURL }); });
+  let n = 0;
+  URL.createObjectURL = vi.fn(() => `blob:synthetic-${++n}`);
+  URL.revokeObjectURL = vi.fn();
+  return pictures;
+}
+
+const teacherReviewBook = (id: string, title: string) => makeJob({
+  id, title, moderation_mode: "teacher_review_v1",
+  pages: [{ scene_id: "s1", caption: "c", image_path: `${id}/s1.png` }],
 });
 
 describe("Bookshelf — §9.11–12", () => {
@@ -216,9 +237,23 @@ describe("Bookshelf — §9.11–12", () => {
 
   it("AC-01 — shows the route skeleton, not the heading, while the book list loads", async () => {
     mockSelect.mockReturnValueOnce(new Promise(() => {}));
-    render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+    const { container } = render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Loading your bookshelf"));
     expect(screen.queryByRole("heading", { name: "Your Bookshelf" })).toBeNull();
+    expect(container.querySelector('[aria-hidden="true"] .animate-pulse.bg-muted\\/50')).not.toBeNull();
+  });
+
+  it("AC-03 — a teacher-review cover appears in its card while another is still downloading", async () => {
+    const pictures = stubPictures();
+    mockSelect.mockResolvedValueOnce({ data: [teacherReviewBook("tr1", "First Book"), teacherReviewBook("tr2", "Second Book")] });
+    render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+    await waitFor(() => expect(pictures).toHaveLength(2));
+    await act(async () => { pictures.find(p => p.url.includes("/jobs/tr1/"))!.finish(new Response("png")); });
+    const first = screen.getByRole("link", { name: "First Book" });
+    await waitFor(() => expect(first.querySelector("img")).toHaveAttribute("src", "blob:synthetic-1"));
+    const second = screen.getByRole("link", { name: "Second Book" });
+    expect(second.querySelector("img")).toBeNull();
+    expect(second.querySelector(".animate-pulse")).not.toBeNull();
   });
 
   it("AC-02/AC-03 — cards render while covers sign, then each cover appears in its card", async () => {
@@ -325,19 +360,6 @@ describe("Bookshelf — §9.11–12", () => {
       pages: [{ scene_id: pageId, caption: "c", image_path: `tr1/${pageId}.png` }],
     }) });
 
-    function stubPictures() {
-      mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
-      const pictures: { url: string; signal: AbortSignal; finish: (r: Response) => void }[] = [];
-      vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => {
-        if (url.includes("/me/notes")) return Promise.resolve(new Response("[]"));
-        return new Promise<Response>(resolve => pictures.push({ url, signal: init!.signal!, finish: resolve }));
-      }));
-      let n = 0;
-      URL.createObjectURL = vi.fn(() => `blob:synthetic-${++n}`);
-      URL.revokeObjectURL = vi.fn();
-      return pictures;
-    }
-
     async function renderInFlight() {
       mockSelect.mockResolvedValueOnce({ data: [makeJob({
         id: "tr1", title: "Held Book", status: "running", moderation_mode: "teacher_review_v1", pages: [],
@@ -372,6 +394,41 @@ describe("Bookshelf — §9.11–12", () => {
       expect(pictures[1].signal.aborted).toBe(false);
       view.unmount();
       expect(pictures[1].signal.aborted).toBe(true);
+    });
+
+    it("keeps the shown cover when a finished book gets another UPDATE with the same cover", async () => {
+      const pictures = stubPictures();
+      mockSelect.mockResolvedValueOnce({ data: [finished("s1")] });
+      render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+      await waitFor(() => expect(pictures).toHaveLength(1));
+      await act(async () => { pictures[0].finish(new Response("png")); });
+      const link = screen.getByRole("link", { name: "Held Book" });
+      await waitFor(() => expect(link.querySelector("img")).toHaveAttribute("src", "blob:synthetic-1"));
+      fireEvent.load(link.querySelector("img")!);
+      expect(link.querySelector(".animate-pulse")).toBeNull();
+
+      await act(async () => realtime.emit({ new: finished("s1") }));
+
+      expect(link.querySelector("img")).toHaveAttribute("src", "blob:synthetic-1");
+      expect(link.querySelector(".animate-pulse")).toBeNull();
+      expect(pictures).toHaveLength(1);
+    });
+
+    it("a first-load cover finishing after a Realtime cover does not replace it", async () => {
+      const pictures = stubPictures();
+      mockSelect.mockResolvedValueOnce({ data: [finished("s1")] });
+      render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
+      await waitFor(() => expect(pictures).toHaveLength(1));
+      act(() => realtime.emit({ new: finished("s2") }));
+      await waitFor(() => expect(pictures).toHaveLength(2));
+      await act(async () => { pictures[1].finish(new Response("png")); });
+      const link = screen.getByRole("link", { name: "Held Book" });
+      await waitFor(() => expect(link.querySelector("img")).toHaveAttribute("src", "blob:synthetic-1"));
+
+      await act(async () => { pictures[0].finish(new Response("png")); });
+      await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(2));
+
+      expect(link.querySelector("img")).toHaveAttribute("src", "blob:synthetic-1");
     });
   });
 

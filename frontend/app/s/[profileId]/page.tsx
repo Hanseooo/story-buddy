@@ -21,16 +21,26 @@ type Covers = Record<string, string | null>;
 
 const coverPath = (job: JobRow) => job.pages?.[0]?.image_path || undefined;
 
-// One round for every cover, then one retry for the failed ones only (spec AC-07, §5.4).
-// A rejected call counts as every path in it failing.
-async function signCovers(rows: JobRow[], signal: AbortSignal): Promise<Record<string, string | null>> {
-  const sign = (jobs: JobRow[]) =>
-    signPaths(jobs.map((j) => coverPath(j)!), jobs, signal).catch(() => ({} as Record<string, string>));
-  const withCover = rows.filter(coverPath);
-  const signed = await sign(withCover);
-  const failed = withCover.filter((j) => !signed[coverPath(j)!]);
-  if (failed.length > 0 && !signal.aborted) Object.assign(signed, await sign(failed));
-  return Object.fromEntries(withCover.map((j) => [j.id, signed[coverPath(j)!] ?? null]));
+// Each cover goes to `onCover` as it arrives, so cards fill in one by one (spec AC-03).
+// One round for every cover, then one retry for the failed ones only (spec AC-07, §5.4);
+// a cover still missing after that ends as null. A rejected call fails every path it had not delivered.
+async function signCovers(rows: JobRow[], signal: AbortSignal, onCover: (jobId: string, url: string | null) => void) {
+  const sign = async (pairs: Array<[JobRow, string]>) => {
+    const arrived = new Set<string>();
+    await signPaths(pairs.map(([, path]) => path), pairs.map(([job]) => job), signal, (path, url) => {
+      arrived.add(path);
+      if (signal.aborted) return;
+      for (const [job, p] of pairs) if (p === path) onCover(job.id, url);
+    }).catch(() => {});
+    return pairs.filter(([, path]) => !arrived.has(path));
+  };
+  const failed = await sign(rows.flatMap((j): Array<[JobRow, string]> => {
+    const path = coverPath(j);
+    return path ? [[j, path]] : [];
+  }));
+  if (failed.length === 0 || signal.aborted) return;
+  const lost = await sign(failed);
+  if (!signal.aborted) for (const [job] of lost) onCover(job.id, null);
 }
 
 export default function BookshelfPage({
@@ -80,7 +90,10 @@ export default function BookshelfPage({
     let cancelled = false;
     const imageController = new AbortController();
     // Realtime cover loads, one per card: a newer update aborts the older load (spec §4, SH-02).
+    // A card here belongs to Realtime, so the first load never sets its cover.
     const liveCovers = new Map<string, AbortController>();
+    // Last known bucket and cover path per card, so a repeat UPDATE keeps the shown cover (spec AC-05).
+    const known = new Map<string, { bucket: JobBucket; path?: string }>();
 
     // Subscribe first, then SELECT — same ordering as useJob (avoids missed updates)
     const channel = supabase
@@ -95,21 +108,21 @@ export default function BookshelfPage({
         },
         (payload: { new: JobRow }) => {
           const row = payload.new;
-          if (classify(row) === "terminal-success") {
+          const bucket = classify(row);
+          const path = coverPath(row);
+          const before = known.get(row.id);
+          known.set(row.id, { bucket, path });
+          if (bucket === "terminal-success" && (before?.bucket !== "terminal-success" || before.path !== path)) {
             liveCovers.get(row.id)?.abort();
             const controller = new AbortController();
             liveCovers.set(row.id, controller);
             setCovers((prev) => {
               const next = { ...prev };
-              if (coverPath(row)) delete next[row.id];
+              if (path) delete next[row.id];
               else next[row.id] = null;
               return next;
             });
-            if (coverPath(row)) {
-              void signCovers([row], controller.signal).then((signed) => {
-                if (!controller.signal.aborted) setCovers((prev) => ({ ...prev, ...signed }));
-              });
-            }
+            if (path) void signCovers([row], controller.signal, (jobId, url) => setCovers((prev) => ({ ...prev, [jobId]: url })));
           }
           setCards((prev) =>
             prev.map((c) =>
@@ -136,6 +149,7 @@ export default function BookshelfPage({
       }
 
       const rows = jobs as JobRow[];
+      for (const j of rows) if (!known.has(j.id)) known.set(j.id, { bucket: classify(j), path: coverPath(j) });
       // Cards render now; covers fill in as signing finishes (spec AC-02, AC-03).
       setCards(
         rows.map((j) => ({
@@ -144,13 +158,13 @@ export default function BookshelfPage({
           title: displayTitle(j.title, j.input_text),
         }))
       );
-      setCovers(Object.fromEntries(rows.filter((j) => !coverPath(j)).map((j) => [j.id, null])));
+      const setFirstCover = (jobId: string, url: string | null) => {
+        if (!cancelled && !liveCovers.has(jobId)) setCovers((prev) => ({ ...prev, [jobId]: url }));
+      };
+      for (const j of rows) if (!coverPath(j)) setFirstCover(j.id, null);
       setLoading(false);
 
-      if (!rows.some(coverPath)) return;
-      const signed = await signCovers(rows, imageController.signal);
-      if (cancelled) return;
-      setCovers((prev) => ({ ...prev, ...signed }));
+      if (rows.some(coverPath)) await signCovers(rows, imageController.signal, setFirstCover);
     })();
 
     return () => {

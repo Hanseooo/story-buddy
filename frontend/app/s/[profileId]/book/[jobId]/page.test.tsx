@@ -498,6 +498,8 @@ describe("BookPage — reader (terminal-success)", () => {
   it("a teacher-review page that misses once is the only page fetched again (image-loading AC-13)", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: { ...COMPLETE_ROW, moderation_mode: "teacher_review_v1" } }));
     mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+    const { createObjectURL, revokeObjectURL } = URL;
+    onTestFinished(() => { Object.assign(URL, { createObjectURL, revokeObjectURL }); });
     URL.createObjectURL = vi.fn(() => `blob:${Math.random()}`);
     URL.revokeObjectURL = vi.fn();
     let s1Misses = 1;
@@ -570,6 +572,8 @@ describe("BookPage — reader fetches only missing pages (image-loading AC-13, A
   it("the read-failure re-sign fetches only the teacher-review page still missing", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: { ...COMPLETE_ROW, moderation_mode: "teacher_review_v1" } }));
     mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+    const { createObjectURL, revokeObjectURL } = URL;
+    onTestFinished(() => { Object.assign(URL, { createObjectURL, revokeObjectURL }); });
     URL.createObjectURL = vi.fn(() => `blob:${Math.random()}`);
     URL.revokeObjectURL = vi.fn();
     let s1Misses = 2;
