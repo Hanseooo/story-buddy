@@ -148,12 +148,14 @@ describe("signPaths", () => {
         .then(urls => { settled = true; return urls; });
       await flush();
       expect(settled).toBe(false);
-      expect(onUrl.mock.calls).toEqual([["cached.png", "https://cdn/cached"], ["j/s0.png", "blob:1"]]);
+      // The baseline link does not wait for the held teacher-review picture (mixed shelf, journey 1).
+      expect(new Map(onUrl.mock.calls)).toEqual(new Map([
+        ["cached.png", "https://cdn/cached"], ["j/s0.png", "blob:1"], ["fresh.png", "https://cdn/fresh"],
+      ]));
       release({ok: true, blob: async () => new Blob(["image"])} as Response);
       await pending;
-      expect(onUrl.mock.calls).toEqual([
-        ["cached.png", "https://cdn/cached"], ["j/s0.png", "blob:1"], ["j/s1.png", "blob:2"], ["fresh.png", "https://cdn/fresh"],
-      ]);
+      expect(onUrl.mock.calls).toHaveLength(4);
+      expect(onUrl).toHaveBeenLastCalledWith("j/s1.png", "blob:2");
     });
   });
 

@@ -118,9 +118,17 @@ export async function signPaths(paths: string[], jobs: ImageJob[] = [], signal?:
   // Protected paths only delete cache entries, so the cache can be saved before they download.
   save(cache);
 
-  if (work.length > 0 && signal) await fetchProtected(work, out, signal, onUrl);
+  // Baseline links do not wait for protected downloads, so a mixed shelf fills in sooner.
+  // allSettled: a signing error rejects only after every download has delivered or failed.
+  const results = await Promise.allSettled([
+    work.length > 0 && signal ? fetchProtected(work, out, signal, onUrl) : undefined,
+    signMissing(),
+  ]);
+  for (const r of results) if (r.status === "rejected") throw r.reason;
+  return out;
 
-  if (missing.length > 0) {
+  async function signMissing() {
+    if (missing.length === 0) return;
     const { data } = await supabase.storage.from(BUCKET).createSignedUrls(missing, TTL);
     (data ?? []).forEach((s, i) => {
       // Supabase echoes `path`, but results come back in request order either way.
@@ -133,6 +141,4 @@ export async function signPaths(paths: string[], jobs: ImageJob[] = [], signal?:
     });
     save(cache);
   }
-
-  return out;
 }

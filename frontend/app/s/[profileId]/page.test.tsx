@@ -279,6 +279,10 @@ describe("Bookshelf — §9.11–12", () => {
     });
     await waitFor(() => expect(dragonLink.querySelector("img")).toHaveAttribute("src", "https://cdn.test/j1.png"));
     expect(dragonLink.querySelector("img")).toHaveAttribute("alt", "");
+    // Fades in (opacity only) once the image has loaded.
+    expect(dragonLink.querySelector("img")).toHaveClass("opacity-0");
+    fireEvent.load(dragonLink.querySelector("img")!);
+    expect(dragonLink.querySelector("img")).toHaveClass("transition-opacity", "opacity-100");
     expect(screen.getByRole("link", { name: "Robot Book" }).querySelector("img"))
       .toHaveAttribute("src", "https://cdn.test/j2.png");
   });

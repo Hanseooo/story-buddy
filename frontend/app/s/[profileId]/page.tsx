@@ -393,7 +393,7 @@ function BookCard({
                   decoding="async"
                   onLoad={() => setLoadedCover(cover)}
                   onError={() => onCoverError(card.id, cover)}
-                  className={`relative w-full h-full object-cover transition-opacity duration-500 ${coverLoaded ? "opacity-100" : "opacity-0"}`}
+                  className={`relative w-full h-full object-cover transition-opacity duration-[var(--duration-slow)] ${coverLoaded ? "opacity-100" : "opacity-0"}`}
                 />
               )}
             </>
