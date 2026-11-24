@@ -16,7 +16,7 @@ instead of repeating it.
 
 ## Teacher-review pictures stay in the browser cache for an hour · 2026-11-25
 
-PR (pending). Decision: [ADR-085](docs/product/adr/ADR-085-teacher-review-pictures-may-be-browser-cached-for-an-hour.md), superseding ADR-080 Decision 7 in part.
+PR [#143](https://github.com/Hanseooo/story-buddy/pull/143). Decision: [ADR-085](docs/product/adr/ADR-085-teacher-review-pictures-may-be-browser-cached-for-an-hour.md), superseding ADR-080 Decision 7 in part.
 
 ### Code
 
