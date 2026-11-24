@@ -2,6 +2,7 @@
 import logging
 import re
 from html import escape
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from pathlib import PurePosixPath
 from threading import BoundedSemaphore
@@ -19,6 +20,8 @@ from app.config import (
 
 pdf_router = APIRouter()
 _render_slot = BoundedSemaphore(1)
+# Matches the browser's per-call picture concurrency (frontend/lib/signedUrls.ts).
+_DOWNLOAD_WORKERS = 4
 _log = logging.getLogger(__name__)
 _PRIVATE = {"Cache-Control": "private, no-store"}
 
@@ -114,8 +117,6 @@ def download_pdf(job_id: str, user=Depends(get_current_user)) -> Response:
         title = row.get("title") or "Untitled"
         if not isinstance(title, str) or len(title) > MAX_TITLE_CHARS:
             raise ValueError("invalid title")
-        images = []
-        total_bytes = 0
         for page in pages:
             caption = page["caption"]
             path = page["image_path"]
@@ -124,12 +125,20 @@ def download_pdf(job_id: str, user=Depends(get_current_user)) -> Response:
             if (not isinstance(path, str) or not path.startswith(f"{job_id}/") or "\\" in path
                     or ".." in PurePosixPath(path).parts or str(PurePosixPath(path)) != path):
                 raise ValueError("invalid image path")
-            image_bytes = providers.download_book_image(path)
-            if row.get("moderation_mode") == "teacher_review_v1":
-                from app.moderation_hold import authorized_asset, connect
-                with connect() as conn:
-                    if authorized_asset(conn, job_id, f"scene-{page['scene_id']}", str(user.id)) != (path, row["generation_epoch"]):
+        # Storage round trips are network waits, so pages download together (each is capped at
+        # PDF_MAX_IMAGE_BYTES; the total budget below is checked once they arrive).
+        with ThreadPoolExecutor(max_workers=_DOWNLOAD_WORKERS) as pool:
+            downloads = list(pool.map(providers.download_book_image, [page["image_path"] for page in pages]))
+        teacher_review = row.get("moderation_mode") == "teacher_review_v1"
+        if teacher_review:
+            from app.moderation_hold import authorized_asset, connect
+            with connect() as conn:
+                for page in pages:
+                    if authorized_asset(conn, job_id, f"scene-{page['scene_id']}", str(user.id)) != (page["image_path"], row["generation_epoch"]):
                         raise HTTPException(409, "book not ready for download", headers=_PRIVATE)
+        images = []
+        total_bytes = 0
+        for image_bytes in downloads:
             total_bytes += len(image_bytes)
             if len(image_bytes) > PDF_MAX_IMAGE_BYTES or total_bytes > PDF_MAX_TOTAL_IMAGE_BYTES:
                 raise ValueError("image budget exceeded")
@@ -143,7 +152,7 @@ def download_pdf(job_id: str, user=Depends(get_current_user)) -> Response:
             images.append(image_bytes)
         pdf = render_book_pdf(title, pages, images)
         _approved_book(job_id, user.id)  # Approval or membership withdrawal must stop this download too.
-        if row.get("moderation_mode") == "teacher_review_v1":
+        if teacher_review:
             with connect() as conn:
                 for page in pages:
                     if authorized_asset(conn, job_id, f"scene-{page['scene_id']}", str(user.id)) != (page["image_path"], row["generation_epoch"]):

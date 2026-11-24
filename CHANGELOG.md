@@ -14,7 +14,7 @@ instead of repeating it.
 
 ---
 
-## Teacher Books thumbnails no longer wait for teacher-review downloads · 2026-11-25
+## Teacher Books thumbnails no longer wait; PDF pages download together · 2026-11-25
 
 PR [#142](https://github.com/Hanseooo/story-buddy/pull/142). Follows [`docs/specs/image-loading-ux.md`](docs/specs/image-loading-ux.md) SH-01.
 
@@ -24,11 +24,19 @@ PR [#142](https://github.com/Hanseooo/story-buddy/pull/142). Follows [`docs/spec
   as the bookshelf already does. Older books' thumbnails no longer wait for teacher-review
   thumbnails, which took about 7 s each in production. A teacher-review thumbnail whose blob was
   revoked by a refresh goes back to the placeholder instead of a broken image.
+- **PDF export.** Page pictures download 4 at a time instead of one after another. A
+  teacher-review book's per-page check before rendering opens one DB connection instead of one per
+  page. Each picture is still capped at `PDF_MAX_IMAGE_BYTES`, but the total budget is now checked
+  after all pages arrive, so a failing book can hold up to 10 × 8 MB briefly instead of stopping
+  at 32 MB.
 
 ### Checks
 
 - Two tests in `books/page.test.tsx`, each seen failing first: a baseline thumbnail renders while
   a teacher-review download is pending; a revoked teacher-review thumbnail is dropped.
+- `test_pdf_downloads_page_pictures_at_the_same_time` in `test_pdf_export.py`, seen failing first
+  (`BrokenBarrierError`, 503). The teacher-review PDF test needs `TEST_MODERATION_DB_URL`, which
+  was not available here or in CI, so the one-connection change is not run by any test.
 
 ## Pictures load sooner on the bookshelf and in the reader · 2026-11-24
 

@@ -140,3 +140,22 @@ def test_pdf_fails_closed_without_partial_download(pdf_request, failure, expecte
     if failure not in {"image_failure", "invalid_image", "withdrawn", "peer_withdrawn",
                        "membership_withdrawn", "author_removed_during_export"}:
         download.assert_not_called()
+
+
+def test_pdf_downloads_page_pictures_at_the_same_time(pdf_request, monkeypatch):
+    # A one-at-a-time loop never lets the first download see the second, so the barrier breaks.
+    import threading
+    monkeypatch.setattr("app.pdf_export.render_book_pdf", MagicMock(return_value=b"%PDF-synthetic"))
+    client, row, query, download, viewer, profiles = pdf_request
+    row["pages"].append({"scene_id": "s1", "caption": "second caption", "image_path": "job-1/scene-2.png"})
+    picture = download.return_value
+    both_started = threading.Barrier(2, timeout=2)
+
+    def wait_for_the_other_page(_path):
+        both_started.wait()
+        return picture
+
+    download.side_effect = wait_for_the_other_page
+    response = client.get("/jobs/job-1/pdf")
+    assert response.status_code == 200
+    assert sorted(c.args[0] for c in download.call_args_list) == ["job-1/scene-1.png", "job-1/scene-2.png"]
