@@ -32,6 +32,13 @@ from pipeline.moderation_replace import replacement_disabled_reason
 
 hold_router = APIRouter()
 PRIVATE = {"Cache-Control": "private, no-store"}
+# ADR-085 (supersedes ADR-080 §7 in part): a picture GET whose URL names its exact bytes may sit
+# in the browser cache for an hour, like an older book's signed link. Tradeoff, accepted for the
+# demo-only deployment: a withdrawn or stopped book stays visible on a device that already loaded it
+# for up to an hour, and the copy outlives logout on that browser. Every uncached request is still
+# authorized twice. JSON, errors and the held-picture reveal (POST) stay no-store. Revisit before
+# real children use the app.
+CACHED_PICTURE = {"Cache-Control": "private, max-age=3600", "Vary": "Authorization"}
 PAGE_PENCIL_KINDS = ("page_pencil_text", "page_pencil_result")
 
 
@@ -641,7 +648,8 @@ def teacher_picture_bytes(job_id, user_id, review_id, version, asset_id=None):
         with connect() as conn:
             if review_asset(conn, job_id, user_id, review_id, version, asset_id) != selected:
                 raise HTTPException(409, "review_changed", headers=PRIVATE)
-        return Response(contents, media_type="image/png", headers=PRIVATE)
+        # A context picture's URL carries review_id and subject_version, so it names fixed bytes.
+        return Response(contents, media_type="image/png", headers=PRIVATE if asset_id is None else CACHED_PICTURE)
     except (psycopg.Error, ValueError):
         raise HTTPException(503, "image_unavailable", headers=PRIVATE) from None
 
@@ -945,10 +953,15 @@ def authorized_asset(conn, job_id: str, asset_id: str, user_id: str) -> tuple[st
 
 
 @hold_router.get("/jobs/{job_id}/images/{asset_id}")
-def job_image(job_id: UUID, asset_id: str, user=Depends(get_current_user)):
+def job_image(job_id: UUID, asset_id: str, v: str | None = None, user=Depends(get_current_user)):
+    """`v` is the picture path the caller expects. Every attempt, draw and pencil result gets its
+    own Storage path (upsert only re-writes a retried step's path before it is recorded), so a
+    matching `v` makes the URL name fixed bytes, which ADR-085 lets the browser cache."""
     try:
         with image_pool().connection() as conn:
             selected = authorized_asset(conn, str(job_id), asset_id, str(user.id))
+        if v is not None and v != selected[0]:
+            raise HTTPException(409, "image_changed", headers=PRIVATE)
         try:
             contents = providers.download_book_image(selected[0])
         except Exception:
@@ -958,7 +971,7 @@ def job_image(job_id: UUID, asset_id: str, user=Depends(get_current_user)):
                 raise HTTPException(404, "image_unavailable", headers=PRIVATE)
     except PoolTimeout:
         raise HTTPException(503, "image_unavailable", headers=PRIVATE) from None
-    return Response(contents, media_type="image/png", headers=PRIVATE)
+    return Response(contents, media_type="image/png", headers=PRIVATE if v is None else CACHED_PICTURE)
 
 
 def opened_outcome(conn, job_id: str, version_id: str, source: str = "unchosen_draw") -> str | None:

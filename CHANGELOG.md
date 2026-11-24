@@ -14,6 +14,31 @@ instead of repeating it.
 
 ---
 
+## Teacher-review pictures stay in the browser cache for an hour · 2026-11-25
+
+PR (pending). Decision: [ADR-085](docs/product/adr/ADR-085-teacher-review-pictures-may-be-browser-cached-for-an-hour.md), superseding ADR-080 Decision 7 in part.
+
+### Code
+
+- **Backend.** `GET /jobs/{id}/images/{asset}?v=<path>` and the teacher context-picture route send
+  `Cache-Control: private, max-age=3600` and `Vary: Authorization`. A `v` that is not the
+  authorized path gets `409 image_changed` (`no-store`). No `v`, JSON, errors and the held-picture
+  reveal stay `no-store`. Each request that reaches the server is still authorized twice.
+- **Frontend.** `signPaths` adds `?v=<path>` and lets the browser cache teacher-review pictures.
+  Needs-help context pictures use the browser cache; the held-picture reveal does not.
+- Revisits within an hour load instantly. First views are unchanged (~7 s per picture in
+  production). A withdrawn book stays visible for up to an hour on a device that already loaded it.
+
+### Docs
+
+- ADR-085 and its `ADRs.md` row; the ADR-080 row notes the partial supersede.
+  `docs/specs/image-loading-ux.md` §3 item 3 points to ADR-085.
+
+### Checks
+
+- Seen failing first: `test_a_teacher_review_picture_is_cacheable_only_under_its_own_path`
+  (3 cases), `test_a_teacher_context_picture_is_cacheable_but_the_held_reveal_is_not`, the updated
+  `signPaths` feature-picture test, and the Needs-help context-picture cache test.
 ## Teacher Books thumbnails no longer wait; PDF pages download together · 2026-11-25
 
 PR [#142](https://github.com/Hanseooo/story-buddy/pull/142). Follows [`docs/specs/image-loading-ux.md`](docs/specs/image-loading-ux.md) SH-01.

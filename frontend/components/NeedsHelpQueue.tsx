@@ -37,7 +37,7 @@ const control = "min-h-[44px] px-4 py-2 rounded-xl font-bold text-primary hover:
 async function reviewFetch(path: string, signal: AbortSignal, options?: RequestInit) {
   const { data: { session } } = await supabase.auth.getSession();
   return fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}${path}`, {
-    ...options, signal, cache: "no-store",
+    cache: "no-store", ...options, signal,
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
   });
 }
@@ -608,7 +608,9 @@ function ReviewPicture({ jobId, reviewId, version, picture, onChanged, onInspect
         const base = `/teacher/jobs/${jobId}/moderation-review`;
         const response = picture.state === "held"
           ? await reviewFetch(`${base}/reveal`, controller.signal, { method: "POST", body: JSON.stringify({ review_id: reviewId, subject_version: version }) })
-          : await reviewFetch(`${base}/images/${encodeURIComponent(picture.asset_id)}?review_id=${encodeURIComponent(reviewId)}&subject_version=${encodeURIComponent(version)}`, controller.signal);
+          // ADR-085: a context picture's URL names fixed bytes, so the browser may keep it for an hour.
+          // The held picture (the reveal POST above) is never cached.
+          : await reviewFetch(`${base}/images/${encodeURIComponent(picture.asset_id)}?review_id=${encodeURIComponent(reviewId)}&subject_version=${encodeURIComponent(version)}`, controller.signal, { cache: "default" });
         if ([401, 403, 409].includes(response.status)) { onChanged(); return; }
         if (!response.ok) throw new Error("image_unavailable");
         const bytes = await response.blob();

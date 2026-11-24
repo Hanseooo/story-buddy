@@ -219,6 +219,8 @@ Applies: SH-02
    than the sum of all pages.
 3. **No caching of protected pictures.** ADR-080 §72-75 requires no-store delivery and forbids signed
    links to children. Changing that needs a new ADR.
+   **Superseded 2026-11-25 by ADR-085:** picture GETs that name their exact picture (`?v=<path>`,
+   or the teacher context route) are browser-cached for an hour. Signed links stay forbidden.
 4. **Cover retry rules.** A sign or fetch failure gets one retry because it is usually transient. An
    `<img>` error does not, because `signPaths` would return the same sessionStorage URL for a
    baseline cover (*inferred rationale*; no cache bypass exists and adding one is out of scope).

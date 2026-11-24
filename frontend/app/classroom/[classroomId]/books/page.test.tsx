@@ -533,6 +533,26 @@ describe("held story inspection", () => {
     expect(JSON.parse(bodies[0])).toEqual(expect.objectContaining({ action: "stop", review_id: held.review_id }));
     vi.unstubAllGlobals();
   });
+  it("lets the browser cache context pictures for an hour but never the held picture (ADR-085)", async () => {
+    const held = { ...heldDetail, pictures: [...heldDetail.pictures, { ...heldDetail.pictures[0], asset_id: "scene-s2", state: "available", label: "Earlier page" }] };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith("/moderation-policy")) return Response.json(moderationPolicy);
+      if (url.endsWith("/moderation-review")) return Response.json(held);
+      if (url.includes("/reveal") || url.includes("/images/")) return new Response("picture");
+      return Response.json([{ review_id: held.review_id, job_id: "synthetic-job", title: held.title, held_at: "2026-10-28T00:00:00Z", ready: true }]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    URL.createObjectURL = vi.fn(() => "blob:synthetic-picture");
+    URL.revokeObjectURL = vi.fn();
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Inspect Synthetic title/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Show picture to review" }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url.includes("/images/scene-s2"))).toBe(true));
+    const cacheOf = (part: string) => (fetchMock.mock.calls.find(([url]) => url.includes(part)) as unknown as [string, RequestInit])[1].cache;
+    expect(cacheOf("/images/scene-s2")).toBe("default");
+    expect(cacheOf("/reveal")).toBe("no-store");
+    vi.unstubAllGlobals();
+  });
   it("replaces a held page pencil result once, and says when the change has used its replacement", async () => {
     const bodies: string[] = [];
     let detail: object = heldPageResult;
