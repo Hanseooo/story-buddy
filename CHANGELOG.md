@@ -16,7 +16,7 @@ instead of repeating it.
 
 ## Teacher Books thumbnails no longer wait for teacher-review downloads · 2026-11-25
 
-Direct main update. Follows [`docs/specs/image-loading-ux.md`](docs/specs/image-loading-ux.md) SH-01.
+PR [#142](https://github.com/Hanseooo/story-buddy/pull/142). Follows [`docs/specs/image-loading-ux.md`](docs/specs/image-loading-ux.md) SH-01.
 
 ### Code
 
