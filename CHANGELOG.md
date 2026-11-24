@@ -14,6 +14,22 @@ instead of repeating it.
 
 ---
 
+## Teacher Books thumbnails no longer wait for teacher-review downloads · 2026-11-25
+
+Direct main update. Follows [`docs/specs/image-loading-ux.md`](docs/specs/image-loading-ux.md) SH-01.
+
+### Code
+
+- **Teacher Books page.** Each thumbnail shows as soon as its link arrives (`signPaths` `onUrl`),
+  as the bookshelf already does. Older books' thumbnails no longer wait for teacher-review
+  thumbnails, which took about 7 s each in production. A teacher-review thumbnail whose blob was
+  revoked by a refresh goes back to the placeholder instead of a broken image.
+
+### Checks
+
+- Two tests in `books/page.test.tsx`, each seen failing first: a baseline thumbnail renders while
+  a teacher-review download is pending; a revoked teacher-review thumbnail is dropped.
+
 ## Pictures load sooner on the bookshelf and in the reader · 2026-11-24
 
 Spec: [`docs/specs/image-loading-ux.md`](docs/specs/image-loading-ux.md).

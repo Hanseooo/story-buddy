@@ -122,6 +122,37 @@ describe("teacher decision labels", () => {
     expect(screen.getByRole("button", { name: /Review story by Sam/ }).querySelector("img")).toBeNull();
     vi.unstubAllGlobals();
   });
+
+  it("drops a teacher-review thumbnail whose blob was revoked by a refresh", async () => {
+    const jobs = [makeJob({ id: "review-thumb", moderation_mode: "teacher_review_v1",
+      pages: [{ scene_id: "s1", caption: "Page 1", image_path: "review-thumb/s1.png" }] })];
+    const from = vi.fn((table: string) => ({
+      select: () => ({
+        eq: () => table === "jobs"
+          ? { order: async () => ({ data: [...jobs] }) }
+          : { single: async () => ({ data: { review_notes_enabled: false } }) },
+      }),
+    }));
+    Object.assign(supabase, { from, storage: { from: () => ({ createSignedUrls: vi.fn(async () => ({ data: [] })) }) } });
+    URL.createObjectURL = vi.fn(() => "blob:review-thumb");
+    URL.revokeObjectURL = vi.fn();
+    // The first download answers; the refresh's download never does.
+    let downloads = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (!url.includes("/images/")) return Response.json([]);
+      return ++downloads === 1 ? new Response("picture") : new Promise<Response>(() => {});
+    }));
+    try {
+      render(<BooksPage />);
+      const card = await screen.findByRole("button", { name: /Review story by Alex/ });
+      await waitFor(() => expect(card.querySelector("img")).toHaveAttribute("src", "blob:review-thumb"));
+      fireEvent(document, new Event("visibilitychange"));
+      await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:review-thumb"));
+      await waitFor(() => expect(screen.getByRole("button", { name: /Review story by Alex/ }).querySelector("img")).toBeNull());
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 vi.mock("next/navigation", () => ({ useParams: () => ({ classroomId: "synthetic-class" }) }));

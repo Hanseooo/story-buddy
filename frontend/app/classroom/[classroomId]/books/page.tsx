@@ -80,15 +80,21 @@ export default function BooksPage() {
     // One batch request, not one per thumbnail. Each thumbnail shows as it arrives,
     // so baseline ones do not wait for teacher-review downloads.
     const controller = new AbortController();
+    const blobs = new Set<string>();
     void signPaths(unsigned.map((j) => j.pages![0].image_path), unsigned, controller.signal, (path, url) => {
       if (controller.signal.aborted) return;
+      if (url.startsWith("blob:")) blobs.add(url);
       setThumbnails((prev) => {
         const next = { ...prev };
         for (const j of unsigned) if (j.pages![0].image_path === path) next[j.id] = url;
         return next;
       });
     });
-    return () => { controller.abort(); };
+    return () => {
+      // Aborting revokes this run's teacher-review blobs, so their cards go back to the placeholder.
+      controller.abort();
+      if (blobs.size) setThumbnails((prev) => Object.fromEntries(Object.entries(prev).filter(([, url]) => !blobs.has(url))));
+    };
   }, [jobs]);
 
   // ── Open dialog & sign pages ──────────────────────────────────────────────
