@@ -16,7 +16,7 @@ instead of repeating it.
 
 ## Teacher-review pictures load through signed links · 2026-11-25
 
-PR [#TBD](https://github.com/Hanseooo/story-buddy/pulls). Decision: [ADR-086](docs/product/adr/ADR-086-teacher-review-pictures-are-served-by-backend-signed-links.md), superseding ADR-080 Decision 7 and ADR-085 Decision 4 in part.
+PR [#144](https://github.com/Hanseooo/story-buddy/pull/144). Decision: [ADR-086](docs/product/adr/ADR-086-teacher-review-pictures-are-served-by-backend-signed-links.md), superseding ADR-080 Decision 7 and ADR-085 Decision 4 in part.
 
 ### Code
 
