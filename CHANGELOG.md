@@ -39,6 +39,7 @@ PR [#143](https://github.com/Hanseooo/story-buddy/pull/143). Decision: [ADR-085]
 - Seen failing first: `test_a_teacher_review_picture_is_cacheable_only_under_its_own_path`
   (3 cases), `test_a_teacher_context_picture_is_cacheable_but_the_held_reveal_is_not`, the updated
   `signPaths` feature-picture test, and the Needs-help context-picture cache test.
+
 ## Teacher Books thumbnails no longer wait; PDF pages download together · 2026-11-25
 
 PR [#142](https://github.com/Hanseooo/story-buddy/pull/142). Follows [`docs/specs/image-loading-ux.md`](docs/specs/image-loading-ux.md) SH-01.

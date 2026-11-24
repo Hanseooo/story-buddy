@@ -3,9 +3,11 @@
 TEST_MODERATION_DB_URL is deliberately separate from application credentials. These
 tests create and remove their own synthetic accounts and never use a hosted project.
 """
+import hashlib
 import os
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -2487,16 +2489,15 @@ def test_the_picture_pool_is_made_for_the_current_database_url_and_replaced_when
         second.close()
 
 
+@contextmanager
+def _no_database():
+    yield object()
+
+
 def _picture_route(monkeypatch, path="synthetic-job/s0-a1.png"):
-    """ADR-085. No database: the pool and the authorization read are its outer boundary here."""
-    from contextlib import contextmanager
-
-    class Pool:
-        @contextmanager
-        def connection(self):
-            yield object()
-
-    monkeypatch.setattr("app.moderation_hold.image_pool", lambda: Pool())
+    """ADR-085 cache headers only. `authorized_asset` is stubbed because no test database runs here or
+    in CI; the real-DB authorization tests above cover it when `TEST_MODERATION_DB_URL` is set."""
+    monkeypatch.setattr("app.moderation_hold.image_pool", lambda: SimpleNamespace(connection=_no_database))
     monkeypatch.setattr("app.moderation_hold.authorized_asset", lambda conn, job, asset, user: (path, 3))
     download = MagicMock(return_value=b"picture")
     monkeypatch.setattr("providers.download_book_image", download)
@@ -2524,13 +2525,7 @@ def test_a_teacher_review_picture_is_cacheable_only_under_its_own_path(monkeypat
 
 
 def test_a_teacher_context_picture_is_cacheable_but_the_held_reveal_is_not(monkeypatch):
-    from contextlib import contextmanager
-
-    @contextmanager
-    def connection():
-        yield object()
-
-    monkeypatch.setattr("app.moderation_hold.connect", connection)
+    monkeypatch.setattr("app.moderation_hold.connect", _no_database)
     monkeypatch.setattr("app.moderation_hold.review_asset", lambda *args: ("synthetic-job/s1-a0.png", 3))
     monkeypatch.setattr("providers.download_book_image", lambda path: b"picture")
     review = uuid4()
@@ -2539,7 +2534,6 @@ def test_a_teacher_context_picture_is_cacheable_but_the_held_reveal_is_not(monke
         client = TestClient(app)
         context = client.get(f"/teacher/jobs/{uuid4()}/moderation-review/images/scene-s1",
                              params={"review_id": str(review), "subject_version": "v1"})
-        import hashlib
         held = client.post(f"/teacher/jobs/{uuid4()}/moderation-review/reveal",
                            json={"review_id": str(review), "subject_version": hashlib.sha256(b"picture").hexdigest()})
     finally:

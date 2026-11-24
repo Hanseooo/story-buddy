@@ -954,9 +954,9 @@ def authorized_asset(conn, job_id: str, asset_id: str, user_id: str) -> tuple[st
 
 @hold_router.get("/jobs/{job_id}/images/{asset_id}")
 def job_image(job_id: UUID, asset_id: str, v: str | None = None, user=Depends(get_current_user)):
-    """`v` is the picture path the caller expects. Every attempt, draw and pencil result gets its
-    own Storage path (upsert only re-writes a retried step's path before it is recorded), so a
-    matching `v` makes the URL name fixed bytes, which ADR-085 lets the browser cache."""
+    """`v` is the picture path the caller expects. Every attempt, draw and pencil use gets its own
+    Storage path, and an upsert re-writes a path only while its single run (queue `unique=True`) has
+    not recorded it yet, so a matching `v` names fixed bytes, which ADR-085 lets the browser cache."""
     try:
         with image_pool().connection() as conn:
             selected = authorized_asset(conn, str(job_id), asset_id, str(user.id))
