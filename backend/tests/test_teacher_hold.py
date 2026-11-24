@@ -3,9 +3,11 @@
 TEST_MODERATION_DB_URL is deliberately separate from application credentials. These
 tests create and remove their own synthetic accounts and never use a hosted project.
 """
+import hashlib
 import os
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -2485,3 +2487,56 @@ def test_the_picture_pool_is_made_for_the_current_database_url_and_replaced_when
         assert second is not first and first.closed and not second.closed
     finally:
         second.close()
+
+
+@contextmanager
+def _no_database():
+    yield object()
+
+
+def _picture_route(monkeypatch, path="synthetic-job/s0-a1.png"):
+    """ADR-085 cache headers only. `authorized_asset` is stubbed because no test database runs here or
+    in CI; the real-DB authorization tests above cover it when `TEST_MODERATION_DB_URL` is set."""
+    monkeypatch.setattr("app.moderation_hold.image_pool", lambda: SimpleNamespace(connection=_no_database))
+    monkeypatch.setattr("app.moderation_hold.authorized_asset", lambda conn, job, asset, user: (path, 3))
+    download = MagicMock(return_value=b"picture")
+    monkeypatch.setattr("providers.download_book_image", download)
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
+    return download
+
+
+@pytest.mark.parametrize("v, status, cache", [
+    ("synthetic-job/s0-a1.png", 200, "private, max-age=3600"),
+    (None, 200, "private, no-store"),  # A caller that names no picture never gets a cacheable answer.
+    ("synthetic-job/s0-a0.png", 409, "private, no-store"),  # A stale page version is refused, not cached.
+])
+def test_a_teacher_review_picture_is_cacheable_only_under_its_own_path(monkeypatch, v, status, cache):
+    download = _picture_route(monkeypatch)
+    try:
+        response = TestClient(app).get(f"/jobs/{uuid4()}/images/scene-s0", params={"v": v} if v else {})
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert (response.status_code, response.headers["cache-control"]) == (status, cache)
+    if status == 200:
+        assert response.content == b"picture"
+        assert response.headers.get("vary") == ("Authorization" if v else None)
+    else:
+        download.assert_not_called()
+
+
+def test_a_teacher_context_picture_is_cacheable_but_the_held_reveal_is_not(monkeypatch):
+    monkeypatch.setattr("app.moderation_hold.connect", _no_database)
+    monkeypatch.setattr("app.moderation_hold.review_asset", lambda *args: ("synthetic-job/s1-a0.png", 3))
+    monkeypatch.setattr("providers.download_book_image", lambda path: b"picture")
+    review = uuid4()
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
+    try:
+        client = TestClient(app)
+        context = client.get(f"/teacher/jobs/{uuid4()}/moderation-review/images/scene-s1",
+                             params={"review_id": str(review), "subject_version": "v1"})
+        held = client.post(f"/teacher/jobs/{uuid4()}/moderation-review/reveal",
+                           json={"review_id": str(review), "subject_version": hashlib.sha256(b"picture").hexdigest()})
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert (context.status_code, context.headers["cache-control"], context.headers["vary"]) == (200, "private, max-age=3600", "Authorization")
+    assert (held.status_code, held.headers["cache-control"]) == (200, "private, no-store")

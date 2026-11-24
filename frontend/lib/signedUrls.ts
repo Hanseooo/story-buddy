@@ -54,8 +54,10 @@ async function fetchProtected(work: Array<[string, ProtectedAsset]>, out: Record
       const [p, selected] = work[next++];
       if (signal.aborted) return;
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${selected.jobId}/images/${encodeURIComponent(selected.assetId)}`, {
-          headers: {Authorization: `Bearer ${token}`}, cache: "no-store", signal,
+        // ADR-085: `v` names the exact picture, so the browser may keep it for an hour (the
+        // backend sends max-age=3600). A withdrawn book stays visible here until it expires.
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${selected.jobId}/images/${encodeURIComponent(selected.assetId)}?v=${encodeURIComponent(p)}`, {
+          headers: {Authorization: `Bearer ${token}`}, cache: "default", signal,
         });
         if (!response.ok) continue;
         const bytes = await response.blob();

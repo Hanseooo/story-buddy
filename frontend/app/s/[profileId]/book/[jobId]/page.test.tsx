@@ -505,7 +505,7 @@ describe("BookPage — reader (terminal-success)", () => {
     let s1Misses = 1;
     const network = vi.fn(async (url: string) => {
       if (url.endsWith("/me/notes")) return new Response("[]");
-      if (url.endsWith("/images/scene-s1") && s1Misses-- > 0) return new Response("", { status: 503 });
+      if (url.includes("/images/scene-s1?") && s1Misses-- > 0) return new Response("", { status: 503 });
       return new Response("png");
     });
     vi.stubGlobal("fetch", network);
@@ -514,7 +514,7 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
     expect(network.mock.calls.map(([url]) => url).filter((url) => url.includes("/images/"))
-      .map((url) => url.slice(url.indexOf("/jobs/")))).toEqual([
+      .map((url) => url.slice(url.indexOf("/jobs/"), url.indexOf("?")))).toEqual([
       "/jobs/j1/images/scene-s0", "/jobs/j1/images/scene-s1", "/jobs/j1/images/scene-s1",
     ]);
     expect(resetFailChain).toHaveBeenCalledTimes(1);
@@ -579,7 +579,7 @@ describe("BookPage — reader fetches only missing pages (image-loading AC-13, A
     let s1Misses = 2;
     const network = vi.fn(async (url: string) => {
       if (url.endsWith("/me/notes")) return new Response("[]");
-      if (url.endsWith("/images/scene-s1") && s1Misses-- > 0) return new Response("", { status: 503 });
+      if (url.includes("/images/scene-s1?") && s1Misses-- > 0) return new Response("", { status: 503 });
       return new Response("png");
     });
     vi.stubGlobal("fetch", network);
@@ -594,7 +594,7 @@ describe("BookPage — reader fetches only missing pages (image-loading AC-13, A
     await waitFor(() => expect(screen.queryByTestId("failure-screen")).toBeNull());
     await waitFor(() => expect(screen.getAllByRole("img").length).toBeGreaterThan(0));
     expect(network.mock.calls.map(([url]) => url).filter((url) => url.includes("/images/"))
-      .map((url) => url.slice(url.indexOf("/jobs/")))).toEqual([
+      .map((url) => url.slice(url.indexOf("/jobs/"), url.indexOf("?")))).toEqual([
       "/jobs/j1/images/scene-s0", "/jobs/j1/images/scene-s1", "/jobs/j1/images/scene-s1", "/jobs/j1/images/scene-s1",
     ]);
     expect(resetFailChain).toHaveBeenCalledTimes(1);

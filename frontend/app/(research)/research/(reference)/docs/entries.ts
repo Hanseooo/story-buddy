@@ -74,7 +74,7 @@ export const DOC_CHAPTERS: DocChapter[] = [
       {
         path: "docs/capstone/ethics_and_safety.md",
         answers: "Which ethics basis does the study rest on, and which safety features does the system have?",
-        lastChanged: "2026-11-22",
+        lastChanged: "2026-11-25",
       },
       {
         path: "docs/capstone/story_donation_consent_and_assent_draft.md",
@@ -200,7 +200,7 @@ export const DOC_CHAPTERS: DocChapter[] = [
       {
         path: "docs/product/ADRs.md",
         answers: "Which architecture decisions were made, and which are still in force?",
-        lastChanged: "2026-11-22",
+        lastChanged: "2026-11-25",
       },
       {
         path: "docs/product/adr/ADR-083-research-pages-hub-chapter-routes-and-png-diagram-export.md",

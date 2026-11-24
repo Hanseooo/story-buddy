@@ -1191,7 +1191,8 @@ peer reads use proposed `GET /jobs/{job_id}/images/{asset_id}`: a server-defined
 an exact selected reference/page, never an arbitrary Storage path. Authenticate, check current
 membership/job state/epoch and exact safety eligibility, fetch internally through `providers.py`,
 and recheck immediately before returning bytes. No redirect or bearer Storage URL to children.
-Use `Cache-Control: private, no-store`; browser fetch with the existing bearer token and render a
+Use `Cache-Control: private, no-store` (since [ADR-085](../product/adr/ADR-085-teacher-review-pictures-may-be-browser-cached-for-an-hour.md): `private, max-age=3600` when `?v=` matches
+the authorized path); browser fetch with the existing bearer token and render a
 temporary blob URL, revoked on state change/unmount. Internal provider Storage reads still use
 signed URLs. This is the narrowly proposed ADR-006 delivery amendment, not a new media service.
 
@@ -1453,7 +1454,8 @@ yet drawn. The additional owner-only
 `review_id` and `subject_version` query parameters. It accepts only an available server-selected
 reference/scene descriptor. The held descriptor is readable only by the explicit reveal POST.
 Both picture routes use internal signed Storage reads, current owner/review/epoch checks before
-and after download, and `Cache-Control: private, no-store`. Reveal additionally verifies the
+and after download, and `Cache-Control: private, no-store` (since [ADR-085](../product/adr/ADR-085-teacher-review-pictures-may-be-browser-cached-for-an-hour.md), picture GETs that name
+fixed bytes use `private, max-age=3600`; reveal stays `no-store`). Reveal additionally verifies the
 downloaded bytes against the recorded subject hash. Inspection performs no writes or generation.
 
 `NeedsHelpQueue` provides a native full-screen scrolling dialog with processed writing, missing

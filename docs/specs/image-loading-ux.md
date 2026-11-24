@@ -6,7 +6,8 @@
 `backend/app/moderation_hold.py` (`job_image` only)
 **Derived from:** performance audit and grill, 2026-11-23 (this conversation; no ticket yet) ·
 **Constrained by:** [ADR-080](../product/adr/ADR-080-teacher-held-moderation-and-exact-content-clearance.md)
-§72-75 (no-store delivery, re-check before response, no signed links to children),
+§72-75 (no-store delivery, re-check before response, no signed links to children; no-store for
+picture GETs superseded by [ADR-085](../product/adr/ADR-085-teacher-review-pictures-may-be-browser-cached-for-an-hour.md)),
 [ADR-025](../product/adr/ADR-025-provider-resilience-failure-mode-policy-d-c.md) (never a partial
 book), ADR-033 (worker checkpointer connection), [`kid-flow-book-persistence.md`](kid-flow-book-persistence.md)
 §4.4, [`kid-flow-reader-and-wait-states.md`](kid-flow-reader-and-wait-states.md) §4.3, §4.5
@@ -152,7 +153,8 @@ Applies: SH-02
   - Non-teacher-review paths keep their sessionStorage cache and single `createSignedUrls` batch.
   - Every caller inherits this: bookshelf, reader, process page, teacher books page and `GuardedCover`.
 - **SH-02 — ADR-080 delivery is untouched.**
-  - Protected responses stay `Cache-Control: private, no-store`.
+  - Protected responses stay `Cache-Control: private, no-store`. Superseded 2026-11-25 by [ADR-085](../product/adr/ADR-085-teacher-review-pictures-may-be-browser-cached-for-an-hour.md):
+    a picture GET whose `?v=` matches the authorized path is `private, max-age=3600`.
   - No signed Storage link reaches the child.
   - Protected pictures never enter the sessionStorage cache.
   - Blob URLs are revoked when the caller's signal aborts. This includes a blob created after the
@@ -219,6 +221,8 @@ Applies: SH-02
    than the sum of all pages.
 3. **No caching of protected pictures.** ADR-080 §72-75 requires no-store delivery and forbids signed
    links to children. Changing that needs a new ADR.
+   **Superseded 2026-11-25 by ADR-085:** picture GETs that name their exact picture (`?v=<path>`,
+   or the teacher context route) are browser-cached for an hour. Signed links stay forbidden.
 4. **Cover retry rules.** A sign or fetch failure gets one retry because it is usually transient. An
    `<img>` error does not, because `signPaths` would return the same sessionStorage URL for a
    baseline cover (*inferred rationale*; no cache bypass exists and adding one is out of scope).
@@ -318,7 +322,7 @@ Applies: SH-02
 | Grill Q5 A (reopened): parallel, retry only failed, all-or-nothing | AC-12–AC-16, SH-05 |
 | Audit #7: leaner shelf query | §5.8 |
 | Seams 1–4 confirmed | §6 |
-| ADR-080: no-store, re-check, no signed links | SH-02, AC-20, §5.3 |
+| ADR-080: no-store (pictures: ADR-085), re-check, no signed links | SH-02, AC-20, §5.3 |
 | ADR-025 / book-persistence §4.4: never partial | SH-05, AC-16 |
 | Reader spec §4.3 / §4.5: read-failed screen, counter | AC-14, AC-15 |
 | Exclusions: caching, batch endpoint, thumbnails, getClaims, lazy covers | §1 Excluded |

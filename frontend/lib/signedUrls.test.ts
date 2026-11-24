@@ -30,8 +30,9 @@ describe("signPaths", () => {
     ]}], controller.signal);
     expect(urls).toEqual({"j/s0-1.png": "blob:feature-image"});
     expect(mockCreateSignedUrls).not.toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/jobs/j/images/scene-s0"), expect.objectContaining({
-      cache: "no-store", headers: {Authorization: "Bearer test-token"},
+    // ADR-085: the picture path in `v` names the exact bytes, so the browser may cache them for an hour.
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/jobs\/j\/images\/scene-s0\?v=j%2Fs0-1\.png$/), expect.objectContaining({
+      cache: "default", headers: {Authorization: "Bearer test-token"},
     }));
     controller.abort();
     expect(revoke).toHaveBeenCalledWith("blob:feature-image");
@@ -100,8 +101,8 @@ describe("signPaths", () => {
     it("leaves out a picture that fails and returns the others", async () => {
       mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
       vi.spyOn(global, "fetch").mockImplementation(async (url) => {
-        if (String(url).endsWith("/scene-s1")) return new Response("server error", {status: 500});
-        if (String(url).endsWith("/scene-s2")) throw new TypeError("network");
+        if (String(url).includes("/scene-s1?")) return new Response("server error", {status: 500});
+        if (String(url).includes("/scene-s2?")) throw new TypeError("network");
         return {ok: true, blob: async () => new Blob(["image"])} as Response;
       });
       vi.stubGlobal("URL", Object.assign(URL, {createObjectURL: vi.fn(() => `blob:${Math.random()}`), revokeObjectURL: vi.fn()}));
@@ -115,7 +116,7 @@ describe("signPaths", () => {
       let release!: () => void;
       const late = new Promise<void>(resolve => { release = resolve; });
       vi.spyOn(global, "fetch").mockImplementation(async (url) => ({ok: true, blob: async () => {
-        if (String(url).endsWith("/scene-s1")) await late;
+        if (String(url).includes("/scene-s1?")) await late;
         return new Blob(["image"]);
       }} as Response));
       let n = 0;
@@ -137,7 +138,7 @@ describe("signPaths", () => {
       mockSession.mockResolvedValue({data: {session: {access_token: "test-token"}}});
       mockCreateSignedUrls.mockResolvedValue({data: [{path: "fresh.png", signedUrl: "https://cdn/fresh", error: null}], error: null});
       let release!: (r: Response) => void;
-      vi.spyOn(global, "fetch").mockImplementation(async (url) => String(url).endsWith("/scene-s1")
+      vi.spyOn(global, "fetch").mockImplementation(async (url) => String(url).includes("/scene-s1?")
         ? new Promise<Response>(resolve => { release = resolve; })
         : ({ok: true, blob: async () => new Blob(["image"])} as Response));
       let n = 0;
