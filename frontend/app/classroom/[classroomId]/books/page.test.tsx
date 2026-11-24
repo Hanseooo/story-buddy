@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { imageLinksResponse } from "@/lib/imageLinksFake";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { jobState, type Job } from "@/lib/types/jobs";
 import BooksPage, { FailedBookRow } from "./page";
@@ -123,7 +124,7 @@ describe("teacher decision labels", () => {
     vi.unstubAllGlobals();
   });
 
-  it("drops a teacher-review thumbnail whose blob was revoked by a refresh", async () => {
+  it("keeps a teacher-review thumbnail across a refresh, reusing its signed link (ADR-086)", async () => {
     const jobs = [makeJob({ id: "review-thumb", moderation_mode: "teacher_review_v1",
       pages: [{ scene_id: "s1", caption: "Page 1", image_path: "review-thumb/s1.png" }] })];
     const from = vi.fn((table: string) => ({
@@ -134,21 +135,18 @@ describe("teacher decision labels", () => {
       }),
     }));
     Object.assign(supabase, { from, storage: { from: () => ({ createSignedUrls: vi.fn(async () => ({ data: [] })) }) } });
-    URL.createObjectURL = vi.fn(() => "blob:review-thumb");
-    URL.revokeObjectURL = vi.fn();
-    // The first download answers; the refresh's download never does.
-    let downloads = 0;
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-      if (!url.includes("/images/")) return Response.json([]);
-      return ++downloads === 1 ? new Response("picture") : new Promise<Response>(() => {});
-    }));
+    const network = vi.fn(async (url: string) => url.includes("/image-links?")
+      ? imageLinksResponse(url, { "scene-s1": "review-thumb/s1.png" }) : Response.json([]));
+    vi.stubGlobal("fetch", network);
     try {
       render(<BooksPage />);
       const card = await screen.findByRole("button", { name: /Review story by Alex/ });
-      await waitFor(() => expect(card.querySelector("img")).toHaveAttribute("src", "blob:review-thumb"));
+      await waitFor(() => expect(card.querySelector("img")).toHaveAttribute("src", "https://cdn.test/review-thumb/s1.png"));
       fireEvent(document, new Event("visibilitychange"));
-      await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:review-thumb"));
-      await waitFor(() => expect(screen.getByRole("button", { name: /Review story by Alex/ }).querySelector("img")).toBeNull());
+      await waitFor(() => expect(from).toHaveBeenCalledTimes(4));
+      expect(screen.getByRole("button", { name: /Review story by Alex/ }).querySelector("img"))
+        .toHaveAttribute("src", "https://cdn.test/review-thumb/s1.png");
+      expect(network.mock.calls.filter(([url]) => url.includes("/image-links?"))).toHaveLength(1);
     } finally {
       vi.unstubAllGlobals();
     }

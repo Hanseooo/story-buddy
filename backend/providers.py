@@ -586,6 +586,12 @@ def get_signed_url(path: str, expires_in: int = 300) -> str:
     return resp["signedURL"]
 
 
+def get_signed_urls(paths: list[str], expires_in: int) -> dict[str, str]:
+    """One Storage call for many paths (ADR-086). A path Storage refused is left out, not raised."""
+    resp = get_supabase_client().storage.from_(_STORAGE_BUCKET).create_signed_urls(paths, expires_in=expires_in)
+    return {item["path"]: item["signedURL"] for item in resp if item["signedURL"] and not item["error"]}
+
+
 def download_book_image(path: str) -> bytes:
     """Bounded private Storage read for on-demand PDF export. Never follows redirects."""
     from app.config import PDF_IMAGE_FETCH_TIMEOUT_SECONDS, PDF_MAX_IMAGE_BYTES

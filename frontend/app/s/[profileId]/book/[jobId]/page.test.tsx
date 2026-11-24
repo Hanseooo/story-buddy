@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, onTestFinished } from "vitest";
+import { imageLinksResponse } from "@/lib/imageLinksFake";
 import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import BookPage from "./page";
 
@@ -76,6 +77,9 @@ const COMPLETE_ROW = {
   failure_reason: null, input_text: "x", title: "A Very Long Title That Keeps Going And Going", style_preset_id: null, pages: PAGES, reveal: null,
   approved_at: "2026-10-21T00:00:00Z", rejected_at: null,
 };
+
+// ADR-086: what the fake `/image-links` route signs for this book's teacher-review assets.
+const LINKED = { "scene-s0": "j1/s0-1.png", "scene-s1": "j1/s1-1.png", "page-version-s0-attempt-0": "j1/s0-0.png" };
 
 const SIGNED = PAGES.map((p, i) => ({ signedUrl: `https://cdn/${i}.png`, error: null }));
 
@@ -498,14 +502,10 @@ describe("BookPage — reader (terminal-success)", () => {
   it("a teacher-review page that misses once is the only page fetched again (image-loading AC-13)", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: { ...COMPLETE_ROW, moderation_mode: "teacher_review_v1" } }));
     mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
-    const { createObjectURL, revokeObjectURL } = URL;
-    onTestFinished(() => { Object.assign(URL, { createObjectURL, revokeObjectURL }); });
-    URL.createObjectURL = vi.fn(() => `blob:${Math.random()}`);
-    URL.revokeObjectURL = vi.fn();
     let s1Misses = 1;
     const network = vi.fn(async (url: string) => {
       if (url.endsWith("/me/notes")) return new Response("[]");
-      if (url.includes("/images/scene-s1?") && s1Misses-- > 0) return new Response("", { status: 503 });
+      if (url.includes("/image-links?")) return imageLinksResponse(url, LINKED, (asset) => asset === "scene-s1" && s1Misses-- > 0);
       return new Response("png");
     });
     vi.stubGlobal("fetch", network);
@@ -513,9 +513,9 @@ describe("BookPage — reader (terminal-success)", () => {
     await renderAndSwitchToPages(makeParams("j1"));
 
     await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
-    expect(network.mock.calls.map(([url]) => url).filter((url) => url.includes("/images/"))
-      .map((url) => url.slice(url.indexOf("/jobs/"), url.indexOf("?")))).toEqual([
-      "/jobs/j1/images/scene-s0", "/jobs/j1/images/scene-s1", "/jobs/j1/images/scene-s1",
+    expect(network.mock.calls.map(([url]) => url).filter((url) => url.includes("/image-links"))
+      .map((url) => url.slice(url.indexOf("/jobs/")))).toEqual([
+      "/jobs/j1/image-links?asset=scene-s0&asset=scene-s1", "/jobs/j1/image-links?asset=scene-s1",
     ]);
     expect(resetFailChain).toHaveBeenCalledTimes(1);
   });
@@ -572,14 +572,10 @@ describe("BookPage — reader fetches only missing pages (image-loading AC-13, A
   it("the read-failure re-sign fetches only the teacher-review page still missing", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: { ...COMPLETE_ROW, moderation_mode: "teacher_review_v1" } }));
     mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
-    const { createObjectURL, revokeObjectURL } = URL;
-    onTestFinished(() => { Object.assign(URL, { createObjectURL, revokeObjectURL }); });
-    URL.createObjectURL = vi.fn(() => `blob:${Math.random()}`);
-    URL.revokeObjectURL = vi.fn();
     let s1Misses = 2;
     const network = vi.fn(async (url: string) => {
       if (url.endsWith("/me/notes")) return new Response("[]");
-      if (url.includes("/images/scene-s1?") && s1Misses-- > 0) return new Response("", { status: 503 });
+      if (url.includes("/image-links?")) return imageLinksResponse(url, LINKED, (asset) => asset === "scene-s1" && s1Misses-- > 0);
       return new Response("png");
     });
     vi.stubGlobal("fetch", network);
@@ -593,9 +589,9 @@ describe("BookPage — reader fetches only missing pages (image-loading AC-13, A
 
     await waitFor(() => expect(screen.queryByTestId("failure-screen")).toBeNull());
     await waitFor(() => expect(screen.getAllByRole("img").length).toBeGreaterThan(0));
-    expect(network.mock.calls.map(([url]) => url).filter((url) => url.includes("/images/"))
-      .map((url) => url.slice(url.indexOf("/jobs/"), url.indexOf("?")))).toEqual([
-      "/jobs/j1/images/scene-s0", "/jobs/j1/images/scene-s1", "/jobs/j1/images/scene-s1", "/jobs/j1/images/scene-s1",
+    expect(network.mock.calls.map(([url]) => url).filter((url) => url.includes("/image-links"))
+      .map((url) => url.slice(url.indexOf("/jobs/")))).toEqual([
+      "/jobs/j1/image-links?asset=scene-s0&asset=scene-s1", "/jobs/j1/image-links?asset=scene-s1", "/jobs/j1/image-links?asset=scene-s1",
     ]);
     expect(resetFailChain).toHaveBeenCalledTimes(1);
   });
@@ -634,7 +630,7 @@ describe("BookPage — other versions of a page (magic pencil 09)", () => {
         return new Response(JSON.stringify({ versions: [{ version_id: "s0-attempt-0", image_path: "j1/s0-0.png" }], unavailable: 0 }));
       }
       if (url.endsWith("/pages/s0/version")) return choose();
-      if (url.includes("/images/")) return new Response("png");
+      if (url.includes("/image-links?")) return imageLinksResponse(url, LINKED);
       throw new Error(`unexpected ${url} ${init?.method}`);
     });
     vi.stubGlobal("fetch", network);
@@ -698,7 +694,7 @@ describe("BookPage — other versions of a page (magic pencil 09)", () => {
   it("shows the load error when moderation is unavailable", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
     vi.stubGlobal("fetch", vi.fn(async (url: string) => url.endsWith("/me/notes") ? new Response("[]")
-      : url.includes("/images/") ? new Response("png") : new Response(null, { status: 503 })));
+      : url.includes("/image-links?") ? imageLinksResponse(url, LINKED) : new Response(null, { status: 503 })));
     await renderAndSwitchToPages(makeParams());
     fireEvent.click(await screen.findByRole("button", { name: "Other versions of page 1" }));
     expect(await screen.findByText("We couldn't load this picture right now.")).toBeDefined();
@@ -725,7 +721,8 @@ describe("BookPage — magic pencil on a finished page (magic pencil 10)", () =>
       const answer = respond(url, init);
       if (answer) return answer;
       if (url.endsWith("/pages/pencil")) return Response.json(statuses.length > 1 ? statuses.shift() : statuses[0]);
-      if (url.includes("/images/")) return new Response("png");
+      if (url.includes("/image-links?")) return imageLinksResponse(url, LINKED);
+      if (url.includes("/images/")) return new Response("png");  // the pencil result still uses the picture route
       throw new Error(`unexpected ${url} ${init?.method}`);
     });
     vi.stubGlobal("fetch", network);

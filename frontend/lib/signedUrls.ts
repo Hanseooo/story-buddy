@@ -35,42 +35,37 @@ function save(cache: Record<string, Entry>) {
   }
 }
 
-// Per call, never shared across calls (image-loading spec §5.6, an assumed value).
-const CONCURRENCY = 4;
-
-async function fetchProtected(work: Array<[string, ProtectedAsset]>, out: Record<string, string>, signal: AbortSignal, onUrl?: OnUrl) {
+// ADR-086: one backend call per teacher-review job returns links it signed for exactly the authorized
+// paths. Each link is a bearer grant for up to an hour, cached like an older book's link.
+async function fetchLinks(byJob: Map<string, Map<string, Set<string>>>, out: Record<string, string>,
+  cache: Record<string, Entry>, now: number, signal?: AbortSignal, onUrl?: OnUrl) {
   let session;
   try {
     ({ data: { session } } = await supabase.auth.getSession());
   } catch {
     return;
   }
-  if (!session || signal.aborted) return;
+  if (!session || signal?.aborted) return;
   const token = session.access_token;
-  let next = 0;
-  const worker = async () => {
-    // Each worker takes the next item synchronously, so requests start in path order.
-    while (next < work.length) {
-      const [p, selected] = work[next++];
-      if (signal.aborted) return;
-      try {
-        // ADR-085: `v` names the exact picture, so the browser may keep it for an hour (the
-        // backend sends max-age=3600). A withdrawn book stays visible here until it expires.
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${selected.jobId}/images/${encodeURIComponent(selected.assetId)}?v=${encodeURIComponent(p)}`, {
-          headers: {Authorization: `Bearer ${token}`}, cache: "default", signal,
-        });
-        if (!response.ok) continue;
-        const bytes = await response.blob();
-        // A listener added after the abort never fires, so a late blob gets no URL at all (SH-02).
-        if (signal.aborted) continue;
-        const url = URL.createObjectURL(bytes);
-        signal.addEventListener("abort", () => URL.revokeObjectURL(url), {once: true});
-        out[p] = url;
-        onUrl?.(p, url);
-      } catch { /* Caller retains its established image error/retry state. */ }
-    }
-  };
-  await Promise.all(Array.from({length: Math.min(CONCURRENCY, work.length)}, worker));
+  await Promise.all([...byJob].map(async ([jobId, assets]) => {
+    try {
+      const query = new URLSearchParams([...assets.keys()].map(a => ["asset", a]));
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/jobs/${jobId}/image-links?${query}`, {
+        headers: {Authorization: `Bearer ${token}`}, signal,
+      });
+      if (!response.ok) return;
+      const {links} = await response.json() as {links: Array<{asset_id: string; path: string; url: string}>};
+      if (signal?.aborted) return;
+      for (const {asset_id, path, url} of links) {
+        // Accept only a path this call asked for under that asset.
+        if (!url || !assets.get(asset_id)?.has(path)) continue;
+        out[path] = url;
+        cache[path] = { url, exp: now + TTL * 1000 - SKEW_MS };
+        onUrl?.(path, url);
+      }
+      save(cache);
+    } catch { /* Caller retains its established image error/retry state. */ }
+  }));
 }
 
 /**
@@ -100,30 +95,27 @@ export async function signPaths(paths: string[], jobs: ImageJob[] = [], signal?:
     for (const v of job.page_versions ?? []) protectedPaths.set(v.image_path, {jobId: job.id, assetId: `page-version-${v.version_id}`});
   }
 
-  const work: Array<[string, ProtectedAsset]> = [];
+  const byJob = new Map<string, Map<string, Set<string>>>();
   for (const p of new Set(paths)) {
-    // No cached Storage link, signing request or sessionStorage blob for feature jobs.
     const selected = protectedPaths.get(p);
-    if (selected) {
-      delete cache[p];
-      if (signal && !signal.aborted) work.push([p, selected]);
-      continue;
-    }
-    if (jobs.some(j => j.moderation_mode === "teacher_review_v1" && p.startsWith(`${j.id}/`))) continue;
+    // Other paths in a teacher-review job are never signed: only the backend signs there (ADR-080, ADR-086).
+    if (!selected && jobs.some(j => j.moderation_mode === "teacher_review_v1" && p.startsWith(`${j.id}/`))) continue;
     const hit = cache[p];
     if (hit && hit.exp > now) {
       out[p] = hit.url;
       onUrl?.(p, hit.url);
+    } else if (selected) {
+      if (signal?.aborted) continue;
+      const assets = byJob.get(selected.jobId) ?? new Map<string, Set<string>>();
+      assets.set(selected.assetId, (assets.get(selected.assetId) ?? new Set()).add(p));
+      byJob.set(selected.jobId, assets);
     } else missing.push(p);
   }
 
-  // Protected paths only delete cache entries, so the cache can be saved before they download.
-  save(cache);
-
-  // Baseline links do not wait for protected downloads, so a mixed shelf fills in sooner.
-  // allSettled: a signing error rejects only after every download has delivered or failed.
+  // Baseline links do not wait for teacher-review links, so a mixed shelf fills in sooner.
+  // allSettled: a signing error rejects only after every book's links have delivered or failed.
   const results = await Promise.allSettled([
-    work.length > 0 && signal ? fetchProtected(work, out, signal, onUrl) : undefined,
+    byJob.size > 0 ? fetchLinks(byJob, out, cache, now, signal, onUrl) : undefined,
     signMissing(),
   ]);
   for (const r of results) if (r.status === "rejected") throw r.reason;

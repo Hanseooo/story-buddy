@@ -78,23 +78,17 @@ export default function BooksPage() {
     if (!unsigned.length) return;
 
     // One batch request, not one per thumbnail. Each thumbnail shows as it arrives,
-    // so baseline ones do not wait for teacher-review downloads.
+    // so baseline ones do not wait for teacher-review links.
     const controller = new AbortController();
-    const blobs = new Set<string>();
     void signPaths(unsigned.map((j) => j.pages![0].image_path), unsigned, controller.signal, (path, url) => {
       if (controller.signal.aborted) return;
-      if (url.startsWith("blob:")) blobs.add(url);
       setThumbnails((prev) => {
         const next = { ...prev };
         for (const j of unsigned) if (j.pages![0].image_path === path) next[j.id] = url;
         return next;
       });
     });
-    return () => {
-      // Aborting revokes this run's teacher-review blobs, so their cards go back to the placeholder.
-      controller.abort();
-      if (blobs.size) setThumbnails((prev) => Object.fromEntries(Object.entries(prev).filter(([, url]) => !blobs.has(url))));
-    };
+    return () => controller.abort();
   }, [jobs]);
 
   // ── Open dialog & sign pages ──────────────────────────────────────────────
@@ -115,7 +109,8 @@ export default function BooksPage() {
     // Deciding auto-advances to the next pending book, so warm its URLs now —
     // otherwise every Approve costs the teacher a signing round trip they watch.
     const next = pendingJobs.find((j) => j.id !== jobId);
-    if (next?.pages?.length && next.moderation_mode !== "teacher_review_v1") void signPaths(next.pages.map((p) => p.image_path));
+    // Teacher-review links are cached like baseline ones (ADR-086), so both kinds warm.
+    if (next?.pages?.length) void signPaths(next.pages.map((p) => p.image_path), [next]);
   }
 
   // ── Decision ─────────────────────────────────────────────────────────────

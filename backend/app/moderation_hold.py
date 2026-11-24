@@ -9,7 +9,7 @@ from uuid import UUID, uuid5
 from typing import Literal
 
 import psycopg
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from langgraph.checkpoint.postgres import PostgresSaver
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 import providers
 from providers import check_text
 from app.auth import get_current_user
-from app.config import settings
+from app.config import IMAGE_BUDGET, settings
 from app.moderation_policy import OPTIONAL_THEMES, POLICY, TEACHER_MODERATION_CRITERIA, TEACHER_MODERATION_POLICY_VERSION
 from app.queue import get_queue
 from contracts.story_memory import StoryMemory
@@ -40,6 +40,8 @@ PRIVATE = {"Cache-Control": "private, no-store"}
 # real children use the app.
 CACHED_PICTURE = {"Cache-Control": "private, max-age=3600", "Vary": "Authorization"}
 PAGE_PENCIL_KINDS = ("page_pencil_text", "page_pencil_result")
+# ADR-086: older books' link lifetime. Every picture a book holds was a paid draw, so IMAGE_BUDGET bounds a list.
+SIGNED_LINK_SECONDS = 3600
 
 
 class ModerationSettingsRequest(BaseModel):
@@ -888,6 +890,15 @@ def job_state(job_id: UUID, response: Response, user=Depends(get_current_user)):
 
 
 def authorized_asset(conn, job_id: str, asset_id: str, user_id: str) -> tuple[str, int]:
+    paths, epoch = authorized_assets(conn, job_id, {asset_id}, user_id)
+    if asset_id not in paths:
+        raise HTTPException(404, "image_unavailable", headers=PRIVATE)
+    return paths[asset_id], epoch
+
+
+def authorized_assets(conn, job_id: str, asset_ids: set[str], user_id: str) -> tuple[dict[str, str], int]:
+    """`authorized_asset`'s rules for many ids with one checkpoint load (ADR-086). Job-level failures raise
+    404; an asset the caller may not see is absent from the returned map."""
     job = product_job(conn, job_id, user_id)
     if (job["moderation_mode"] != "teacher_review_v1"
             or job["status"] not in ("awaiting_confirm", "complete")
@@ -905,17 +916,18 @@ def authorized_asset(conn, job_id: str, asset_id: str, user_id: str) -> tuple[st
             or any(c.canonical_ref_image and c.ref_moderation_status not in ("passed", "teacher_allowed")
                    for c in state.characters)):
         raise HTTPException(404, "image_unavailable", headers=PRIVATE)
-    path = None
+    # Later matches overwrite earlier ones, as the single-asset loop did; a None path is dropped at the end.
+    paths: dict[str, str | None] = {}
     if job["status"] == "awaiting_confirm" and str(job["profile_id"]) == user_id:
         for char in state.characters:
-            if asset_id == f"ref-{char.char_id}" and char.ref_moderation_status in ("passed", "teacher_allowed"):
-                path = char.canonical_ref_image
+            if f"ref-{char.char_id}" in asset_ids and char.ref_moderation_status in ("passed", "teacher_allowed"):
+                paths[f"ref-{char.char_id}"] = char.canonical_ref_image
             for version in char.versions if has_versions(state) else []:
-                if asset_id == f"version-{version.version_id}" and (
+                if f"version-{version.version_id}" in asset_ids and (
                         version.ref_moderation_status == "passed" or (
                             version.ref_moderation_status is None
                             and opened_outcome(conn, job_id, version.version_id) == "passed")):
-                    path = version.image_path
+                    paths[f"version-{version.version_id}"] = version.image_path
     elif job["status"] == "complete":
         if any(s.moderation_status not in ("passed", "teacher_allowed") or not any(
             a.image_ref == s.final_image_ref and a.safety_eligibility in ("cleared", "teacher_allowed")
@@ -927,14 +939,15 @@ def authorized_asset(conn, job_id: str, asset_id: str, user_id: str) -> tuple[st
         pages = {p.get("scene_id"): p.get("image_path") for p in job["pages"] or [] if isinstance(p, dict)}
         for scene in state.scenes:
             for index, attempt in enumerate(scene.attempts):
-                if asset_id == f"scene-{scene.scene_id}" and attempt.image_ref == pages.get(scene.scene_id) and (
+                if f"scene-{scene.scene_id}" in asset_ids and attempt.image_ref == pages.get(scene.scene_id) and (
                         (attempt.image_ref == scene.final_image_ref
                          and attempt.safety_eligibility in ("cleared", "teacher_allowed"))
                         or (has_versions(state) and page_version_cleared(conn, job_id, scene, index))):
-                    path = attempt.image_ref
-                if (asset_id == f"page-version-{page_version_id(scene, index)}" and str(job["profile_id"]) == user_id
+                    paths[f"scene-{scene.scene_id}"] = attempt.image_ref
+                version = f"page-version-{page_version_id(scene, index)}"
+                if (version in asset_ids and str(job["profile_id"]) == user_id
                         and has_versions(state) and page_version_cleared(conn, job_id, scene, index)):
-                    path = attempt.image_ref
+                    paths[version] = attempt.image_ref
         # magic-pencil 10: a page pencil result is shown once output moderation passed it or a teacher
         # allowed it. A teacher-allowed result is never another version (ticket 04), only the kept page.
         for use in conn.execute("""select * from job_picture_records where job_id=%s and kind='pencil'
@@ -942,14 +955,15 @@ def authorized_asset(conn, job_id: str, asset_id: str, user_id: str) -> tuple[st
                                 (job_id,)).fetchall() if has_versions(state) else []:
             if use["picture_moderation"] != "passed" and use["choice"] == "old":
                 continue
-            if asset_id == f"scene-{use['target_id']}" and use["image_path"] == pages.get(use["target_id"]):
-                path = use["image_path"]
-            if (str(job["profile_id"]) == user_id and (asset_id == f"page-pencil-{use['version_id']}" or (
-                    asset_id == f"page-version-{use['version_id']}" and use in page_pencil_versions(conn, job_id)))):
-                path = use["image_path"]
-    if not path or not path.startswith(f"{job_id}/"):
-        raise HTTPException(404, "image_unavailable", headers=PRIVATE)
-    return path, job["generation_epoch"]
+            if f"scene-{use['target_id']}" in asset_ids and use["image_path"] == pages.get(use["target_id"]):
+                paths[f"scene-{use['target_id']}"] = use["image_path"]
+            if str(job["profile_id"]) == user_id:
+                if f"page-pencil-{use['version_id']}" in asset_ids:
+                    paths[f"page-pencil-{use['version_id']}"] = use["image_path"]
+                if (f"page-version-{use['version_id']}" in asset_ids
+                        and use in page_pencil_versions(conn, job_id)):
+                    paths[f"page-version-{use['version_id']}"] = use["image_path"]
+    return {a: p for a, p in paths.items() if p and p.startswith(f"{job_id}/")}, job["generation_epoch"]
 
 
 @hold_router.get("/jobs/{job_id}/images/{asset_id}")
@@ -972,6 +986,29 @@ def job_image(job_id: UUID, asset_id: str, v: str | None = None, user=Depends(ge
     except PoolTimeout:
         raise HTTPException(503, "image_unavailable", headers=PRIVATE) from None
     return Response(contents, media_type="image/png", headers=PRIVATE if v is None else CACHED_PICTURE)
+
+
+@hold_router.get("/jobs/{job_id}/image-links")
+def job_image_links(job_id: UUID, response: Response, asset: list[str] = Query(default=[]),
+                    user=Depends(get_current_user)):
+    """ADR-086. Signs only paths authorization returned, never one the caller sent, and leaves out an
+    asset whose path or epoch moved while signing. Each link is a bearer grant for an hour."""
+    if not asset or len(asset) > IMAGE_BUDGET:
+        raise HTTPException(422, "invalid_assets", headers=PRIVATE)
+    try:
+        with image_pool().connection() as conn:
+            paths, epoch = authorized_assets(conn, str(job_id), set(asset), str(user.id))
+        try:
+            urls = providers.get_signed_urls(sorted(set(paths.values())), SIGNED_LINK_SECONDS) if paths else {}
+        except Exception:
+            raise HTTPException(503, "image_unavailable", headers=PRIVATE) from None
+        with image_pool().connection() as conn:
+            again = authorized_assets(conn, str(job_id), set(paths), str(user.id)) if paths else ({}, epoch)
+    except PoolTimeout:
+        raise HTTPException(503, "image_unavailable", headers=PRIVATE) from None
+    response.headers.update(PRIVATE)
+    return {"links": [{"asset_id": a, "path": paths[a], "url": urls[paths[a]]} for a in dict.fromkeys(asset)
+                      if a in paths and again[1] == epoch and again[0].get(a) == paths[a] and paths[a] in urls]}
 
 
 def opened_outcome(conn, job_id: str, version_id: str, source: str = "unchosen_draw") -> str | None:

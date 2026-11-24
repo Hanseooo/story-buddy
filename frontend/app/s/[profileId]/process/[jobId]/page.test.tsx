@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { imageLinksResponse } from "@/lib/imageLinksFake";
 import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import ProcessingPage from "./page";
 // Captured from test_teacher_hold's synthetic real graph/Postgres stopped response.
@@ -846,7 +847,7 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
 });
 
 describe("ProcessingPage — other versions (magic pencil ticket 04)", () => {
-  // A feature job: pictures arrive as authenticated bytes through the guarded product route.
+  // A feature job: pictures arrive as backend-signed links (ADR-086).
   const VERSION_ROW = {
     ...PAUSED_ROW, moderation_mode: "teacher_review_v1",
     reveal: { taps_left: 1, characters: [{
@@ -856,11 +857,10 @@ describe("ProcessingPage — other versions (magic pencil ticket 04)", () => {
   };
 
   function serve({ versionFails = false, confirm }: { versionFails?: boolean; confirm?: Promise<Response> } = {}) {
-    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:picture"), revokeObjectURL: vi.fn() }));
     global.fetch = vi.fn((url: string) => {
       if (url.endsWith("/confirm")) return confirm ?? Promise.resolve({ ok: true, status: 200 } as Response);
-      if (versionFails && url.includes("/images/version-")) return Promise.resolve({ ok: false, status: 503 } as Response);
-      return Promise.resolve({ ok: true, blob: async () => new Blob(["image"]) } as Response);
+      return Promise.resolve(imageLinksResponse(url, { "ref-c0": "j1/ref-c0-2.png", "version-ref-c0-1": "j1/ref-c0-1.png" },
+        (asset) => versionFails && asset.startsWith("version-")));
     }) as unknown as typeof fetch;
   }
 
@@ -939,10 +939,9 @@ describe("ProcessingPage — unchosen draws moderated on open (magic pencil tick
   };
 
   function serve(opened: { versions: Array<{ version_id: string; image_path: string }>; unavailable: number }) {
-    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:picture"), revokeObjectURL: vi.fn() }));
     global.fetch = vi.fn((url: string) => {
       if (url.endsWith("/versions/open")) return Promise.resolve({ ok: true, json: async () => opened } as Response);
-      return Promise.resolve({ ok: true, blob: async () => new Blob(["image"]) } as Response);
+      return Promise.resolve(imageLinksResponse(url, { "ref-c0": "j1/ref-c0-1.png", "version-ref-c0-1-u1": "j1/ref-c0-1-u1.png" }));
     }) as unknown as typeof fetch;
   }
 
@@ -958,7 +957,7 @@ describe("ProcessingPage — unchosen draws moderated on open (magic pencil tick
     expect(openCalls()).toHaveLength(1);
     expect(String(openCalls()[0][0])).toContain("/jobs/j1/characters/c0/versions/open");
     expect(openCalls()[0][1]?.method).toBe("POST");
-    expect(vi.mocked(global.fetch).mock.calls.some(([url]) => String(url).includes("/images/version-ref-c0-1-u1"))).toBe(true);
+    expect(vi.mocked(global.fetch).mock.calls.some(([url]) => String(url).includes("/image-links?asset=version-ref-c0-1-u1"))).toBe(true);
     expect(screen.getByText("We couldn't load this picture right now.")).toBeDefined();
   });
 
@@ -986,10 +985,9 @@ describe("ProcessingPage — magic pencil (ticket 06)", () => {
   });
 
   function serve(confirm?: Promise<Response>) {
-    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:picture"), revokeObjectURL: vi.fn() }));
     global.fetch = vi.fn((url: string) => {
       if (url.endsWith("/confirm")) return confirm ?? Promise.resolve({ ok: true, status: 200 } as Response);
-      return Promise.resolve({ ok: true, blob: async () => new Blob(["image"]) } as Response);
+      return Promise.resolve(imageLinksResponse(url, { "ref-c0": "j1/ref-c0-1.png", "version-ref-c0-1": "j1/ref-c0-1.png" }));
     }) as unknown as typeof fetch;
   }
   const confirmCalls = () => vi.mocked(global.fetch).mock.calls.filter(([url]) => String(url).endsWith("/confirm"));

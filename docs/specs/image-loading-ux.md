@@ -7,7 +7,8 @@
 **Derived from:** performance audit and grill, 2026-11-23 (this conversation; no ticket yet) ·
 **Constrained by:** [ADR-080](../product/adr/ADR-080-teacher-held-moderation-and-exact-content-clearance.md)
 §72-75 (no-store delivery, re-check before response, no signed links to children; no-store for
-picture GETs superseded by [ADR-085](../product/adr/ADR-085-teacher-review-pictures-may-be-browser-cached-for-an-hour.md)),
+picture GETs superseded by [ADR-085](../product/adr/ADR-085-teacher-review-pictures-may-be-browser-cached-for-an-hour.md);
+no signed links superseded by [ADR-086](../product/adr/ADR-086-teacher-review-pictures-are-served-by-backend-signed-links.md)),
 [ADR-025](../product/adr/ADR-025-provider-resilience-failure-mode-policy-d-c.md) (never a partial
 book), ADR-033 (worker checkpointer connection), [`kid-flow-book-persistence.md`](kid-flow-book-persistence.md)
 §4.4, [`kid-flow-reader-and-wait-states.md`](kid-flow-reader-and-wait-states.md) §4.3, §4.5
@@ -19,6 +20,8 @@ loading, not a measured speed target. Success is judged by the owner's own obser
 
 Since 2026-11-21 new books are `teacher_review_v1` by default. Their pictures cannot use signed links
 (ADR-080), so the browser downloads each one from `GET /jobs/{job_id}/images/{asset_id}`. Today:
+*(Since 2026-11-25, [ADR-086](../product/adr/ADR-086-teacher-review-pictures-are-served-by-backend-signed-links.md): `signPaths` gets backend-signed links from
+`GET /jobs/{job_id}/image-links` instead, one call per book.)*
 
 - `signPaths` downloads those pictures **one after another** and reads the session once per picture
   (`frontend/lib/signedUrls.ts:63-89`).
@@ -37,6 +40,7 @@ Since 2026-11-21 new books are `teacher_review_v1` by default. Their pictures ca
 
 **Excluded:**
 - **Browser caching of protected pictures and signed links for them.** ADR-080 forbids both.
+  Superseded 2026-11-25 by ADR-085 (caching) and [ADR-086](../product/adr/ADR-086-teacher-review-pictures-are-served-by-backend-signed-links.md) (backend-signed links).
 - **A batch "all covers" endpoint.** It would change the API, and US-04 already removes most of the
   per-request cost.
 - **Cover thumbnails or WebP covers.** They would change pipeline assets.
@@ -143,7 +147,8 @@ Applies: SH-02
 
 ## 3. Shared behaviour
 
-- **SH-01 — Parallel protected fetch in `signPaths`.**
+- **SH-01 — Parallel protected fetch in `signPaths`.** Superseded 2026-11-25 by [ADR-086](../product/adr/ADR-086-teacher-review-pictures-are-served-by-backend-signed-links.md):
+  one `GET /jobs/{job_id}/image-links` call per book, books in parallel; no per-picture downloads.
   - Teacher-review pictures are downloaded with at most **4** requests in flight per `signPaths` call.
   - The session is read once per call. No session means every protected path is left out of the
     result, as today.
@@ -157,6 +162,8 @@ Applies: SH-02
     a picture GET whose `?v=` matches the authorized path is `private, max-age=3600`.
   - No signed Storage link reaches the child.
   - Protected pictures never enter the sessionStorage cache.
+    Both superseded 2026-11-25 by [ADR-086](../product/adr/ADR-086-teacher-review-pictures-are-served-by-backend-signed-links.md): the backend signs exact authorized paths for 3600 s
+    and `signPaths` caches them in sessionStorage like baseline links. No blob URLs for these pictures.
   - Blob URLs are revoked when the caller's signal aborts. This includes a blob created after the
     abort; it is never handed out.
   - The after-download re-check in `job_image` keeps the full `authorized_asset` call.
@@ -178,10 +185,10 @@ Applies: SH-02
 |---|---|---|
 | Shelf with 0 books | Existing empty state | AC-04 |
 | Shelf with 1 book | One card, cover placeholder then fade-in | AC-02, AC-03 |
-| Shelf with many books (e.g. 50) | All cards at once. Covers load at most 4 at a time per call (lazy below-the-fold loading is out of scope) | AC-02, SH-01 |
-| Mix of baseline and teacher-review books | Baseline covers come from cache or one signed batch. Teacher-review covers are fetched in parallel. Both feed the same per-card states | SH-01, AC-03 |
+| Shelf with many books (e.g. 50) | All cards at once. Covers load at most 4 at a time per call (lazy below-the-fold loading is out of scope). *(Superseded by ADR-086: one link call per book.)* | AC-02, SH-01 |
+| Mix of baseline and teacher-review books | Baseline covers come from cache or one signed batch. Teacher-review covers are fetched in parallel. Both feed the same per-card states. *(Superseded by ADR-086: one link call per book.)* | SH-01, AC-03 |
 | Book list read fails | Error state with "Try again", which repeats the list read | AC-06, OD-01 |
-| Child leaves the shelf while covers load | All in-flight requests abort, blobs are revoked, no state is set after unmount | SH-02 |
+| Child leaves the shelf while covers load | All in-flight requests abort, blobs are revoked, no state is set after unmount. *(ADR-086: no blobs; links stay cached.)* | SH-02 |
 | Child taps a card before its cover arrives | Navigates normally | AC-11, SH-04 |
 | Cover fetch fails once (blip, 503 pool timeout) | One automatic retry for the failed covers only | AC-07, AC-19 |
 | Cover fails twice | Book-icon placeholder, no text, card still a link | AC-08 |
@@ -198,11 +205,11 @@ Applies: SH-02
 | Reader: one page fails once | Only that page is refetched. The book renders when it arrives | AC-13 |
 | Reader: a page fails twice | Read-failure screen, counter unchanged | AC-14 |
 | Reader: read-failure re-sign | Fetches only the still-missing pages | AC-15 |
-| Reader: child leaves mid-download | Aborts, revokes blobs | SH-02, AC-15 |
+| Reader: child leaves mid-download | Aborts, revokes blobs. *(ADR-086: no blobs; links stay cached.)* | SH-02, AC-15 |
 | Reader: baseline book, one path fails to sign | Retry signs only that path. The cache serves the rest | AC-13 |
 | Reader: book open longer than the signed-URL TTL | Unchanged existing behaviour (`kid-flow-book-persistence.md` §4.5) | Out of scope |
 | Teacher books page dialog switched mid-load | Existing abort per dialog, now with parallel fetch | SH-01 |
-| Two `signPaths` calls at once (e.g. shelf and a cover retry) | Each has its own limit of 4. No shared queue | SH-01 |
+| Two `signPaths` calls at once (e.g. shelf and a cover retry) | Each has its own limit of 4. No shared queue. *(Superseded by ADR-086: one link call per book.)* | SH-01 |
 | Pool exhausted under load | `503 image_unavailable` after the pool timeout | AC-19 |
 | Pooled connection dropped by Supabase while idle | Checked before reuse and replaced, never handed out broken | §5.5 |
 | Tests switch `settings.supabase_db_url` per test | The pool is created lazily for the current URL and recreated if the URL changes | §5.5 |
@@ -223,6 +230,8 @@ Applies: SH-02
    links to children. Changing that needs a new ADR.
    **Superseded 2026-11-25 by ADR-085:** picture GETs that name their exact picture (`?v=<path>`,
    or the teacher context route) are browser-cached for an hour. Signed links stay forbidden.
+   **Superseded 2026-11-25 by ADR-086:** the backend signs exact authorized paths; links are cached
+   in sessionStorage until shortly before they expire.
 4. **Cover retry rules.** A sign or fetch failure gets one retry because it is usually transient. An
    `<img>` error does not, because `signPaths` would return the same sessionStorage URL for a
    baseline cover (*inferred rationale*; no cache bypass exists and adding one is out of scope).
@@ -243,6 +252,7 @@ Applies: SH-02
      (*inferred*, not checked).
 6. **Concurrency of 4 per call** (*assumed value*). It keeps a 50-book shelf from opening 50
    simultaneous backend requests, which would each take a pool connection and threadpool worker.
+   *Superseded by ADR-086: one link call per book, so no per-picture limit.*
 7. **The skeleton is reused, not copied.** The page renders the route's `loading.tsx` component while
    loading, so there is one source of truth for the skeleton.
 8. **Leaner bookshelf query.** It drops `reveal`, `current_stage` and `failure_reason`, which the
@@ -257,7 +267,8 @@ Applies: SH-02
 **Confirmed seams (owner, 2026-11-23):**
 
 1. `signPaths`, `frontend/lib/signedUrls.test.ts`. Pattern: "feature pictures use authenticated
-   bytes and revoke their blob on exit".
+   bytes and revoke their blob on exit". *(ADR-086: the pattern is now "teacher-review pictures
+   come from one `/image-links` call per job and are cached".)*
 2. Bookshelf page, `frontend/app/s/[profileId]/page.test.tsx`.
 3. Reader page, `frontend/app/s/[profileId]/book/[jobId]/page.test.tsx`. The existing tests at :301,
    :474 and :486 stay and must pass unchanged.
@@ -269,7 +280,7 @@ Applies: SH-02
 
 - SH-01:
   - With 6 protected paths and fetch promises held open, more than 1 and at most 4 requests are in
-    flight together.
+    flight together. *(Superseded by ADR-086; the test was replaced by one call per job.)*
   - `auth.getSession` is called once.
   - One path returning 500 is left out while the others return.
 - AC-01–AC-03:
@@ -306,7 +317,7 @@ Applies: SH-02
   changes a cheaper fingerprint. Those inputs include checkpoint state, `job_picture_records`,
   reviews and profile state, and ADR-080 requires the re-check. This is unproven, so the double full
   check stays. To revisit it, first list those inputs and show the fingerprint covers each one.
-- **Assumed values:** concurrency 4, pool `max_size` about 5, pool timeout about 5 s.
+- **Assumed values:** concurrency 4 (unused since ADR-086), pool `max_size` about 5, pool timeout about 5 s.
 
 **Readiness:** Ready. OD-01 decided 2026-11-24.
 
@@ -322,7 +333,7 @@ Applies: SH-02
 | Grill Q5 A (reopened): parallel, retry only failed, all-or-nothing | AC-12–AC-16, SH-05 |
 | Audit #7: leaner shelf query | §5.8 |
 | Seams 1–4 confirmed | §6 |
-| ADR-080: no-store (pictures: ADR-085), re-check, no signed links | SH-02, AC-20, §5.3 |
+| ADR-080: no-store (pictures: ADR-085), re-check, no signed links (backend-signed since ADR-086) | SH-02, AC-20, §5.3 |
 | ADR-025 / book-persistence §4.4: never partial | SH-05, AC-16 |
 | Reader spec §4.3 / §4.5: read-failed screen, counter | AC-14, AC-15 |
 | Exclusions: caching, batch endpoint, thumbnails, getClaims, lazy covers | §1 Excluded |

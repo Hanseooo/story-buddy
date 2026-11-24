@@ -1195,6 +1195,10 @@ Use `Cache-Control: private, no-store` (since [ADR-085](../product/adr/ADR-085-t
 the authorized path); browser fetch with the existing bearer token and render a
 temporary blob URL, revoked on state change/unmount. Internal provider Storage reads still use
 signed URLs. This is the narrowly proposed ADR-006 delivery amendment, not a new media service.
+Since [ADR-086](../product/adr/ADR-086-teacher-review-pictures-are-served-by-backend-signed-links.md), `signPaths` instead calls `GET /jobs/{job_id}/image-links?asset=<id>...`: the
+same authorization once per list, the backend signs only the exact authorized paths for 3600 s,
+authorizes again and drops any asset whose path or epoch moved. The JSON is `private, no-store`;
+the links are bearer grants for up to an hour. The picture route stays for other callers.
 
 While held, no generated picture or partial book is child/peer-readable. After reference release,
 only exact cleared references can reach the existing child reveal. Completed pages require all
@@ -1403,7 +1407,7 @@ real-child release approval. Tickets 06–15 retain their own acceptance criteri
   quiescence marker and private immutable review subjects. Browser roles cannot read reviews or
   feature-job Storage objects, including through existing researcher policies.
 - `app/moderation_hold.py` transactionally projects an unresolved checkpoint into one review and
-  `awaiting_teacher`. Authorized `/jobs/{job_id}/state`, `/images/{asset_id}` and
+  `awaiting_teacher`. Authorized `/jobs/{job_id}/state`, `/images/{asset_id}`, `/image-links` (ADR-086) and
   `/reconcile-hold` routes expose neutral state, selected cleared image bytes and explicit
   checkpoint-only recovery. Teacher inspection/decision routes belong to 06–09.
 - `worker/run_job.py::run_review_storybook_job` serializes execution with an advisory lock,
