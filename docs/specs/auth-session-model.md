@@ -86,7 +86,7 @@ once S3 ships. Until S3 ships, all new tables are default-deny (S1 §7 C3).
 from fastapi import Header, HTTPException, Depends
 from app.db import get_supabase_client
 
-async def get_current_user(authorization: str | None = Header(None)):
+def get_current_user(authorization: str | None = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "missing token")
     jwt = authorization.removeprefix("Bearer ")

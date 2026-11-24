@@ -7,14 +7,41 @@ import { classify, type JobRow, type JobBucket } from "@/lib/useJob";
 import { displayTitle } from "@/lib/displayTitle";
 import { signPaths } from "@/lib/signedUrls";
 import { motion } from "framer-motion";
-import { MagicWand, Users, FileDashed, Books, PencilSimple } from "@phosphor-icons/react";
+import { MagicWand, Users, FileDashed, Books, PencilSimple, WarningCircle, ArrowsClockwise } from "@phosphor-icons/react";
+import Loading from "./loading";
 
 type JobCard = {
   id: string;
   bucket: JobBucket;
   title: string;
-  coverUrl: string | null;
 };
+
+// Per-card cover state (spec §5.9): no key = still loading, null = no cover, string = ready.
+type Covers = Record<string, string | null>;
+
+const coverPath = (job: JobRow) => job.pages?.[0]?.image_path || undefined;
+
+// Each cover goes to `onCover` as it arrives, so cards fill in one by one (spec AC-03).
+// One round for every cover, then one retry for the failed ones only (spec AC-07, §5.4);
+// a cover still missing after that ends as null. A rejected call fails every path it had not delivered.
+async function signCovers(rows: JobRow[], signal: AbortSignal, onCover: (jobId: string, url: string | null) => void) {
+  const sign = async (pairs: Array<[JobRow, string]>) => {
+    const arrived = new Set<string>();
+    await signPaths(pairs.map(([, path]) => path), pairs.map(([job]) => job), signal, (path, url) => {
+      arrived.add(path);
+      if (signal.aborted) return;
+      for (const [job, p] of pairs) if (p === path) onCover(job.id, url);
+    }).catch(() => {});
+    return pairs.filter(([, path]) => !arrived.has(path));
+  };
+  const failed = await sign(rows.flatMap((j): Array<[JobRow, string]> => {
+    const path = coverPath(j);
+    return path ? [[j, path]] : [];
+  }));
+  if (failed.length === 0 || signal.aborted) return;
+  const lost = await sign(failed);
+  if (!signal.aborted) for (const [job] of lost) onCover(job.id, null);
+}
 
 export default function BookshelfPage({
   params,
@@ -23,7 +50,11 @@ export default function BookshelfPage({
 }) {
   const [profileId, setProfileId] = useState<string | null>(null);
   const [cards, setCards] = useState<JobCard[]>([]);
+  const [covers, setCovers] = useState<Covers>({});
   const [loading, setLoading] = useState(true);
+  // The list read failed (spec AC-06, OD-01). Bumping `attempt` re-runs the load effect.
+  const [listFailed, setListFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [unreadNotes, setUnreadNotes] = useState<string[]>([]);
 
   useEffect(() => {
@@ -61,6 +92,11 @@ export default function BookshelfPage({
     if (!profileId) return;
     let cancelled = false;
     const imageController = new AbortController();
+    // Realtime cover loads, one per card: a newer update aborts the older load (spec §4, SH-02).
+    // A card here belongs to Realtime, so the first load never sets its cover.
+    const liveCovers = new Map<string, AbortController>();
+    // Last known bucket and cover path per card, so a repeat UPDATE keeps the shown cover (spec AC-05).
+    const known = new Map<string, { bucket: JobBucket; path?: string }>();
 
     // Subscribe first, then SELECT — same ordering as useJob (avoids missed updates)
     const channel = supabase
@@ -74,6 +110,23 @@ export default function BookshelfPage({
           filter: `profile_id=eq.${profileId}`,
         },
         (payload: { new: JobRow }) => {
+          const row = payload.new;
+          const bucket = classify(row);
+          const path = coverPath(row);
+          const before = known.get(row.id);
+          known.set(row.id, { bucket, path });
+          if (bucket === "terminal-success" && (before?.bucket !== "terminal-success" || before.path !== path)) {
+            liveCovers.get(row.id)?.abort();
+            const controller = new AbortController();
+            liveCovers.set(row.id, controller);
+            setCovers((prev) => {
+              const next = { ...prev };
+              if (path) delete next[row.id];
+              else next[row.id] = null;
+              return next;
+            });
+            if (path) void signCovers([row], controller.signal, (jobId, url) => setCovers((prev) => ({ ...prev, [jobId]: url })));
+          }
           setCards((prev) =>
             prev.map((c) =>
               c.id === payload.new.id
@@ -86,46 +139,70 @@ export default function BookshelfPage({
       .subscribe();
 
     (async () => {
-      const { data: jobs } = await supabase
+      const { data: jobs, error } = await supabase
         .from("jobs")
-        .select("id, status, moderation_mode, current_stage, failure_reason, input_text, title, pages, reveal")
+        .select("id, status, moderation_mode, input_text, title, pages")
         // ponytail: explicit filter required — RLS also grants classmates' approved jobs (spec §7.2)
         .eq("profile_id", profileId)
         .order("created_at", { ascending: false });
 
-      if (cancelled || !jobs) {
+      if (cancelled) return;
+      if (error || !jobs) {
+        setListFailed(true);
         setLoading(false);
         return;
       }
 
-      const imagePaths = (jobs as JobRow[])
-        .map((j) => j.pages?.[0]?.image_path)
-        .filter((p): p is string => Boolean(p));
-
-      const signedMap = imagePaths.length > 0 ? await signPaths(imagePaths, jobs as JobRow[], imageController.signal) : {};
-      if (cancelled) return;
-
+      const rows = jobs as JobRow[];
+      for (const j of rows) if (!known.has(j.id)) known.set(j.id, { bucket: classify(j), path: coverPath(j) });
+      // Cards render now; covers fill in as signing finishes (spec AC-02, AC-03).
       setCards(
-        (jobs as JobRow[]).map((j) => ({
+        rows.map((j) => ({
           id: j.id,
           bucket: classify(j),
           title: displayTitle(j.title, j.input_text),
-          coverUrl: j.pages?.[0]?.image_path
-            ? (signedMap[j.pages[0].image_path] ?? null)
-            : null,
         }))
       );
+      const setFirstCover = (jobId: string, url: string | null) => {
+        if (!cancelled && !liveCovers.has(jobId)) setCovers((prev) => ({ ...prev, [jobId]: url }));
+      };
+      for (const j of rows) if (!coverPath(j)) setFirstCover(j.id, null);
       setLoading(false);
+
+      if (rows.some(coverPath)) await signCovers(rows, imageController.signal, setFirstCover);
     })();
 
     return () => {
       cancelled = true;
       imageController.abort();
+      for (const controller of liveCovers.values()) controller.abort();
       supabase.removeChannel(channel);
     };
-  }, [profileId]);
+  }, [profileId, attempt]);
 
   if (!profileId) return null;
+
+  // An issued URL that fails in <img> would fail again from cache, so no retry (spec AC-10, §5.4).
+  const coverFailed = (jobId: string, url: string) =>
+    setCovers((prev) => (prev[jobId] === url ? { ...prev, [jobId]: null } : prev));
+
+  // Same skeleton as the route loading file (spec §5.7), so the heading never sits over an empty grid.
+  if (loading) {
+    return (
+      <>
+        <p role="status" aria-live="polite" className="sr-only">Loading your bookshelf</p>
+        <div aria-hidden="true">
+          <Loading />
+        </div>
+      </>
+    );
+  }
+
+  const retryList = () => {
+    setListFailed(false);
+    setLoading(true);
+    setAttempt((n) => n + 1);
+  };
 
   // Failed jobs are permanent (terminal jobs are immutable — kid-flow S3), so they are
   // tucked away instead of deleted; keeps the shelf tidy with no delete surface.
@@ -149,7 +226,30 @@ export default function BookshelfPage({
         )}
       </div>
 
-      {!loading && cards.length === 0 && (
+      {listFailed && (
+        <div
+          role="alert"
+          className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-surface border border-primary/15 rounded-[32px] max-w-2xl mx-auto w-full my-auto"
+        >
+          <div className="size-20 bg-warning/15 text-warning rounded-2xl flex items-center justify-center mb-6">
+            <WarningCircle weight="duotone" className="size-10" aria-hidden="true" />
+          </div>
+          <h2 className="font-display text-3xl font-extrabold text-primary mb-3">We couldn&apos;t open your bookshelf</h2>
+          <p className="text-foreground/70 text-lg mb-8 max-w-[30ch]">
+            Don&apos;t worry, your stories are safe! Let&apos;s try that again.
+          </p>
+          <button
+            type="button"
+            onClick={retryList}
+            className="min-h-[56px] px-8 rounded-2xl bg-primary text-on-primary text-xl font-extrabold inline-flex items-center justify-center gap-2 hover:bg-primary-deep active:scale-[0.98] transition-all cursor-pointer focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+          >
+            <ArrowsClockwise weight="bold" className="size-5" aria-hidden="true" />
+            Try again
+          </button>
+        </div>
+      )}
+
+      {!listFailed && cards.length === 0 && (
         <motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -183,7 +283,7 @@ export default function BookshelfPage({
             }}
           >
             {shelfCards.map((card, idx) => (
-              <BookCard key={card.id} card={card} profileId={profileId} index={idx} hasNote={unreadNotes.includes(card.id)} />
+              <BookCard key={card.id} card={card} cover={covers[card.id]} onCoverError={coverFailed} profileId={profileId} index={idx} hasNote={unreadNotes.includes(card.id)} />
             ))}
           </motion.div>
 
@@ -195,7 +295,7 @@ export default function BookshelfPage({
               </summary>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 sm:gap-8 lg:gap-10 mt-6">
                 {failedCards.map((card, idx) => (
-                  <BookCard key={card.id} card={card} profileId={profileId} index={idx} />
+                  <BookCard key={card.id} card={card} cover={covers[card.id]} onCoverError={coverFailed} profileId={profileId} index={idx} />
                 ))}
               </div>
             </details>
@@ -219,11 +319,15 @@ export default function BookshelfPage({
 
 function BookCard({
   card,
+  cover,
+  onCoverError,
   profileId,
   index,
   hasNote = false,
 }: {
   card: JobCard;
+  cover: string | null | undefined;
+  onCoverError: (jobId: string, url: string) => void;
   profileId: string;
   index: number;
   hasNote?: boolean;
@@ -244,9 +348,11 @@ function BookCard({
   const rotations = [-3, 2, -1, 4, -2];
   const defaultRotation = rotations[index % rotations.length];
 
-  const coverBg = card.coverUrl && card.bucket === "terminal-success" 
-    ? "bg-background" 
-    : card.bucket === "paused" || card.bucket === "teacher-held" ? "bg-secondary/10"
+  // Tracks which URL finished loading, so a new cover from Realtime pulses and fades in again.
+  const [loadedCover, setLoadedCover] = useState<string | null>(null);
+  const coverLoaded = Boolean(cover) && loadedCover === cover;
+
+  const coverBg = card.bucket === "paused" || card.bucket === "teacher-held" ? "bg-secondary/10"
     : (card.bucket === "terminal-failure" || card.bucket === "not-found") ? "bg-destructive/5"
     : card.bucket === "in-flight" ? "bg-primary/5"
     : "bg-background";
@@ -275,15 +381,22 @@ function BookCard({
       >
         {/* Cover Image or Status Graphic */}
         <div className={`relative w-full aspect-[4/5] ${coverBg}`}>
-          {card.coverUrl && card.bucket === "terminal-success" ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={card.coverUrl}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              className="w-full h-full object-cover"
-            />
+          {card.bucket === "terminal-success" && cover !== null ? (
+            <>
+              {!coverLoaded && <div className="absolute inset-0 animate-pulse bg-muted/50" />}
+              {cover && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={cover}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  onLoad={() => setLoadedCover(cover)}
+                  onError={() => onCoverError(card.id, cover)}
+                  className={`relative w-full h-full object-cover transition-opacity duration-[var(--duration-slow)] ${coverLoaded ? "opacity-100" : "opacity-0"}`}
+                />
+              )}
+            </>
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center border-b-2 border-primary/5">
               {card.bucket === "in-flight" && (
@@ -301,9 +414,9 @@ function BookCard({
                   <FileDashed weight="fill" className="w-8 h-8 text-destructive" aria-hidden="true" />
                 </div>
               )}
-              {card.bucket === "terminal-success" && !card.coverUrl && (
+              {card.bucket === "terminal-success" && (
                 <div className="w-16 h-16 rounded-3xl bg-primary/10 flex items-center justify-center mb-3">
-                  <span className="text-3xl font-display font-extrabold text-primary">?</span>
+                  <Books weight="duotone" className="w-8 h-8 text-primary" aria-hidden="true" />
                 </div>
               )}
             </div>

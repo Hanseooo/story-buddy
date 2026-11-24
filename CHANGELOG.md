@@ -14,6 +14,40 @@ instead of repeating it.
 
 ---
 
+## Pictures load sooner on the bookshelf and in the reader · 2026-11-24
+
+Spec: [`docs/specs/image-loading-ux.md`](docs/specs/image-loading-ux.md).
+
+### Code
+
+- **Bookshelf.** Shows the route skeleton while the book list loads, then every card at once. Each
+  cover pulses and fades in on its own, and a card can be tapped before its cover arrives. A cover
+  that fails is retried once, then shows a book-icon placeholder. A book that finishes while the
+  shelf is open loads its own cover instead of showing "?". If the book list itself cannot be read,
+  the shelf says so and offers "Try again" instead of showing "Your shelf is empty!".
+- **Reader.** A page that fails is fetched again on its own, not the whole book. The book still
+  opens only when every page is ready (ADR-025).
+- **`signPaths`.** Teacher-review pictures download in parallel, at most 4 at once, with one
+  session read. Baseline signed links no longer wait for those downloads.
+- **Backend.** `get_current_user` is a plain `def`, so FastAPI runs the blocking Supabase call in
+  its thread pool and no longer stalls every other request. `GET /jobs/{job_id}/images/{asset_id}`
+  uses a shared connection pool (`psycopg-pool`, at most 5) instead of opening two new Postgres
+  connections per picture. A pool timeout answers 503. Both authorization checks are unchanged.
+
+### Docs
+
+- Add the image-loading spec (OD-01 decided: list read failure gets an inline error state).
+- `auth-session-model.md` shows `get_current_user` as `def`.
+
+### Checks
+
+- Frontend: `pnpm lint` and `pnpm build` passed, `pnpm test` passed 1208 tests (2 skipped).
+- Backend: `ruff` passed, `pytest` passed 1648 (168 skipped, 6 known WeasyPrint failures in
+  `test_pdf_export.py`). With `TEST_MODERATION_DB_URL` set to a throwaway migrated Postgres,
+  `test_teacher_hold.py` passed 72 with none skipped, covering the pool and both authorization
+  checks.
+- Not yet checked in a real browser (login wall). The owner's acceptance is ticket 08.
+
 ## Class code input takes any letter or digit · 2026-11-22
 
 ### Code

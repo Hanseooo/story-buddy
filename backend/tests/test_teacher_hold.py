@@ -2447,3 +2447,41 @@ def test_the_page_pencil_is_disabled_with_its_reason_and_versions_still_work(mon
         assert client.post(f"/jobs/{job}/pages/s0/versions/open").status_code == 200
     finally:
         app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_an_exhausted_picture_pool_answers_a_private_503(monkeypatch):
+    """image-loading AC-19. No database: the pool is the outer boundary and is stubbed to time out."""
+    from contextlib import contextmanager
+    from psycopg_pool import PoolTimeout
+
+    class ExhaustedPool:
+        @contextmanager
+        def connection(self):
+            raise PoolTimeout("couldn't get a connection after 5.00 sec")
+            yield
+
+    monkeypatch.setattr("app.moderation_hold.image_pool", lambda: ExhaustedPool())
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
+    try:
+        response = TestClient(app).get(f"/jobs/{uuid4()}/images/scene-s0")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert response.status_code == 503
+    assert response.json() == {"detail": "image_unavailable"}
+    assert response.headers["cache-control"] == "private, no-store"
+
+
+def test_the_picture_pool_is_made_for_the_current_database_url_and_replaced_when_it_changes(monkeypatch):
+    """image-loading §5.5. Unreachable URLs: creating a pool connects in the background only."""
+    from app import moderation_hold
+
+    monkeypatch.setattr(moderation_hold, "_image_pool", None)
+    monkeypatch.setattr(settings, "supabase_db_url", "postgresql://127.0.0.1:1/first")
+    first = moderation_hold.image_pool()
+    assert moderation_hold.image_pool() is first
+    monkeypatch.setattr(settings, "supabase_db_url", "postgresql://127.0.0.1:1/second")
+    second = moderation_hold.image_pool()
+    try:
+        assert second is not first and first.closed and not second.closed
+    finally:
+        second.close()

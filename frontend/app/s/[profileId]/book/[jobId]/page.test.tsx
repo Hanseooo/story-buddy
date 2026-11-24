@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, onTestFinished } from "vitest";
 import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import BookPage from "./page";
 
@@ -495,6 +495,31 @@ describe("BookPage — reader (terminal-success)", () => {
     expect(screen.getByTestId("failure-screen").getAttribute("data-countable")).toBe("false");
   });
 
+  it("a teacher-review page that misses once is the only page fetched again (image-loading AC-13)", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: { ...COMPLETE_ROW, moderation_mode: "teacher_review_v1" } }));
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+    const { createObjectURL, revokeObjectURL } = URL;
+    onTestFinished(() => { Object.assign(URL, { createObjectURL, revokeObjectURL }); });
+    URL.createObjectURL = vi.fn(() => `blob:${Math.random()}`);
+    URL.revokeObjectURL = vi.fn();
+    let s1Misses = 1;
+    const network = vi.fn(async (url: string) => {
+      if (url.endsWith("/me/notes")) return new Response("[]");
+      if (url.endsWith("/images/scene-s1") && s1Misses-- > 0) return new Response("", { status: 503 });
+      return new Response("png");
+    });
+    vi.stubGlobal("fetch", network);
+
+    await renderAndSwitchToPages(makeParams("j1"));
+
+    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    expect(network.mock.calls.map(([url]) => url).filter((url) => url.includes("/images/"))
+      .map((url) => url.slice(url.indexOf("/jobs/")))).toEqual([
+      "/jobs/j1/images/scene-s0", "/jobs/j1/images/scene-s1", "/jobs/j1/images/scene-s1",
+    ]);
+    expect(resetFailChain).toHaveBeenCalledTimes(1);
+  });
+
   it("no jobs.error or moderation category rendered in any bucket (spec invariant 4)", async () => {
     const rowWithError = {
       ...COMPLETE_ROW,
@@ -540,6 +565,59 @@ describe("BookPage — a finished book whose pictures will not load (spec §4)",
 
     await waitFor(() => expect(screen.queryByTestId("failure-screen")).toBeNull());
     expect(mockCreateSignedUrls).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("BookPage — reader fetches only missing pages (image-loading AC-13, AC-15)", () => {
+  it("the read-failure re-sign fetches only the teacher-review page still missing", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: { ...COMPLETE_ROW, moderation_mode: "teacher_review_v1" } }));
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: "synthetic" } } });
+    const { createObjectURL, revokeObjectURL } = URL;
+    onTestFinished(() => { Object.assign(URL, { createObjectURL, revokeObjectURL }); });
+    URL.createObjectURL = vi.fn(() => `blob:${Math.random()}`);
+    URL.revokeObjectURL = vi.fn();
+    let s1Misses = 2;
+    const network = vi.fn(async (url: string) => {
+      if (url.endsWith("/me/notes")) return new Response("[]");
+      if (url.endsWith("/images/scene-s1") && s1Misses-- > 0) return new Response("", { status: 503 });
+      return new Response("png");
+    });
+    vi.stubGlobal("fetch", network);
+
+    await renderPage(makeParams("j1"));
+    await waitFor(() => expect(screen.getByTestId("failure-screen").getAttribute("data-kind")).toBe("read-failed"));
+    expect(resetFailChain).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "reload" }));
+    });
+
+    await waitFor(() => expect(screen.queryByTestId("failure-screen")).toBeNull());
+    await waitFor(() => expect(screen.getAllByRole("img").length).toBeGreaterThan(0));
+    expect(network.mock.calls.map(([url]) => url).filter((url) => url.includes("/images/"))
+      .map((url) => url.slice(url.indexOf("/jobs/")))).toEqual([
+      "/jobs/j1/images/scene-s0", "/jobs/j1/images/scene-s1", "/jobs/j1/images/scene-s1", "/jobs/j1/images/scene-s1",
+    ]);
+    expect(resetFailChain).toHaveBeenCalledTimes(1);
+  });
+
+  it("a baseline book's retry signs only the path missing from the first result, even with no URL cache", async () => {
+    // Private mode: sessionStorage refuses writes, so the reader itself must keep the first result.
+    const noCache = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("QuotaExceededError"); });
+    onTestFinished(() => noCache.mockRestore());
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
+    mockCreateSignedUrls
+      .mockResolvedValueOnce({ data: [{ path: "j1/s0-1.png", signedUrl: "https://cdn/0.png", error: null }], error: null })
+      .mockResolvedValueOnce({ data: [{ path: "j1/s1-1.png", signedUrl: "https://cdn/1.png", error: null }], error: null });
+
+    await renderPage(makeParams("j1"));
+
+    await waitFor(() => expect(mockCreateSignedUrls).toHaveBeenCalledTimes(2));
+    expect(mockCreateSignedUrls.mock.calls).toEqual([
+      [["j1/s0-1.png", "j1/s1-1.png"], 3600],
+      [["j1/s1-1.png"], 3600],
+    ]);
+    fireEvent.click(await screen.findByLabelText("Pages View"));
+    expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
   });
 });
 
