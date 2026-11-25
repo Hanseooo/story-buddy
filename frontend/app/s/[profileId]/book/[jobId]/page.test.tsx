@@ -412,7 +412,7 @@ describe("BookPage — reader (terminal-success)", () => {
 
     const bigger = await screen.findByRole("button", { name: "Show the picture for page 1 bigger" });
     expect(bigger.querySelector("img")).toHaveAttribute("alt", "");
-    expect(screen.getByText("The dog ran.")).not.toHaveAttribute("aria-hidden");
+    expect(screen.getByText("The dog ran.").closest('[aria-hidden="true"]')).toBeNull();
     expect(screen.queryByAltText("The dog ran.")).toBeNull();
   });
 

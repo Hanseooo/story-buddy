@@ -299,8 +299,9 @@ reserves query params for filters and pagination, and there is no bookshelf to r
 **Alt text.** The image carries `alt={caption}` and the visible caption is `aria-hidden`. Today's
 page does both without the `aria-hidden`, so every page is read twice to a screen reader. The caption
 is the verbatim story text (ADR-013), so it is the correct accessible name for the illustration.
-Superseded 2026-11-26: the Pages view picture is now a "Show the picture for page N bigger" button, whose
-children a screen reader never reads, so the visible caption is the read text and the image's alt is empty.
+Superseded 2026-11-26 for Pages view only: the picture there is now a "Show the picture for page N bigger"
+button, whose children a screen reader never reads, so the visible caption is the read text and the image's
+alt is empty. Scroll view is unchanged: its caption is visible and the image's alt is still the caption.
 
 **Signing.** One `createSignedUrls` batch over every path, 3600s. Any per-path error or null URL
 fails the whole read (S1 constraint 7, ADR-025 — no page-shaped holes). **The failure is retried once
