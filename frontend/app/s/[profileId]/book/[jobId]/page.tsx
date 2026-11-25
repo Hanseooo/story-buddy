@@ -312,11 +312,11 @@ function PageVersions({ jobId, pageNumber, page, reviewed, busy, onBusy, onChang
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" ref={confirmButtonRef} onClick={() => pending && void change(pending.version)}
             className="min-h-11 rounded-xl bg-primary px-4 font-bold text-on-primary focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3">
-            Change page {pageNumber}
+            Use this picture
           </button>
           <button type="button" onClick={cancelConfirm}
             className="min-h-11 rounded-xl px-4 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3">
-            Keep page {pageNumber} as it is
+            Go back
           </button>
         </div>
       </dialog>
@@ -580,10 +580,10 @@ function PagePencil({ jobId, pageNumber, page, status, reviewed, busy, onBusy, o
         <h2 id={`${formId}-confirm`} className="text-xl font-bold">Your teacher will look at your book again before classmates can see it.</h2>
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" ref={confirmButtonRef} onClick={() => void decide("kept")} className={`${kidControl} bg-primary text-on-primary`}>
-            Change page {pageNumber}
+            Use the new picture
           </button>
           <button type="button" onClick={() => confirmRef.current?.close()} className={`${kidControl} text-foreground`}>
-            Keep page {pageNumber} as it is
+            Go back
           </button>
         </div>
       </dialog>

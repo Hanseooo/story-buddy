@@ -717,14 +717,14 @@ describe("BookPage — other versions of a page (magic pencil 09)", () => {
 
     fireEvent.click(choice);
     expect(screen.getByText("Your teacher will look at your book again before classmates can see it.")).toBeVisible();
-    const confirm = screen.getByRole("button", { name: "Change page 1" });
+    const confirm = screen.getByRole("button", { name: "Use this picture" });
     expect(confirm).toHaveFocus();
-    fireEvent.click(screen.getByRole("button", { name: "Keep page 1 as it is" }));
+    fireEvent.click(screen.getByRole("button", { name: "Go back" }));
     expect(choice).toHaveFocus();
     expect(network.mock.calls.some(([url]) => String(url).endsWith("/pages/s0/version"))).toBe(false);
 
     fireEvent.click(choice);
-    fireEvent.click(screen.getByRole("button", { name: "Change page 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use this picture" }));
     await waitFor(() => expect(REFETCH).toHaveBeenCalled());
     const sent = network.mock.calls.find(([url]) => String(url).endsWith("/pages/s0/version"))!;
     expect(JSON.parse(String(sent[1]!.body))).toEqual({ version_id: "s0-attempt-0", source: "j1/s0-1.png" });
@@ -820,7 +820,10 @@ describe("BookPage — magic pencil on a finished page (magic pencil 10)", () =>
     fireEvent.load(await screen.findByAltText("Your changed picture for page 1"));
     await waitFor(() => expect(keep).toBeEnabled());
     fireEvent.click(keep);
-    const confirm = screen.getByRole("button", { name: "Change page 1" });
+    // "Keep this" opened the dialog, so no button in it says "Keep" for the old picture.
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(/keep/i);
+    expect(screen.getByRole("button", { name: "Go back" })).toBeDefined();
+    const confirm = screen.getByRole("button", { name: "Use the new picture" });
     expect(confirm).toHaveFocus();
     fireEvent.click(confirm);
     await waitFor(() => expect(REFETCH).toHaveBeenCalled());
