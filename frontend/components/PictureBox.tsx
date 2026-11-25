@@ -8,8 +8,9 @@ type Props = {
   /** The picture's link: undefined while it is being signed, null when there is none. */
   src: string | null | undefined;
   alt: string;
-  /** Gets a new link. The caller drops the cached one first (`forgetSignedUrls`). */
-  onRetry: () => void;
+  /** Gets a new link. The caller drops the cached one first (`forgetSignedUrls`). Without it (no picture
+   *  path to sign) the failed state has no Try again, since it could do nothing. */
+  onRetry?: () => void;
   /** Box size and shape. Pictures are 1024×768, so the default box is 4:3. */
   className?: string;
   /** A small thumb: the failed state is one icon button instead of a line of text. */
@@ -29,12 +30,12 @@ export default function PictureBox({ src, alt, onRetry, className = "aspect-[4/3
     event.preventDefault();
     event.stopPropagation();
     setBrokenSrc(null);
-    onRetry();
+    onRetry?.();
   }
 
   return (
     <div className={`relative overflow-hidden bg-muted ${className}`}>
-      {!loaded && !failed && <div aria-hidden="true" className="absolute inset-0 animate-pulse bg-muted/50" />}
+      {!loaded && !failed && <div role="status" aria-label="Loading picture" className="absolute inset-0 animate-pulse bg-muted/50" />}
       {src && !failed && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -47,7 +48,12 @@ export default function PictureBox({ src, alt, onRetry, className = "aspect-[4/3
           className={`relative h-full w-full object-cover transition-opacity duration-[var(--duration-slow)] ${loaded ? "opacity-100" : "opacity-0"}`}
         />
       )}
-      {failed && (compact ? (
+      {failed && !onRetry && (
+        <p className="absolute inset-0 flex items-center justify-center p-1 text-center text-xs text-foreground/70">
+          {compact ? <span className="sr-only">Picture didn&apos;t load</span> : "Picture didn't load"}
+        </p>
+      )}
+      {failed && onRetry && (compact ? (
         <button type="button" onClick={retry}
           className="relative z-10 flex h-full min-h-11 w-full min-w-11 items-center justify-center text-foreground/60 hover:text-primary focus-visible:outline-3 focus-visible:outline-secondary">
           <ArrowsClockwise weight="bold" className="h-5 w-5" aria-hidden="true" />

@@ -7,7 +7,8 @@ type Props = {
   job: Job;
   /** undefined while signing, null when signing found no link. */
   thumbnailUrl: string | null | undefined;
-  onRetryThumbnail: () => void;
+  /** Absent when the book has no picture to sign. */
+  onRetryThumbnail?: () => void;
   onOpen: () => void;
 };
 

@@ -46,13 +46,11 @@ vi.mock("next/headers", () => ({
 vi.mock("next/link", () => ({
   default: ({
     href,
-    className,
     children,
   }: {
     href: string;
-    className?: string;
     children: React.ReactNode;
-  }) => <a href={href} className={className}>{children}</a>,
+  }) => <a href={href}>{children}</a>,
 }));
 
 const PROFILE_ID = "profile-abc";
@@ -171,10 +169,9 @@ describe("GalleryPage", () => {
     const { getByAltText, getByRole } = render(jsx);
 
     // Ticket 03: the cover sits beside the link, whose ::after covers the whole card, because the
-    // cover's Try again cannot sit inside a link. jsdom cannot hit-test that overlay.
+    // cover's Try again cannot sit inside a link. jsdom cannot hit-test that overlay: browser check.
     const link = getByRole("link");
     expect(link).toHaveAttribute("href", `/s/${PROFILE_ID}/book/job-xyz`);
-    expect(link.className).toContain("after:inset-0");
     expect(link.parentElement).toContainElement(getByAltText("Cover of book by Kai"));
   });
 

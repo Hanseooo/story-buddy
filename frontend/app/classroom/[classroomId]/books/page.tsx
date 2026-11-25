@@ -27,6 +27,9 @@ type Toast = {
 
 const TOAST_MS = 5000;
 
+/** The picture a book's thumbnail shows, or undefined when a finished book has none to sign. */
+const thumbPath = (j: Job) => (j.status === "complete" ? j.pages?.[0]?.image_path : undefined);
+
 export default function BooksPage() {
   const { classroomId } = useParams<{ classroomId: string }>();
 
@@ -34,6 +37,7 @@ export default function BooksPage() {
   const [notesClassroom, setNotesClassroom] = useState<{ id: string; enabled: boolean } | null>(null);
   // A missing id is still signing; null means signing found no link.
   const [thumbnails, setThumbnails] = useState<Record<string, string | null>>({});
+  const thumbRetries = useRef(new Map<string, AbortController>());
   const [activeTab, setActiveTab] = useState<Tab>("pending");
   const [heldCount, setHeldCount] = useState(0);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -90,7 +94,7 @@ export default function BooksPage() {
 
   useEffect(() => {
     if (!jobs) return;
-    const unsigned = jobs.filter((j) => j.status === "complete" && j.pages?.[0]);
+    const unsigned = jobs.filter((j) => thumbPath(j));
     if (!unsigned.length) return;
 
     // One batch request, not one per thumbnail. Each thumbnail shows as it arrives,
@@ -105,20 +109,32 @@ export default function BooksPage() {
         return next;
       });
     };
+    // Links already delivered survive a later signing error.
+    const delivered: Record<string, string> = {};
     signPaths(unsigned.map((j) => j.pages![0].image_path), unsigned, controller.signal, (path, url) => {
       if (controller.signal.aborted) return;
+      delivered[path] = url;
       setThumbnails((prev) => {
         const next = { ...prev };
         for (const j of unsigned) if (j.pages![0].image_path === path) next[j.id] = url;
         return next;
       });
-    }).then(markMissing, () => markMissing({}));
-    return () => controller.abort();
+    }).then(markMissing, () => markMissing(delivered));
+    const retries = thumbRetries.current;
+    return () => {
+      controller.abort();
+      // A retry answered after a refresh or unmount must not overwrite the newer thumbnail.
+      for (const retry of retries.values()) retry.abort();
+      retries.clear();
+    };
   }, [jobs]);
 
   /** Drops a broken thumbnail's cached link and signs it again. */
   async function retryThumbnail(job: Job) {
     const path = job.pages![0].image_path;
+    thumbRetries.current.get(job.id)?.abort();
+    const controller = new AbortController();
+    thumbRetries.current.set(job.id, controller);
     forgetSignedUrls([path]);
     setThumbnails((prev) => {
       const next = { ...prev };
@@ -127,10 +143,12 @@ export default function BooksPage() {
     });
     let url: string | null = null;
     try {
-      url = (await signPaths([path], [job]))[path] ?? null;
+      url = (await signPaths([path], [job], controller.signal))[path] ?? null;
     } catch {
       // Stays without a link, so the failed state shows again.
     }
+    if (controller.signal.aborted) return;
+    thumbRetries.current.delete(job.id);
     setThumbnails((prev) => ({ ...prev, [job.id]: url }));
   }
 
@@ -460,8 +478,8 @@ export default function BooksPage() {
               <StaggerItem key={j.id}>
                 <BookCard
                   job={j}
-                  thumbnailUrl={thumbnails[j.id]}
-                  onRetryThumbnail={() => void retryThumbnail(j)}
+                  thumbnailUrl={thumbPath(j) ? thumbnails[j.id] : null}
+                  onRetryThumbnail={thumbPath(j) ? () => void retryThumbnail(j) : undefined}
                   onOpen={() => openDialog(j.id)}
                 />
               </StaggerItem>
@@ -492,8 +510,8 @@ export default function BooksPage() {
                   <BookTableRow
                     key={j.id}
                     job={j}
-                    thumbnailUrl={thumbnails[j.id]}
-                    onRetryThumbnail={() => void retryThumbnail(j)}
+                    thumbnailUrl={thumbPath(j) ? thumbnails[j.id] : null}
+                    onRetryThumbnail={thumbPath(j) ? () => void retryThumbnail(j) : undefined}
                     onOpen={() => openDialog(j.id)}
                   />
                 ))}
@@ -575,7 +593,7 @@ function BookTableRow({
 }: {
   job: Job;
   thumbnailUrl: string | null | undefined;
-  onRetryThumbnail: () => void;
+  onRetryThumbnail?: () => void;
   onOpen: () => void;
 }) {
   const state = jobState(job);

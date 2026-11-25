@@ -9,6 +9,13 @@ export default function GuardedCover({job, alt, src, className}: {job: ImageJob;
   const path = job.pages?.[0]?.image_path;
   const [url, setUrl] = useState<string | null | undefined>(src);
   const [attempt, setAttempt] = useState(0);
+  // A refreshed server render can pass a newly signed link; follow it.
+  const [prevSrc, setPrevSrc] = useState(src);
+  if (src !== prevSrc) {
+    setPrevSrc(src);
+    setUrl(src);
+    setAttempt(0);
+  }
   useEffect(() => {
     if (!path || (src && attempt === 0)) return;
     const controller = new AbortController();
@@ -19,9 +26,9 @@ export default function GuardedCover({job, alt, src, className}: {job: ImageJob;
     });
     return () => { controller.abort(); };
   }, [job, path, src, attempt]);
-  return <PictureBox src={path ? url : null} alt={alt} className={className} onRetry={() => {
-    if (path) forgetSignedUrls([path]);
+  return <PictureBox src={path ? url : null} alt={alt} className={className} onRetry={path ? () => {
+    forgetSignedUrls([path]);
     setUrl(undefined);
     setAttempt(value => value + 1);
-  }} />;
+  } : undefined} />;
 }

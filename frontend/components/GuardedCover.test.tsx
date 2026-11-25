@@ -25,13 +25,15 @@ describe("GuardedCover picture box", () => {
     render(<GuardedCover job={job} alt="Cover of book by Kai" />);
     await waitFor(() => expect(network).toHaveBeenCalled());
     expect(screen.queryByRole("img")).toBeNull();
-    // A6: a pulse like every other surface, not a text line.
+    // A6: a pulse like every other surface, named for assistive tech, not a visible text line.
+    expect(screen.getByRole("status", { name: "Loading picture" })).toBeDefined();
     expect(screen.queryByText("Loading picture…")).toBeNull();
     expect(screen.queryByText("Picture didn't load")).toBeNull();
     answer(links("https://cdn.test/j/s1.png?token=first"));
     const img = await screen.findByRole("img", { name: "Cover of book by Kai" });
     fireEvent.load(img);
     expect(img).toHaveAttribute("src", "https://cdn.test/j/s1.png?token=first");
+    expect(screen.queryByRole("status", { name: "Loading picture" })).toBeNull();
   });
 
   it("a broken picture offers Try again, which drops the cached link and shows a new one", async () => {
@@ -57,5 +59,18 @@ describe("GuardedCover picture box", () => {
     expect(await screen.findByText("Picture didn't load")).toBeDefined();
     expect(screen.getByRole("button", { name: "Try again" })).toBeDefined();
     expect(screen.queryByRole("img")).toBeNull();
+  });
+
+  it("shows a new server-signed link when the page passes one", () => {
+    const baseline = { id: "b", pages: [{ scene_id: "s1", image_path: "b/s1.png" }] };
+    const { rerender } = render(<GuardedCover job={baseline} alt="Cover of book by Kai" src="https://cdn.test/b/s1.png?token=first" />);
+    rerender(<GuardedCover job={baseline} alt="Cover of book by Kai" src="https://cdn.test/b/s1.png?token=second" />);
+    expect(screen.getByRole("img", { name: "Cover of book by Kai" })).toHaveAttribute("src", "https://cdn.test/b/s1.png?token=second");
+  });
+
+  it("a book with no cover path says so without a Try again that could do nothing", () => {
+    render(<GuardedCover job={{ id: "n", pages: [] }} alt="Cover of book by Kai" />);
+    expect(screen.getByText("Picture didn't load")).toBeDefined();
+    expect(screen.queryByRole("button")).toBeNull();
   });
 });

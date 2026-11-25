@@ -151,6 +151,82 @@ describe("teacher decision labels", () => {
     expect(createSignedUrls).toHaveBeenCalledTimes(2);
   });
 
+  it("a signing error fails only the thumbnails that got no link (ticket 03)", async () => {
+    const jobs = [
+      makeJob({ id: "signed-early", moderation_mode: "teacher_review_v1",
+        pages: [{ scene_id: "s1", caption: "Page 1", image_path: "signed-early/s1.png" }] }),
+      makeJob({ id: "signer-throws", pages: [{ scene_id: "s1", caption: "Page 1", image_path: "signer-throws/s1.png" }],
+        profiles: { display_nickname: "Sam", avatar_id: null } }),
+    ];
+    const from = vi.fn((table: string) => ({
+      select: () => ({
+        eq: () => table === "jobs"
+          ? { order: async () => ({ data: jobs }) }
+          : { single: async () => ({ data: { review_notes_enabled: false } }) },
+      }),
+    }));
+    // The teacher-review link arrives through onUrl; the baseline signer then rejects.
+    let reject: (e: Error) => void = () => {};
+    const createSignedUrls = vi.fn(() => new Promise((_, r) => { reject = r; }));
+    Object.assign(supabase, { from, storage: { from: () => ({ createSignedUrls }) } });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => imageLinksResponse(url, { "scene-s1": "signed-early/s1.png" })));
+    try {
+      render(<BooksPage />);
+      const early = (await screen.findByRole("button", { name: /Review story by Alex/ })).parentElement!;
+      await waitFor(() => expect(early.querySelector("img")).toHaveAttribute("src", "https://cdn.test/signed-early/s1.png"));
+      reject(new Error("storage down"));
+      const throws = screen.getByRole("button", { name: /Review story by Sam/ }).parentElement!;
+      expect(await within(throws).findByText("Picture didn't load")).toBeDefined();
+      expect(early.querySelector("img")).toHaveAttribute("src", "https://cdn.test/signed-early/s1.png");
+      expect(within(early).queryByText("Picture didn't load")).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("a retry answered after a refresh does not overwrite the refreshed thumbnail (ticket 03)", async () => {
+    const jobs = [makeJob({ id: "late-retry", pages: [{ scene_id: "s1", caption: "Page 1", image_path: "late-retry/s1.png" }] })];
+    const from = vi.fn((table: string) => ({
+      select: () => ({
+        eq: () => table === "jobs"
+          ? { order: async () => ({ data: [...jobs] }) }
+          : { single: async () => ({ data: { review_notes_enabled: false } }) },
+      }),
+    }));
+    let answerRetry: (v: unknown) => void = () => {};
+    const createSignedUrls = vi.fn()
+      .mockResolvedValueOnce({ data: [{ path: "late-retry/s1.png", signedUrl: null, error: "Object not found" }] })
+      .mockImplementationOnce(() => new Promise((r) => { answerRetry = r; }))
+      .mockResolvedValueOnce({ data: [{ path: "late-retry/s1.png", signedUrl: "https://cdn.test/late-retry/s1.png?token=fresh", error: null }] });
+    Object.assign(supabase, { from, storage: { from: () => ({ createSignedUrls }) } });
+
+    render(<BooksPage />);
+    const card = (await screen.findByRole("button", { name: /Review story by Alex/ })).parentElement!;
+    fireEvent.click(await within(card).findByRole("button", { name: "Try again" }));
+    fireEvent(document, new Event("visibilitychange"));
+    await waitFor(() => expect(card.querySelector("img")).toHaveAttribute("src", "https://cdn.test/late-retry/s1.png?token=fresh"));
+    answerRetry({ data: [{ path: "late-retry/s1.png", signedUrl: null, error: "Object not found" }] });
+    await act(async () => { await Promise.resolve(); });
+    expect(card.querySelector("img")).toHaveAttribute("src", "https://cdn.test/late-retry/s1.png?token=fresh");
+  });
+
+  it("a finished book with no page picture shows the failed state, not a pulse forever (ticket 03)", async () => {
+    const jobs = [makeJob({ id: "no-pages", pages: [] })];
+    const from = vi.fn((table: string) => ({
+      select: () => ({
+        eq: () => table === "jobs"
+          ? { order: async () => ({ data: jobs }) }
+          : { single: async () => ({ data: { review_notes_enabled: false } }) },
+      }),
+    }));
+    Object.assign(supabase, { from });
+
+    render(<BooksPage />);
+    const card = (await screen.findByRole("button", { name: /Review story by Alex/ })).parentElement!;
+    expect(within(card).getByText("Picture didn't load")).toBeDefined();
+    expect(within(card).queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
   it("keeps a teacher-review thumbnail across a refresh, reusing its signed link (ADR-086)", async () => {
     const jobs = [makeJob({ id: "review-thumb", moderation_mode: "teacher_review_v1",
       pages: [{ scene_id: "s1", caption: "Page 1", image_path: "review-thumb/s1.png" }] })];
