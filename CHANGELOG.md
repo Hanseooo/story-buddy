@@ -16,7 +16,7 @@ instead of repeating it.
 
 ## Reader, progress screen and app-wide UI fixes · 2026-11-25
 
-PR pending. From a code-read UI/UX and responsiveness audit (batches 1-3 of 5).
+Direct main update. From a code-read UI/UX and responsiveness audit (batches 1-3 of 5).
 
 ### Code
 
