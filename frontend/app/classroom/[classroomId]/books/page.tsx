@@ -20,6 +20,8 @@ type Toast = {
   undoDecision: ReviewDecision;
   /** Child's nickname; offers "Add a note" for that book. */
   noteFor?: string;
+  /** The decision did not save; the action sends it again. */
+  retry?: boolean;
 };
 
 const TOAST_MS = 5000;
@@ -38,6 +40,7 @@ export default function BooksPage() {
   const [dialogJobId, setDialogJobId] = useState<string | null>(null);
   const [noteJobId, setNoteJobId] = useState<string | null>(null);
   const [dialogPageUrls, setDialogPageUrls] = useState<string[]>([]);
+  const [dialogPagesFailed, setDialogPagesFailed] = useState(false);
   const dialogImages = useRef<AbortController | null>(null);
   useEffect(() => {
     const controller = dialogImages.current;
@@ -94,23 +97,37 @@ export default function BooksPage() {
   // ── Open dialog & sign pages ──────────────────────────────────────────────
 
   async function openDialog(jobId: string, withNote = false) {
-    dialogImages.current?.abort();
-    const controller = new AbortController();
-    dialogImages.current = controller;
     setDialogJobId(jobId);
     setNoteJobId(withNote ? jobId : null);
-    setDialogPageUrls([]);
-    const job = jobs?.find((j) => j.id === jobId);
-    if (!job?.pages?.length) return;
-    const signed = await signPaths(job.pages.map((p) => p.image_path), [job], controller.signal);
-    if (controller.signal.aborted) return;
-    setDialogPageUrls(job.pages.map((p) => signed[p.image_path] ?? ""));
+    if (!(await signDialogPages(jobId))) return;
 
     // Deciding auto-advances to the next pending book, so warm its URLs now —
     // otherwise every Approve costs the teacher a signing round trip they watch.
     const next = pendingJobs.find((j) => j.id !== jobId);
     // Teacher-review links are cached like baseline ones (ADR-086), so both kinds warm.
     if (next?.pages?.length) void signPaths(next.pages.map((p) => p.image_path), [next]);
+  }
+
+  /** Signs the dialog's pages. Returns false when there is nothing to show or the result is stale. */
+  async function signDialogPages(jobId: string) {
+    dialogImages.current?.abort();
+    const controller = new AbortController();
+    dialogImages.current = controller;
+    setDialogPageUrls([]);
+    setDialogPagesFailed(false);
+    const job = jobs?.find((j) => j.id === jobId);
+    if (!job?.pages?.length) return false;
+    try {
+      const signed = await signPaths(job.pages.map((p) => p.image_path), [job], controller.signal);
+      if (controller.signal.aborted) return false;
+      const urls = job.pages.map((p) => signed[p.image_path] ?? "");
+      setDialogPageUrls(urls);
+      if (urls.some((url) => !url)) setDialogPagesFailed(true);
+    } catch {
+      if (controller.signal.aborted) return false;
+      setDialogPagesFailed(true);
+    }
+    return true;
   }
 
   // ── Decision ─────────────────────────────────────────────────────────────
@@ -192,6 +209,7 @@ export default function BooksPage() {
         message: "Could not save — try again",
         jobId: dialogJobId,
         undoDecision: decision,
+        retry: true,
       });
     }
   }
@@ -217,9 +235,19 @@ export default function BooksPage() {
   // ── Toast helpers ─────────────────────────────────────────────────────────
 
   function showToast(t: Toast) {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast(t);
+    startToastTimer();
+  }
+
+  function startToastTimer() {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
+  }
+
+  // WCAG 2.2.1: the toast waits while the pointer or focus is on it.
+  function pauseToast() {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = null;
   }
 
   function clearToast() {
@@ -243,7 +271,11 @@ export default function BooksPage() {
   const toastElement = toast && (
     <div
       role="status"
-      className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] sm:bottom-6 mx-auto w-fit max-w-sm bg-foreground text-background px-5 py-3 rounded-xl text-sm font-bold shadow-lg z-50 flex items-center gap-3"
+      onMouseEnter={pauseToast}
+      onMouseLeave={(e) => { if (!e.currentTarget.contains(document.activeElement)) startToastTimer(); }}
+      onFocus={pauseToast}
+      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null) && !e.currentTarget.matches(":hover")) startToastTimer(); }}
+      className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] sm:bottom-6 mx-auto w-fit max-w-sm bg-foreground text-background px-5 py-3 rounded-xl text-sm font-bold shadow-lg z-[var(--z-toast)] flex items-center gap-3"
     >
       <span>{toast.message}</span>
       {toast.noteFor !== undefined && (
@@ -259,7 +291,7 @@ export default function BooksPage() {
         onClick={handleUndo}
         className="text-secondary font-bold hover:underline min-h-[44px] px-1"
       >
-        Undo
+        {toast.retry ? "Try again" : "Undo"}
       </button>
     </div>
   );
@@ -423,6 +455,8 @@ export default function BooksPage() {
       <BookReviewDialog
         job={dialogJob}
         pageUrls={dialogPageUrls}
+        pagesFailed={dialogPagesFailed}
+        onRetryPages={() => { if (dialogJobId) void signDialogPages(dialogJobId); }}
         notesEnabled={notesEnabled}
         openNoteFor={noteJobId}
         onDecide={handleDecide}
@@ -508,7 +542,8 @@ function BookTableRow({
       <td className="px-6 py-3 text-right">
         <button
           className="text-primary text-sm font-bold hover:underline min-h-[44px] px-2"
-          onClick={onOpen}
+          // The row opens the book too; one click must sign once.
+          onClick={(e) => { e.stopPropagation(); onOpen(); }}
         >
           Review
         </button>

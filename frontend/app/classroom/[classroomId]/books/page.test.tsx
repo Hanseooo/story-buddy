@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { imageLinksResponse } from "@/lib/imageLinksFake";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { jobState, type Job } from "@/lib/types/jobs";
 import BooksPage, { FailedBookRow } from "./page";
 import { supabase } from "@/lib/supabaseClient";
@@ -204,7 +204,7 @@ describe("teacher note row", () => {
       return Response.json({ detail: "not found" }, { status: 404 });
     }));
     const decide = vi.fn();
-    const props = { job: makeJob({ id: reviewNote.job_id }), pageUrls: [], notesEnabled: true, onClose: vi.fn(), onDecide: decide };
+    const props = { job: makeJob({ id: reviewNote.job_id }), pageUrls: [], notesEnabled: true, onClose: vi.fn(), onDecide: decide, onRetryPages: vi.fn() };
     const { rerender, unmount } = render(<BookReviewDialog {...props} />);
     const summary = screen.getByText("Add a note for Alex");
     expect(summary.parentElement).not.toHaveAttribute("open");
@@ -293,7 +293,7 @@ describe("teacher note row", () => {
       if (options?.method === "PUT") return Response.json({ detail: failure === 409 ? "notes_disabled" : "invalid" }, { status: failure });
       return Response.json({ detail: "not found" }, { status: 404 });
     }));
-    render(<BookReviewDialog job={makeJob()} pageUrls={[]} notesEnabled onClose={vi.fn()} onDecide={vi.fn()} />);
+    render(<BookReviewDialog job={makeJob()} pageUrls={[]} notesEnabled onClose={vi.fn()} onDecide={vi.fn()} onRetryPages={vi.fn()} />);
     fireEvent.click(screen.getByText("Add a note for Alex"));
     const box = screen.getByRole("textbox", { name: "Note for Alex" });
     await waitFor(() => expect(box).toBeEnabled());
@@ -399,7 +399,7 @@ describe("held story inspection", () => {
       return Response.json(clearances);
     }));
     render(<BookReviewDialog job={makeJob({ moderation_mode: "teacher_review_v1" })} pageUrls={[]}
-      onClose={() => {}} onDecide={() => {}} />);
+      onClose={() => {}} onDecide={() => {}} onRetryPages={() => {}} />);
     const buttons = await screen.findAllByRole("button", { name: /^Withdraw clearance for/ });
     fireEvent.click(buttons[0]);
     expect(screen.getByRole("button", { name: "Keep clearance" })).toHaveFocus();
@@ -659,6 +659,104 @@ describe("held story inspection", () => {
   });
 });
 
+describe("review dialog pictures and toast", () => {
+  function serveJobs(jobs: Job[]) {
+    Object.assign(supabase, { from: vi.fn((table: string) => ({
+      select: () => ({ eq: () => table === "jobs"
+        ? { order: async () => ({ data: jobs }) }
+        : { single: async () => ({ data: { review_notes_enabled: false } }) } }),
+    })) });
+  }
+  const twoPages = (id: string) => makeJob({ id, pages: [
+    { scene_id: "s1", caption: "Page 1", image_path: `${id}/s1.png` },
+    { scene_id: "s2", caption: "Page 2", image_path: `${id}/s2.png` },
+  ] });
+  const signed = (paths: string[]) => ({ data: paths.map((path) => ({ path, signedUrl: `https://cdn.test/${path}`, error: null })) });
+
+  it("shows an alert with Try again when signing the pages fails, and Try again shows them", async () => {
+    serveJobs([twoPages("sign-fails")]);
+    let dialogCalls = 0;
+    const createSignedUrls = vi.fn(async (paths: string[]) => {
+      if (paths.includes("sign-fails/s2.png") && ++dialogCalls === 1) throw new Error("storage unavailable");
+      return signed(paths);
+    });
+    Object.assign(supabase, { storage: { from: () => ({ createSignedUrls }) } });
+    render(<BooksPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /Review story by Alex/ }));
+    const dialog = document.querySelector("dialog")!;
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("A page didn't load, so you can't share yet.");
+    expect(within(dialog).queryByText("Loading pages…")).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(within(dialog).getByAltText("Page 2")).toHaveAttribute("src", "https://cdn.test/sign-fails/s2.png"));
+    expect(within(dialog).queryByRole("alert")).toBeNull();
+  });
+
+  it("signs a book's pages once when its Review button is clicked", async () => {
+    serveJobs([twoPages("one-click")]);
+    const createSignedUrls = vi.fn(async (paths: string[]) => signed(paths));
+    Object.assign(supabase, { storage: { from: () => ({ createSignedUrls }) } });
+    render(<BooksPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Review" }));
+    await waitFor(() => expect(document.querySelector("dialog img[alt='Page 2']")).not.toBeNull());
+    expect(createSignedUrls.mock.calls.filter(([paths]) => paths.includes("one-click/s2.png"))).toHaveLength(1);
+  });
+
+  it("keeps Share off until every page loads, and says when a page did not", () => {
+    const props = { job: twoPages("job-1"), onClose: vi.fn(), onDecide: vi.fn(), onRetryPages: vi.fn() };
+    const urls = ["https://cdn.test/1.png", "https://cdn.test/2.png"];
+    const { unmount } = render(<BookReviewDialog {...props} pageUrls={urls} />);
+    expect(screen.getByRole("button", { name: "Share with class" })).toBeDisabled();
+    expect(screen.getByText("Pages are still loading. Scroll through the book to load every page.")).toBeDefined();
+    expect(notReadyButton()).toBeEnabled();
+    fireEvent.load(screen.getByAltText("Page 1"));
+    fireEvent.load(screen.getByAltText("Page 2"));
+    expect(screen.getByRole("button", { name: "Share with class" })).toBeEnabled();
+    unmount();
+
+    render(<BookReviewDialog {...props} pageUrls={[...urls]} />);
+    fireEvent.load(screen.getByAltText("Page 1"));
+    fireEvent.error(screen.getByAltText("Page 2"));
+    expect(screen.getByText("This page's picture didn't load.")).toBeDefined();
+    expect(screen.getByRole("alert")).toHaveTextContent("A page didn't load, so you can't share yet.");
+    expect(screen.getByRole("button", { name: "Share with class" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Try loading page 2 again" }));
+    expect(props.onRetryPages).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds the toast while the pointer is on it, then dismisses it after leaving", async () => {
+    serveJobs([makeJob({ pages: [] })]);
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ approved_at: null, rejected_at: null })));
+    render(<BooksPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /Review story by Alex/ }));
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(notReadyButton());
+      const toast = screen.getByText("Marked not ready").parentElement!;
+      fireEvent.mouseEnter(toast);
+      act(() => { vi.advanceTimersByTime(6000); });
+      expect(screen.getByText("Marked not ready")).toBeDefined();
+      fireEvent.mouseLeave(toast);
+      act(() => { vi.advanceTimersByTime(5000); });
+      expect(screen.queryByText("Marked not ready")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("labels the save-failed toast's retry Try again, not Undo", async () => {
+    serveJobs([makeJob({ pages: [] })]);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("down", { status: 503 })));
+    render(<BooksPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /Review story by Alex/ }));
+    fireEvent.click(notReadyButton());
+    expect(await screen.findByText("Could not save — try again")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    vi.unstubAllGlobals();
+  });
+});
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeJob(overrides: Partial<Job> = {}): Job {
@@ -892,7 +990,7 @@ describe("removed student visibility", () => {
 
 describe("BookReviewDialog accessible name", () => {
   it("names the dialog by the student and the book title", () => {
-    render(<BookReviewDialog job={makeJob({ title: "The Red Comb" })} pageUrls={[]} onClose={vi.fn()} onDecide={vi.fn()} />);
+    render(<BookReviewDialog job={makeJob({ title: "The Red Comb" })} pageUrls={[]} onClose={vi.fn()} onDecide={vi.fn()} onRetryPages={vi.fn()} />);
     expect(screen.getByRole("dialog", { name: "Alex The Red Comb" })).toBeDefined();
   });
 });

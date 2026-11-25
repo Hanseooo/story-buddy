@@ -11,6 +11,10 @@ import { ClearanceWithdrawal } from "./NeedsHelpQueue";
 type Props = {
   job: Job | null;
   pageUrls: string[];
+  /** Signing the pages failed or left a page without a link. */
+  pagesFailed?: boolean;
+  /** Signs the pages again; the page's Try again buttons call it. */
+  onRetryPages: () => void;
   notesEnabled?: boolean;
   /** Job whose note row opens on load: set when the teacher picks "Add a note" from the toast. */
   openNoteFor?: string | null;
@@ -23,6 +27,8 @@ type Props = {
 export default function BookReviewDialog({
   job,
   pageUrls,
+  pagesFailed = false,
+  onRetryPages,
   notesEnabled = false,
   openNoteFor = null,
   onDecide,
@@ -34,6 +40,16 @@ export default function BookReviewDialog({
   const [pending, setPending] = useState(false);
   const [withdrawnJob, setWithdrawnJob] = useState<string | null>(null);
   const withdrawn = !!job && withdrawnJob === job.id;
+  // Load state per page index, for this set of links only: a re-sign hands over a new array and starts fresh.
+  const [pictures, setPictures] = useState<{ urls: string[]; state: Record<number, "loaded" | "failed"> }>({ urls: pageUrls, state: {} });
+  const pictureState = pictures.urls === pageUrls ? pictures.state : {};
+  const markPicture = (i: number, value: "loaded" | "failed") => setPictures((current) => ({
+    urls: pageUrls, state: { ...(current.urls === pageUrls ? current.state : {}), [i]: value },
+  }));
+  const pageFailed = (i: number) => pictureState[i] === "failed" || (pagesFailed && !pageUrls[i]);
+  const pageCount = job?.pages?.length ?? 0;
+  const anyPageFailed = Array.from({ length: pageCount }, (_, i) => pageFailed(i)).some(Boolean);
+  const allPagesLoaded = Array.from({ length: pageCount }, (_, i) => pictureState[i] === "loaded").every(Boolean);
 
   useEffect(() => {
     const el = ref.current;
@@ -102,7 +118,7 @@ export default function BookReviewDialog({
 
           {/* Pages */}
           <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-8 bg-background/30">
-            {!withdrawn && pageUrls.length === 0 && (
+            {!withdrawn && pageUrls.length === 0 && !pagesFailed && (
               <div className="py-12 text-center text-foreground/40 text-sm">
                 Loading pages…
               </div>
@@ -112,11 +128,24 @@ export default function BookReviewDialog({
                 key={page.scene_id}
                 className="bg-surface rounded-2xl overflow-hidden border border-primary/10 shadow-[0_6px_18px_rgb(49_85_217/10%)]"
               >
-                {pageUrls[i] ? (
+                {pageFailed(i) ? (
+                  <div className="w-full aspect-[4/3] bg-muted flex flex-col items-center justify-center gap-2 p-4 text-center text-sm text-foreground/70">
+                    <p>This page&apos;s picture didn&apos;t load.</p>
+                    <button
+                      onClick={onRetryPages}
+                      aria-label={`Try loading page ${i + 1} again`}
+                      className="min-h-[44px] px-4 py-2 rounded-xl border border-primary/20 bg-surface font-bold text-foreground hover:bg-muted transition-colors"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                ) : pageUrls[i] ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={pageUrls[i]}
                     alt={page.caption}
+                    onLoad={() => markPicture(i, "loaded")}
+                    onError={() => markPicture(i, "failed")}
                     // A 15-page book is ~20 MB of full-res PNG. This is a scroll
                     // container, so lazy means the teacher pays for the pages they
                     // actually scroll to, not the whole book on open.
@@ -148,6 +177,22 @@ export default function BookReviewDialog({
               Classmates will be able to read and download this book. Copies already saved remain
               after approval is withdrawn or the book is deleted.
             </p>
+            {state !== "approved" && anyPageFailed && (
+              <div role="alert" className="flex flex-wrap items-center gap-3 text-sm font-bold text-destructive">
+                <p>A page didn&apos;t load, so you can&apos;t share yet.</p>
+                <button
+                  onClick={onRetryPages}
+                  className="min-h-[44px] px-4 py-2 rounded-xl border border-primary/20 text-foreground hover:bg-muted transition-colors"
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+            {state !== "approved" && !anyPageFailed && !allPagesLoaded && (
+              <p id="book-share-waiting" className="text-sm text-foreground/75">
+                Pages are still loading. Scroll through the book to load every page.
+              </p>
+            )}
             <div className="flex flex-wrap gap-3 justify-end">
               {state !== "rejected" && state !== "pending" ? null : (
                 <button
@@ -160,8 +205,9 @@ export default function BookReviewDialog({
               {state !== "approved" ? (
                 <button
                   onClick={() => onDecide("approved")}
-                  aria-describedby="book-sharing-note"
-                  className="min-h-[44px] px-8 py-2 rounded-xl bg-primary text-on-primary font-bold text-sm hover:bg-primary-deep transition-colors"
+                  disabled={anyPageFailed || !allPagesLoaded}
+                  aria-describedby={!anyPageFailed && !allPagesLoaded ? "book-sharing-note book-share-waiting" : "book-sharing-note"}
+                  className="min-h-[44px] px-8 py-2 rounded-xl bg-primary text-on-primary font-bold text-sm hover:bg-primary-deep transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary"
                 >
                   Share with class
                 </button>
