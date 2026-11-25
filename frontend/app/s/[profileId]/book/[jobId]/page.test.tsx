@@ -61,6 +61,15 @@ async function renderAndSwitchToPages(paramsPromise: Promise<{ jobId: string }>)
   return res;
 }
 
+// The Pages view picture sits in its "bigger" button, which names it, so its own alt is empty (spec §4.3).
+const BIGGER = /^Show the picture for page \d+ bigger$/;
+const queryPicture = () => screen.queryByRole("button", { name: BIGGER })?.querySelector("img") ?? null;
+function picture() {
+  const img = queryPicture();
+  if (!img) throw new Error("no page picture");
+  return img;
+}
+
 const REFETCH = vi.fn();
 
 function jobState(overrides: Partial<ReturnType<typeof mockUseJob>>) {
@@ -153,7 +162,7 @@ describe("BookPage — teacher note", () => {
       .mockRejectedValue(new Error("offline"));
     vi.stubGlobal("fetch", network);
     await renderPage(makeParams());
-    await waitFor(() => expect(screen.getByRole("img")).toBeVisible());
+    await waitFor(() => expect(picture()).toBeVisible());
     await waitFor(() => expect(network).toHaveBeenCalledTimes(1));
     fireEvent.focus(window);
     await waitFor(() => expect(network).toHaveBeenCalledTimes(2));
@@ -183,7 +192,7 @@ describe("BookPage — PDF download", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /download pdf/i })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
     if (kind === "peer") {
-      await waitFor(() => expect(screen.queryByRole("img")).toBeNull());
+      await waitFor(() => expect(queryPicture()).toBeNull());
       expect(screen.queryByRole("button", { name: /download pdf/i })).toBeNull();
     } else if (kind === "owner") {
       await waitFor(() => expect(screen.getByRole("button", { name: /download pdf/i })).toBeDisabled());
@@ -192,7 +201,7 @@ describe("BookPage — PDF download", () => {
     } else {
       await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("We couldn't download your book. Try again."));
       expect(screen.getByRole("button", { name: /download pdf/i })).toBeEnabled();
-      expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
+      expect(picture()).toHaveAttribute("src", "https://cdn/0.png");
     }
   });
 
@@ -242,7 +251,7 @@ describe("BookPage — PDF download", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /download pdf/i })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("We couldn't download your book. Try again."));
-    expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
+    expect(picture()).toHaveAttribute("src", "https://cdn/0.png");
     fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
     await waitFor(() => expect(fetchPdf).toHaveBeenCalledTimes(2));
     const signal = fetchPdf.mock.calls[1][1].signal as AbortSignal;
@@ -259,7 +268,7 @@ describe("BookPage — PDF download", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row }));
     mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
     await renderPage(makeParams("j1"));
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    await waitFor(() => expect(picture()).toBeDefined());
     if (kind.startsWith("peer")) expect(screen.queryByRole("button", { name: /download pdf/i })).toBeNull();
     else {
       expect(screen.getByRole("button", { name: /download pdf/i })).toBeDisabled();
@@ -291,7 +300,7 @@ describe("BookPage — bucket routing (spec invariant 1)", () => {
     }));
     await renderPage(makeParams("j1"));
     // Should NOT show the reader — shows a loading/wait state
-    expect(screen.queryByRole("img")).toBeNull();
+    expect(queryPicture()).toBeNull();
   });
 
   it("not-found renders not-found FailureScreen", async () => {
@@ -308,8 +317,8 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await renderAndSwitchToPages(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
-    expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
+    await waitFor(() => expect(picture()).toBeDefined());
+    expect(picture()).toHaveAttribute("src", "https://cdn/0.png");
     expect(mockCreateSignedUrls).toHaveBeenCalledTimes(1);
     expect(mockCreateSignedUrls).toHaveBeenCalledWith(["j1/s0-1.png", "j1/s1-1.png"], 3600);
   });
@@ -320,8 +329,8 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await renderPage(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
-    expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
+    await waitFor(() => expect(picture()).toBeDefined());
+    expect(picture()).toHaveAttribute("src", "https://cdn/0.png");
   });
 
   it("renders back button linking to student bookshelf", async () => {
@@ -395,16 +404,16 @@ describe("BookPage — reader (terminal-success)", () => {
     expect(buttons[1].getAttribute("aria-label")).toBe("Scroll View");
   });
 
-  it("image alt = caption; visible caption is aria-hidden (spec §4.3 double-read fix)", async () => {
+  it("reads the story text once from the caption; the picture button names the picture (spec §4.3)", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
     mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
 
     await renderAndSwitchToPages(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
-    expect(screen.getByRole("img")).toHaveAttribute("alt", "The dog ran.");
-    const caption = screen.getByText("The dog ran.");
-    expect(caption).toHaveAttribute("aria-hidden", "true");
+    const bigger = await screen.findByRole("button", { name: "Show the picture for page 1 bigger" });
+    expect(bigger.querySelector("img")).toHaveAttribute("alt", "");
+    expect(screen.getByText("The dog ran.")).not.toHaveAttribute("aria-hidden");
+    expect(screen.queryByAltText("The dog ran.")).toBeNull();
   });
 
   it("identifies the current page when jumping with the page controls", async () => {
@@ -427,10 +436,10 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await renderAndSwitchToPages(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    await waitFor(() => expect(picture()).toBeDefined());
     fireEvent.click(screen.getByTestId("nav-next"));
     await waitFor(() => {
-      expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/1.png");
+      expect(picture()).toHaveAttribute("src", "https://cdn/1.png");
     });
   });
 
@@ -440,14 +449,14 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await renderAndSwitchToPages(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    await waitFor(() => expect(picture()).toBeDefined());
     fireEvent.click(screen.getByTestId("nav-next"));
     await waitFor(() => {
-      expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/1.png");
+      expect(picture()).toHaveAttribute("src", "https://cdn/1.png");
     });
     fireEvent.click(screen.getByTestId("nav-prev"));
     await waitFor(() => {
-      expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
+      expect(picture()).toHaveAttribute("src", "https://cdn/0.png");
     });
   });
 
@@ -455,7 +464,7 @@ describe("BookPage — reader (terminal-success)", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
     mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
     await renderAndSwitchToPages(makeParams("j1"));
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    await waitFor(() => expect(picture()).toBeDefined());
     expect(screen.getByRole("button", { name: "Previous page" })).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByText("Page 1 of 2")).toHaveAttribute("aria-live", "polite");
     const next = screen.getByRole("button", { name: "Next page" });
@@ -473,9 +482,9 @@ describe("BookPage — reader (terminal-success)", () => {
     mockCreateSignedUrls.mockResolvedValueOnce({ data: SIGNED, error: null })
       .mockResolvedValueOnce({ data: [{ signedUrl: "https://cdn/0-again.png", error: null }], error: null });
     await renderAndSwitchToPages(makeParams("j1"));
-    fireEvent.error(await screen.findByAltText("The dog ran."));
+    fireEvent.error(await waitFor(picture));
     fireEvent.click(await screen.findByRole("button", { name: "Try loading this picture again" }));
-    await waitFor(() => expect(screen.getByAltText("The dog ran.")).toHaveAttribute("src", "https://cdn/0-again.png"));
+    await waitFor(() => expect(picture()).toHaveAttribute("src", "https://cdn/0-again.png"));
     expect(mockCreateSignedUrls).toHaveBeenLastCalledWith(["j1/s0-1.png"], 3600);
   });
 
@@ -506,7 +515,7 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await renderAndSwitchToPages(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    await waitFor(() => expect(picture()).toBeDefined());
     expect(screen.queryByTestId("nav-next")).toBeNull();
     expect(screen.queryByTestId("nav-prev")).toBeNull();
   });
@@ -517,7 +526,7 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await renderAndSwitchToPages(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    await waitFor(() => expect(picture()).toBeDefined());
     expect(resetFailChain).toHaveBeenCalledTimes(1);
   });
 
@@ -529,7 +538,7 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await renderAndSwitchToPages(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    await waitFor(() => expect(picture()).toBeDefined());
     expect(mockCreateSignedUrls).toHaveBeenCalledTimes(2);
   });
 
@@ -558,7 +567,7 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await renderAndSwitchToPages(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    await waitFor(() => expect(picture()).toBeDefined());
     expect(network.mock.calls.map(([url]) => url).filter((url) => url.includes("/image-links"))
       .map((url) => url.slice(url.indexOf("/jobs/")))).toEqual([
       "/jobs/j1/image-links?asset=scene-s0&asset=scene-s1", "/jobs/j1/image-links?asset=scene-s1",
@@ -634,7 +643,7 @@ describe("BookPage — reader fetches only missing pages (image-loading AC-13, A
     });
 
     await waitFor(() => expect(screen.queryByTestId("failure-screen")).toBeNull());
-    await waitFor(() => expect(screen.getAllByRole("img").length).toBeGreaterThan(0));
+    await waitFor(() => expect(picture()).toBeDefined());
     expect(network.mock.calls.map(([url]) => url).filter((url) => url.includes("/image-links"))
       .map((url) => url.slice(url.indexOf("/jobs/")))).toEqual([
       "/jobs/j1/image-links?asset=scene-s0&asset=scene-s1", "/jobs/j1/image-links?asset=scene-s1", "/jobs/j1/image-links?asset=scene-s1",
@@ -659,7 +668,7 @@ describe("BookPage — reader fetches only missing pages (image-loading AC-13, A
       [["j1/s1-1.png"], 3600],
     ]);
     fireEvent.click(await screen.findByLabelText("Pages View"));
-    expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
+    expect(picture()).toHaveAttribute("src", "https://cdn/0.png");
   });
 });
 
@@ -750,7 +759,7 @@ describe("BookPage — other versions of a page (magic pencil 09)", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: { ...FEATURE_ROW, profile_id: "someone-else" } }));
     featureNetwork();
     await renderAndSwitchToPages(makeParams());
-    await screen.findByAltText("The dog ran.");
+    await waitFor(picture);
     expect(screen.queryByRole("button", { name: /Other versions/ })).toBeNull();
   });
 });
@@ -855,7 +864,7 @@ describe("BookPage — magic pencil on a finished page (magic pencil 10)", () =>
     pencilNetwork([{ pencils_left: 5, disabled_reason: null, uses: [use(state)] }]);
     await renderAndSwitchToPages(makeParams());
     expect(await screen.findByText(copy)).toBeDefined();
-    expect(screen.getByAltText("The dog ran.")).toBeDefined();
+    expect(picture()).toBeDefined();
     const opener = screen.getByRole("button", { name: "Magic pencil for page 1" });
     if (state === "held") expect(opener).toBeDisabled();   // one request per book (SH-07)
     else expect(opener).toBeEnabled();
@@ -894,7 +903,7 @@ describe("BookPage — magic pencil on a finished page (magic pencil 10)", () =>
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: { ...FEATURE_ROW, profile_id: "someone-else" } }));
     pencilNetwork([{ pencils_left: 5, disabled_reason: null, uses: [] }]);
     await renderAndSwitchToPages(makeParams());
-    await screen.findByAltText("The dog ran.");
+    await waitFor(picture);
     expect(screen.queryByRole("button", { name: /Magic pencil/ })).toBeNull();
   });
 });

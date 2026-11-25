@@ -1161,7 +1161,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                       >
                         <img
                           src={current.signedUrl}
-                          alt={current.caption}
+                          alt=""
                           fetchPriority="high"
                           onLoad={() => setLoaded(l => (l[pageIndex] ? l : { ...l, [pageIndex]: true }))}
                           onError={() => markBroken(current.image_path)}
@@ -1193,7 +1193,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                   {/* Right side: Story Text */}
                   <div className="w-full flex-1 lg:w-[40%] xl:w-[35%] flex flex-col justify-between p-6 lg:p-12 bg-surface relative overflow-y-auto">
                     <div className="flex-1 flex flex-col justify-center pt-2 lg:pt-0">
-                      <p aria-hidden="true" className="font-kid text-lg md:text-2xl lg:text-3xl leading-relaxed text-foreground text-left max-w-[60ch]">
+                      <p className="font-kid text-lg md:text-2xl lg:text-3xl leading-relaxed text-foreground text-left max-w-[60ch]">
                         {current.caption}
                       </p>
                       {ownsBook && current.other_versions && (
