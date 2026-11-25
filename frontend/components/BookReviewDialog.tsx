@@ -67,7 +67,7 @@ export default function BookReviewDialog({
       }}
     >
       {job && (
-        <div className="bg-surface w-full max-w-3xl mx-4 sm:mx-auto rounded-2xl flex flex-col max-h-[95vh] shadow-[0_22px_60px_rgb(49_85_217/16%)] overflow-hidden">
+        <div className="bg-surface w-full max-w-3xl mx-4 sm:mx-auto rounded-2xl flex flex-col max-h-[95dvh] shadow-[0_22px_60px_rgb(49_85_217/16%)] overflow-hidden">
           {/* Header */}
           <div className="px-6 py-4 border-b border-primary/10 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3">

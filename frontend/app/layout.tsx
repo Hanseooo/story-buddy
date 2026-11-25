@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Outfit, Inter, JetBrains_Mono, Nunito } from "next/font/google";
+import MotionProvider from "@/components/MotionProvider";
 import OfflineIndicator from "@/components/OfflineIndicator";
 import StoppedWritingCleanup from "@/lib/stoppedWriting";
 import "./globals.css";
@@ -40,9 +41,11 @@ export default function RootLayout({
       className={`${outfit.variable} ${inter.variable} ${jetbrainsMono.variable} ${nunito.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans text-foreground bg-background selection:bg-primary selection:text-on-primary">
-        <OfflineIndicator />
-        <StoppedWritingCleanup />
-        {children}
+        <MotionProvider>
+          <OfflineIndicator />
+          <StoppedWritingCleanup />
+          {children}
+        </MotionProvider>
       </body>
     </html>
   );

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { imageLinksResponse } from "@/lib/imageLinksFake";
-import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent, within } from "@testing-library/react";
 import ProcessingPage from "./page";
 // Captured from test_teacher_hold's synthetic real graph/Postgres stopped response.
 import stoppedState from "@/lib/stopped-state.fixture.json";
@@ -198,6 +198,43 @@ describe("ProcessingPage — bucket routing", () => {
     }));
     await renderPage(makeParams("j1"));
     expect(screen.getByText(/drawing picture 3 of 8/i)).toBeDefined();
+  });
+
+  it("in-flight: the drawing bar shows the pictures already finished, not a loop", async () => {
+    // The worker writes "generate_scene:{done + 1}/{n}", so picture 3 of 8 means 2 are finished.
+    mockUseJob.mockReturnValue(jobState({
+      bucket: "in-flight",
+      row: { ...RUNNING_ROW, current_stage: "generate_scene:3/8" },
+    }));
+    await renderPage(makeParams("j1"));
+    const bar = screen.getByRole("progressbar", { name: "Pictures finished" });
+    expect(bar).toHaveAttribute("aria-valuenow", "2");
+    expect(bar).toHaveAttribute("aria-valuemax", "8");
+    expect(bar.firstElementChild).toHaveStyle({ width: "25%" });
+  });
+
+  it("in-flight: the drawing bar stays indeterminate when the stage has no picture count", async () => {
+    mockUseJob.mockReturnValue(jobState({
+      bucket: "in-flight",
+      row: { ...RUNNING_ROW, current_stage: "generate_scene" },
+    }));
+    await renderPage(makeParams("j1"));
+    expect(screen.getByRole("progressbar", { name: "Pictures finished" })).not.toHaveAttribute("aria-valuenow");
+  });
+
+  it("in-flight: the tracker names each step, marks the current one and announces it", async () => {
+    mockUseJob.mockReturnValue(jobState({
+      bucket: "in-flight",
+      row: { ...RUNNING_ROW, current_stage: "generate_scene:3/8" },
+    }));
+    await renderPage(makeParams("j1"));
+    const steps = within(screen.getByRole("list", { name: "Book steps" })).getAllByRole("listitem");
+    expect(steps.map((step) => step.textContent)).toEqual([
+      "Step 1: Story, done", "Step 2: Characters, done", "Step 3: Pictures", "Step 4: Book",
+    ]);
+    expect(steps[2]).toHaveAttribute("aria-current", "step");
+    expect(steps.filter((step) => step.hasAttribute("aria-current"))).toHaveLength(1);
+    expect(screen.getByRole("status")).toHaveTextContent("Drawing picture 3 of 8");
   });
 
   it("in-flight: unrecognised current_stage shows heading only, does not crash", async () => {
@@ -682,6 +719,32 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
     // The pause is unchanged, so the trait is still offered and still chosen.
     expect(screen.getByRole("button", { name: /orange sock/ })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("shows a failed redraw's error in the card that sent it", async () => {
+    const twoCharacters = {
+      ...PAUSED_ROW,
+      reveal: {
+        ...PAUSED_ROW.reveal!,
+        characters: [
+          ...PAUSED_ROW.reveal!.characters,
+          { char_id: "c1", name: "Maya", image_path: "j1/ref-c1.png", chips: ["blue hat"] },
+        ],
+      },
+    };
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: twoCharacters }));
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 503 }) as unknown as typeof fetch;
+    await renderPausedPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "blue hat" }));
+    fireEvent.click(screen.getByRole("button", { name: "Redraw Maya" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("We couldn't send that choice. Please try again.");
+    const mayaCard = screen.getByRole("heading", { name: "Maya" }).parentElement!;
+    const kikoCard = screen.getByRole("heading", { name: "Kiko" }).parentElement!;
+    expect(mayaCard).toContainElement(alert);
+    expect(kikoCard).not.toContainElement(alert);
   });
 
   it("keeps submissions locked when both dispatch and reconciliation fail", async () => {

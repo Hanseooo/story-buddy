@@ -14,6 +14,35 @@ instead of repeating it.
 
 ---
 
+## Reader, progress screen and app-wide UI fixes · 2026-11-25
+
+PR pending. From a code-read UI/UX and responsiveness audit (batches 1-3 of 5).
+
+### Code
+
+- **App-wide.** `MotionProvider` wraps the root layout in `MotionConfig reducedMotion="user"`, so
+  framer-motion honours the OS setting (the CSS block only reached CSS animations). The focus ring
+  gains a navy band inside the yellow outline (yellow alone is about 1.4:1 on ivory). A modal
+  `<dialog>` locks page scroll. `BookReviewDialog` and `ShortcutsModal` cap height in `dvh`.
+- **Reader.** Arrow keys no longer turn the page from a text field or dialog (it lost the
+  magic-pencil text). Below `lg` only the arrow buttons take taps; the arrows stay on edge pages as
+  `aria-disabled`, and a status line says "Page N of M". Swipe follows the finger and commits on
+  distance or speed. Pictures hold a 4:3 box and a broken picture offers a retry. The big picture
+  is a native `<dialog>` with Escape, a Close button and a keyboard-reachable opener.
+- **Progress screen.** The step line now draws. The drawing bar shows pictures finished
+  (`(m-1)/n`, since the worker writes `done + 1`) instead of looping. Steps are an `<ol>` with
+  `aria-current` and a live status heading. Exit links are 44px. Bounce and perpetual pulses are
+  gone, and loops hold still under reduced motion. A failed redraw shows its error in its card.
+
+### Docs
+
+- `DESIGN.md` §7 focus rule names the navy band.
+
+### Checks
+
+- Frontend: 1218 tests pass (8 new, each seen red first), lint and build clean. `tsc` reports one
+  error in the unchanged `lib/signedUrls.test.ts`.
+
 ## Teacher-review pictures load through signed links · 2026-11-25
 
 PR [#144](https://github.com/Hanseooo/story-buddy/pull/144). Decision: [ADR-086](docs/product/adr/ADR-086-teacher-review-pictures-are-served-by-backend-signed-links.md), superseding ADR-080 Decision 7 and ADR-085 Decision 4 in part.
