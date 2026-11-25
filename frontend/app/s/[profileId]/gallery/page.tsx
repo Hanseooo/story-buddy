@@ -73,7 +73,6 @@ export default async function GalleryPage({
         const coverUrl = coverPath ? signedMap[coverPath] : undefined;
         const nickname = job.profiles?.display_nickname ?? "Unknown";
         const href = `/s/${profileId}/book/${job.id}`;
-        const cardClass = "block overflow-hidden rounded-2xl border border-primary/15 bg-surface shadow-[0_6px_18px_rgba(49,85,217,0.1)] outline-none h-full";
         const details = (
           <>
             <p className="font-kid truncate text-sm font-bold text-foreground">
@@ -87,35 +86,17 @@ export default async function GalleryPage({
             </div>
           </>
         );
-        if (job.moderation_mode === "teacher_review_v1") {
-          // GuardedCover can render a retry button, which cannot sit inside a link.
-          return (
-            <StaggerItem key={job.id}>
-              <div className={cardClass}>
-                <GuardedCover job={job} alt={`Cover of book by ${nickname}`} />
-                <Link href={href} className="p-3 flex flex-col gap-1 min-h-11 focus-visible:outline-3 focus-visible:outline-secondary">
-                  {details}
-                </Link>
-              </div>
-            </StaggerItem>
-          );
-        }
+        // The cover's Try again cannot sit inside a link, so the link's ::after covers the card
+        // (tapping the cover still opens the book) and Try again sits above it.
         return (
           <StaggerItem key={job.id}>
-            <Link href={href} className={cardClass}>
-              {coverUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={coverUrl}
-                  alt={`Cover of book by ${nickname}`}
-                  loading="lazy"
-                  className="aspect-[3/4] w-full border-b border-primary/15 bg-muted object-cover"
-                />
-              ) : (
-                <div className="aspect-[3/4] w-full border-b border-primary/15 bg-muted" />
-              )}
-              <div className="p-3 flex flex-col gap-1">{details}</div>
-            </Link>
+            <div className="relative h-full overflow-hidden rounded-2xl border border-primary/15 bg-surface shadow-[0_6px_18px_rgba(49,85,217,0.1)]">
+              <GuardedCover job={job} alt={`Cover of book by ${nickname}`} src={coverUrl}
+                className="aspect-[4/3] w-full border-b border-primary/15" />
+              <Link href={href} className="p-3 flex flex-col gap-1 min-h-11 after:absolute after:inset-0 focus-visible:outline-3 focus-visible:outline-secondary">
+                {details}
+              </Link>
+            </div>
           </StaggerItem>
         );
       })}
