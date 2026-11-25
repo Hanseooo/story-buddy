@@ -40,7 +40,7 @@ Branch `fix/ui-audit-2`, PR number pending. Ticket `.scratch/ui-audit/issues/03-
 
 ### Checks
 
-- Frontend: 1253 tests pass (5 new, each seen red first). Lint and build clean. Not driven in a
+- Frontend: 1258 tests pass (10 new, each seen red first). Lint and build clean. Not driven in a
   browser.
 
 ---
