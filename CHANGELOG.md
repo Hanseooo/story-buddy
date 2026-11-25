@@ -25,15 +25,18 @@ Branch `fix/ui-audit-2`, PR number pending. Batch 1 of `.scratch/ui-audit/issues
   picture" / "Use this picture" and "Go back", so "Keep" never means the old picture (B2).
 - **Teacher shell.** A Settings gear link below `sm`, and a 44px log-out target (D1).
 - **Books review.** A signing failure or a broken page shows "A page didn't load" with Try again
-  instead of loading forever. Share with class stays off until every page has loaded (A3, A4). The
-  Review button signs once (C8). The toast waits while hovered or focused, and the save-failed toast
-  says Try again (C9).
-- **Motion.** Card entrances finish within 0.4s, hover lifts 2px without scale or bounce, and the
+  instead of loading forever, on approved books too. Try again drops only the broken pages' cached
+  links (`forgetSignedUrls`), re-signs only those, keeps loaded pages loaded, and moves focus to the
+  retried page. Every page loads on open, and Share with class stays off with "Loading pages N of M"
+  until all have loaded (A3, A4). The Review button signs once (C8). The toast waits while hovered
+  or focused, also when it appears under the pointer, and the save-failed toast says Try again (C9).
+- **Motion.** The last card entrance starts by 0.4s and lands by about 0.65s, hover lifts 2px in 0.15s without scale or bounce, and the
   shelf's paused and held badges no longer bounce (D2, D3).
 
 ### Docs
 
-- `kid-flow-reader-and-wait-states.md` §4.3: the caption is now the read text.
+- `kid-flow-reader-and-wait-states.md` §4.3: in Pages view the caption is now the read text; Scroll
+  view is unchanged.
 
 ### Checks
 

@@ -367,8 +367,8 @@ function BookCard({
       }}
       initial="hidden"
       animate="show"
-      whileHover={{ y: -2, rotate: 0, zIndex: 10 }}
-      whileFocus={{ y: -2, rotate: 0, zIndex: 10 }}
+      whileHover={{ y: -2, rotate: 0, zIndex: 10, transition: { type: "spring", bounce: 0, duration: 0.15 } }}
+      whileFocus={{ y: -2, rotate: 0, zIndex: 10, transition: { type: "spring", bounce: 0, duration: 0.15 } }}
       transition={{ type: "spring", bounce: 0, duration: 0.25, delay: entered ? 0 : Math.min(index, 8) * 0.05 }}
       onAnimationComplete={() => setEntered(true)}
       className="relative"
