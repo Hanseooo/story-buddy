@@ -10,6 +10,7 @@ import NeedsHelpQueue from "@/components/NeedsHelpQueue";
 import { StaggerGrid, StaggerItem } from "@/components/StaggerGrid";
 import { Job, ReviewDecision, jobState } from "@/lib/types/jobs";
 import { forgetSignedUrls, signPaths } from "@/lib/signedUrls";
+import PictureBox from "@/components/PictureBox";
 import { displayTitle } from "@/lib/displayTitle";
 
 type Tab = "pending" | "approved" | "rejected" | "held";
@@ -31,7 +32,8 @@ export default function BooksPage() {
 
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [notesClassroom, setNotesClassroom] = useState<{ id: string; enabled: boolean } | null>(null);
-  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
+  // A missing id is still signing; null means signing found no link.
+  const [thumbnails, setThumbnails] = useState<Record<string, string | null>>({});
   const [activeTab, setActiveTab] = useState<Tab>("pending");
   const [heldCount, setHeldCount] = useState(0);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -94,16 +96,43 @@ export default function BooksPage() {
     // One batch request, not one per thumbnail. Each thumbnail shows as it arrives,
     // so baseline ones do not wait for teacher-review links.
     const controller = new AbortController();
-    void signPaths(unsigned.map((j) => j.pages![0].image_path), unsigned, controller.signal, (path, url) => {
+    // A thumbnail left without a link once signing ends shows its failed state, not a pulse forever.
+    const markMissing = (signed: Record<string, string>) => {
+      if (controller.signal.aborted) return;
+      setThumbnails((prev) => {
+        const next = { ...prev };
+        for (const j of unsigned) if (!signed[j.pages![0].image_path]) next[j.id] = null;
+        return next;
+      });
+    };
+    signPaths(unsigned.map((j) => j.pages![0].image_path), unsigned, controller.signal, (path, url) => {
       if (controller.signal.aborted) return;
       setThumbnails((prev) => {
         const next = { ...prev };
         for (const j of unsigned) if (j.pages![0].image_path === path) next[j.id] = url;
         return next;
       });
-    });
+    }).then(markMissing, () => markMissing({}));
     return () => controller.abort();
   }, [jobs]);
+
+  /** Drops a broken thumbnail's cached link and signs it again. */
+  async function retryThumbnail(job: Job) {
+    const path = job.pages![0].image_path;
+    forgetSignedUrls([path]);
+    setThumbnails((prev) => {
+      const next = { ...prev };
+      delete next[job.id];
+      return next;
+    });
+    let url: string | null = null;
+    try {
+      url = (await signPaths([path], [job]))[path] ?? null;
+    } catch {
+      // Stays without a link, so the failed state shows again.
+    }
+    setThumbnails((prev) => ({ ...prev, [job.id]: url }));
+  }
 
   // ── Open dialog & sign pages ──────────────────────────────────────────────
 
@@ -431,7 +460,8 @@ export default function BooksPage() {
               <StaggerItem key={j.id}>
                 <BookCard
                   job={j}
-                  thumbnailUrl={thumbnails[j.id] ?? null}
+                  thumbnailUrl={thumbnails[j.id]}
+                  onRetryThumbnail={() => void retryThumbnail(j)}
                   onOpen={() => openDialog(j.id)}
                 />
               </StaggerItem>
@@ -462,7 +492,8 @@ export default function BooksPage() {
                   <BookTableRow
                     key={j.id}
                     job={j}
-                    thumbnailUrl={thumbnails[j.id] ?? null}
+                    thumbnailUrl={thumbnails[j.id]}
+                    onRetryThumbnail={() => void retryThumbnail(j)}
                     onOpen={() => openDialog(j.id)}
                   />
                 ))}
@@ -539,10 +570,12 @@ function EmptyState({ tab }: { tab: Tab }) {
 function BookTableRow({
   job,
   thumbnailUrl,
+  onRetryThumbnail,
   onOpen,
 }: {
   job: Job;
-  thumbnailUrl: string | null;
+  thumbnailUrl: string | null | undefined;
+  onRetryThumbnail: () => void;
   onOpen: () => void;
 }) {
   const state = jobState(job);
@@ -558,12 +591,7 @@ function BookTableRow({
     >
       <td className="px-6 py-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-muted overflow-hidden shrink-0">
-            {thumbnailUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={thumbnailUrl} alt="" aria-hidden="true" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-            )}
-          </div>
+          <PictureBox src={thumbnailUrl} alt="" onRetry={onRetryThumbnail} compact className="aspect-[4/3] w-15 rounded-xl shrink-0" />
           <span className="font-bold">{name}</span>
         </div>
       </td>

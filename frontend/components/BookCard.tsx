@@ -1,14 +1,17 @@
 import { Job, jobState } from "@/lib/types/jobs";
 import { Avatar } from "@/components/Avatar";
 import { displayTitle } from "@/lib/displayTitle";
+import PictureBox from "@/components/PictureBox";
 
 type Props = {
   job: Job;
-  thumbnailUrl: string | null;
+  /** undefined while signing, null when signing found no link. */
+  thumbnailUrl: string | null | undefined;
+  onRetryThumbnail: () => void;
   onOpen: () => void;
 };
 
-export default function BookCard({ job, thumbnailUrl, onOpen }: Props) {
+export default function BookCard({ job, thumbnailUrl, onRetryThumbnail, onOpen }: Props) {
   const state = jobState(job);
   const name = job.profiles?.display_nickname ?? "Unknown";
   const bookTitle = displayTitle(job.title, job.input_text);
@@ -17,39 +20,28 @@ export default function BookCard({ job, thumbnailUrl, onOpen }: Props) {
     day: "numeric",
   });
 
+  // The picture's Try again cannot sit inside the card button, so the button's ::after covers the
+  // card instead and Try again sits above it.
   return (
-    <button
-      onClick={onOpen}
-      className="w-full text-left bg-surface border border-primary/15 rounded-2xl overflow-hidden shadow-[0_6px_18px_rgb(49_85_217/10%)] hover:border-primary/40 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2"
-      aria-label={`Review story by ${name}: ${bookTitle}`}
-    >
+    <div className="relative bg-surface border border-primary/15 rounded-2xl overflow-hidden shadow-[0_6px_18px_rgb(49_85_217/10%)] hover:border-primary/40 transition-colors">
       {/* Thumbnail */}
-      <div className="aspect-[3/2] bg-muted relative">
-        {thumbnailUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={thumbnailUrl}
-            alt=""
-            aria-hidden="true"
-            className="w-full h-full object-cover"
-            loading="lazy"
-          />
-        ) : (
-          <div className="w-full h-full animate-pulse bg-muted" />
-        )}
-        <StateBadge state={state} className="absolute top-3 right-3" />
-      </div>
+      <PictureBox src={thumbnailUrl} alt="" onRetry={onRetryThumbnail} />
 
       {/* Meta */}
-      <div className="px-4 py-3 flex items-center gap-3">
+      <button
+        onClick={onOpen}
+        className="w-full text-left px-4 py-3 flex items-center gap-3 focus:outline-none after:absolute after:inset-0 after:rounded-2xl focus-visible:after:ring-2 focus-visible:after:ring-secondary focus-visible:after:ring-offset-2"
+        aria-label={`Review story by ${name}: ${bookTitle}`}
+      >
+        <StateBadge state={state} className="absolute top-3 right-3" />
         <Avatar avatarId={job.profiles?.avatar_id ?? null} displayNickname={name} size={32} />
-        <div>
+        <div className="min-w-0">
           <p className="font-bold text-foreground text-sm truncate">{name}</p>
           <p className="text-xs text-foreground/60 truncate">{bookTitle}</p>
           <p className="text-xs text-foreground/50 mt-0.5">{date}</p>
         </div>
-      </div>
-    </button>
+      </button>
+    </div>
   );
 }
 

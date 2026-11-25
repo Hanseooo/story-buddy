@@ -90,6 +90,7 @@ describe("teacher decision labels", () => {
     rerender(<BookCard
       job={makeJob({ rejected_at: "2026-10-29T00:00:00Z" })}
       thumbnailUrl={null}
+      onRetryThumbnail={vi.fn()}
       onOpen={vi.fn()}
     />);
     expect(screen.getByText("Not ready yet")).toBeDefined();
@@ -118,10 +119,36 @@ describe("teacher decision labels", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
 
     render(<BooksPage />);
-    const baseline = await screen.findByRole("button", { name: /Review story by Alex/ });
+    // Ticket 03: the thumbnail sits beside the card button, not inside it.
+    const baseline = (await screen.findByRole("button", { name: /Review story by Alex/ })).parentElement!;
     await waitFor(() => expect(baseline.querySelector("img")).toHaveAttribute("src", "https://cdn.test/baseline-thumb/s1.png"));
-    expect(screen.getByRole("button", { name: /Review story by Sam/ }).querySelector("img")).toBeNull();
+    expect(screen.getByRole("button", { name: /Review story by Sam/ }).parentElement!.querySelector("img")).toBeNull();
     vi.unstubAllGlobals();
+  });
+
+  it("a thumbnail that cannot be signed says so and Try again signs it anew, without opening the book (ticket 03)", async () => {
+    const jobs = [makeJob({ id: "thumb-retry", pages: [{ scene_id: "s1", caption: "Page 1", image_path: "thumb-retry/s1.png" }] })];
+    const from = vi.fn((table: string) => ({
+      select: () => ({
+        eq: () => table === "jobs"
+          ? { order: async () => ({ data: jobs }) }
+          : { single: async () => ({ data: { review_notes_enabled: false } }) },
+      }),
+    }));
+    const createSignedUrls = vi.fn()
+      .mockResolvedValueOnce({ data: [{ path: "thumb-retry/s1.png", signedUrl: null, error: "Object not found" }] })
+      .mockResolvedValueOnce({ data: [{ path: "thumb-retry/s1.png", signedUrl: "https://cdn.test/thumb-retry/s1.png?token=second", error: null }] });
+    Object.assign(supabase, { from, storage: { from: () => ({ createSignedUrls }) } });
+
+    render(<BooksPage />);
+    const card = (await screen.findByRole("button", { name: /Review story by Alex/ })).parentElement!;
+    expect(await within(card).findByText("Picture didn't load")).toBeDefined();
+    expect(within(card).getByRole("button", { name: "Try again" })).toBeDefined();
+    // The table row's small thumb retries without opening the review dialog.
+    fireEvent.click(screen.getByRole("button", { name: "Picture didn't load. Try again" }));
+    await waitFor(() => expect(card.querySelector("img")).toHaveAttribute("src", "https://cdn.test/thumb-retry/s1.png?token=second"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(createSignedUrls).toHaveBeenCalledTimes(2);
   });
 
   it("keeps a teacher-review thumbnail across a refresh, reusing its signed link (ADR-086)", async () => {
@@ -140,11 +167,11 @@ describe("teacher decision labels", () => {
     vi.stubGlobal("fetch", network);
     try {
       render(<BooksPage />);
-      const card = await screen.findByRole("button", { name: /Review story by Alex/ });
+      const card = (await screen.findByRole("button", { name: /Review story by Alex/ })).parentElement!;
       await waitFor(() => expect(card.querySelector("img")).toHaveAttribute("src", "https://cdn.test/review-thumb/s1.png"));
       fireEvent(document, new Event("visibilitychange"));
       await waitFor(() => expect(from).toHaveBeenCalledTimes(4));
-      expect(screen.getByRole("button", { name: /Review story by Alex/ }).querySelector("img"))
+      expect(screen.getByRole("button", { name: /Review story by Alex/ }).parentElement!.querySelector("img"))
         .toHaveAttribute("src", "https://cdn.test/review-thumb/s1.png");
       expect(network.mock.calls.filter(([url]) => url.includes("/image-links?"))).toHaveLength(1);
     } finally {
@@ -972,6 +999,7 @@ describe("failure_reason rendering", () => {
       <BookCard
         job={makeJob({ title: "My Dragon Book" })}
         thumbnailUrl={null}
+        onRetryThumbnail={vi.fn()}
         onOpen={vi.fn()}
       />
     );
@@ -983,6 +1011,7 @@ describe("failure_reason rendering", () => {
       <BookCard
         job={makeJob({ title: "A Very Long Dragon Book Title" })}
         thumbnailUrl={null}
+        onRetryThumbnail={vi.fn()}
         onOpen={vi.fn()}
       />
     );
