@@ -13,8 +13,8 @@ type Props = {
   pageUrls: string[];
   /** Signing the pages failed or left a page without a link. */
   pagesFailed?: boolean;
-  /** Signs the pages again; the page's Try again buttons call it. */
-  onRetryPages: () => void;
+  /** Signs these pages again (indexes into `job.pages`); the Try again buttons call it. */
+  onRetryPages: (pages: number[]) => void;
   notesEnabled?: boolean;
   /** Job whose note row opens on load: set when the teacher picks "Add a note" from the toast. */
   openNoteFor?: string | null;
@@ -40,16 +40,25 @@ export default function BookReviewDialog({
   const [pending, setPending] = useState(false);
   const [withdrawnJob, setWithdrawnJob] = useState<string | null>(null);
   const withdrawn = !!job && withdrawnJob === job.id;
-  // Load state per page index, for this set of links only: a re-sign hands over a new array and starts fresh.
-  const [pictures, setPictures] = useState<{ urls: string[]; state: Record<number, "loaded" | "failed"> }>({ urls: pageUrls, state: {} });
-  const pictureState = pictures.urls === pageUrls ? pictures.state : {};
-  const markPicture = (i: number, value: "loaded" | "failed") => setPictures((current) => ({
-    urls: pageUrls, state: { ...(current.urls === pageUrls ? current.state : {}), [i]: value },
+  // Load state per link, for this book only: a re-signed page gets a new link and starts fresh,
+  // while a page whose link is unchanged stays loaded.
+  const [pictures, setPictures] = useState<{ jobId: string | null; state: Record<string, "loaded" | "failed"> }>({ jobId: null, state: {} });
+  const pictureState = pictures.jobId === (job?.id ?? null) ? pictures.state : {};
+  const markPicture = (url: string, value: "loaded" | "failed") => setPictures((current) => ({
+    jobId: job?.id ?? null, state: { ...(current.jobId === (job?.id ?? null) ? current.state : {}), [url]: value },
   }));
-  const pageFailed = (i: number) => pictureState[i] === "failed" || (pagesFailed && !pageUrls[i]);
+  const pageFailed = (i: number) => pageUrls[i] ? pictureState[pageUrls[i]] === "failed" : pagesFailed;
   const pageCount = job?.pages?.length ?? 0;
-  const anyPageFailed = Array.from({ length: pageCount }, (_, i) => pageFailed(i)).some(Boolean);
-  const allPagesLoaded = Array.from({ length: pageCount }, (_, i) => pictureState[i] === "loaded").every(Boolean);
+  const failedPages = Array.from({ length: pageCount }, (_, i) => i).filter(pageFailed);
+  const anyPageFailed = failedPages.length > 0;
+  const loadedCount = Array.from({ length: pageCount }, (_, i) => !!pageUrls[i] && pictureState[pageUrls[i]] === "loaded").filter(Boolean).length;
+  const allPagesLoaded = loadedCount === pageCount;
+  const pageBoxes = useRef<Record<number, HTMLDivElement | null>>({});
+  // The pressed Try again unmounts, so focus moves to the first retried page instead of falling to <body>.
+  const retry = (pages: number[]) => {
+    pageBoxes.current[pages[0]]?.focus();
+    onRetryPages(pages);
+  };
 
   useEffect(() => {
     const el = ref.current;
@@ -126,13 +135,15 @@ export default function BookReviewDialog({
             {!withdrawn && job.pages?.map((page, i) => (
               <div
                 key={page.scene_id}
+                ref={(el) => { pageBoxes.current[i] = el; }}
+                tabIndex={-1}
                 className="bg-surface rounded-2xl overflow-hidden border border-primary/10 shadow-[0_6px_18px_rgb(49_85_217/10%)]"
               >
                 {pageFailed(i) ? (
                   <div className="w-full aspect-[4/3] bg-muted flex flex-col items-center justify-center gap-2 p-4 text-center text-sm text-foreground/70">
                     <p>This page&apos;s picture didn&apos;t load.</p>
                     <button
-                      onClick={onRetryPages}
+                      onClick={() => retry([i])}
                       aria-label={`Try loading page ${i + 1} again`}
                       className="min-h-[44px] px-4 py-2 rounded-xl border border-primary/20 bg-surface font-bold text-foreground hover:bg-muted transition-colors"
                     >
@@ -144,12 +155,10 @@ export default function BookReviewDialog({
                   <img
                     src={pageUrls[i]}
                     alt={page.caption}
-                    onLoad={() => markPicture(i, "loaded")}
-                    onError={() => markPicture(i, "failed")}
-                    // A 15-page book is ~20 MB of full-res PNG. This is a scroll
-                    // container, so lazy means the teacher pays for the pages they
-                    // actually scroll to, not the whole book on open.
-                    loading={i === 0 ? "eager" : "lazy"}
+                    onLoad={() => markPicture(pageUrls[i], "loaded")}
+                    onError={() => markPicture(pageUrls[i], "failed")}
+                    // Every page loads on open (not lazily): Share waits for all of them,
+                    // so the teacher should not have to scroll to the end to unlock it.
                     decoding="async"
                     // Whole picture, never cropped: the teacher approves what the class
                     // will see. Generated pictures are 1024x768 (4:3).
@@ -177,11 +186,11 @@ export default function BookReviewDialog({
               Classmates will be able to read and download this book. Copies already saved remain
               after approval is withdrawn or the book is deleted.
             </p>
-            {state !== "approved" && anyPageFailed && (
+            {anyPageFailed && (
               <div role="alert" className="flex flex-wrap items-center gap-3 text-sm font-bold text-destructive">
-                <p>A page didn&apos;t load, so you can&apos;t share yet.</p>
+                <p>{state === "approved" ? "A page didn't load." : "A page didn't load, so you can't share yet."}</p>
                 <button
-                  onClick={onRetryPages}
+                  onClick={() => retry(failedPages)}
                   className="min-h-[44px] px-4 py-2 rounded-xl border border-primary/20 text-foreground hover:bg-muted transition-colors"
                 >
                   Try again
@@ -190,7 +199,7 @@ export default function BookReviewDialog({
             )}
             {state !== "approved" && !anyPageFailed && !allPagesLoaded && (
               <p id="book-share-waiting" className="text-sm text-foreground/75">
-                Pages are still loading. Scroll through the book to load every page.
+                Loading pages {loadedCount} of {pageCount}
               </p>
             )}
             <div className="flex flex-wrap gap-3 justify-end">

@@ -9,7 +9,7 @@ import BookReviewDialog from "@/components/BookReviewDialog";
 import NeedsHelpQueue from "@/components/NeedsHelpQueue";
 import { StaggerGrid, StaggerItem } from "@/components/StaggerGrid";
 import { Job, ReviewDecision, jobState } from "@/lib/types/jobs";
-import { signPaths } from "@/lib/signedUrls";
+import { forgetSignedUrls, signPaths } from "@/lib/signedUrls";
 import { displayTitle } from "@/lib/displayTitle";
 
 type Tab = "pending" | "approved" | "rejected" | "held";
@@ -36,6 +36,17 @@ export default function BooksPage() {
   const [heldCount, setHeldCount] = useState(0);
   const [toast, setToast] = useState<Toast | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastHeld = useRef({ hover: false, focus: false });
+  const startToastTimer = useCallback(() => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
+  }, []);
+  // The toast unmounts without a leave or blur (dismissed, or moved in or out of the dialog), so a
+  // hold is dropped then, and a remounted toast whose timer was held starts it again.
+  const toastRef = useCallback((el: HTMLDivElement | null) => {
+    if (!el) toastHeld.current = { hover: false, focus: false };
+    else if (!toastTimer.current) startToastTimer();
+  }, [startToastTimer]);
 
   const [dialogJobId, setDialogJobId] = useState<string | null>(null);
   const [noteJobId, setNoteJobId] = useState<string | null>(null);
@@ -128,6 +139,31 @@ export default function BooksPage() {
       setDialogPagesFailed(true);
     }
     return true;
+  }
+
+  /** Signs only the pages that failed, dropping their cached links first so a broken link is not handed back. */
+  async function retryDialogPages(indexes: number[]) {
+    const job = jobs?.find((j) => j.id === dialogJobId);
+    if (!job?.pages?.length) return;
+    const pages = job.pages;
+    dialogImages.current?.abort();
+    const controller = new AbortController();
+    dialogImages.current = controller;
+    const paths = indexes.map((i) => pages[i].image_path);
+    forgetSignedUrls(paths);
+    const before = dialogPageUrls;
+    setDialogPagesFailed(false);
+    setDialogPageUrls(pages.map((_, i) => (indexes.includes(i) ? "" : before[i] ?? "")));
+    let signed: Record<string, string> = {};
+    try {
+      signed = await signPaths(paths, [job], controller.signal);
+    } catch {
+      // A rejected signing leaves these pages without links; they show as failed below.
+    }
+    if (controller.signal.aborted) return;
+    const urls = pages.map((p, i) => (indexes.includes(i) ? signed[p.image_path] ?? "" : before[i] ?? ""));
+    setDialogPageUrls(urls);
+    if (urls.some((url) => !url)) setDialogPagesFailed(true);
   }
 
   // ── Decision ─────────────────────────────────────────────────────────────
@@ -236,18 +272,16 @@ export default function BooksPage() {
 
   function showToast(t: Toast) {
     setToast(t);
-    startToastTimer();
-  }
-
-  function startToastTimer() {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
+    if (!toastHeld.current.hover && !toastHeld.current.focus) startToastTimer();
   }
 
   // WCAG 2.2.1: the toast waits while the pointer or focus is on it.
-  function pauseToast() {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = null;
+  function holdToast(kind: "hover" | "focus", held: boolean) {
+    toastHeld.current[kind] = held;
+    if (toastHeld.current.hover || toastHeld.current.focus) {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      toastTimer.current = null;
+    } else startToastTimer();
   }
 
   function clearToast() {
@@ -270,11 +304,12 @@ export default function BooksPage() {
 
   const toastElement = toast && (
     <div
+      ref={toastRef}
       role="status"
-      onMouseEnter={pauseToast}
-      onMouseLeave={(e) => { if (!e.currentTarget.contains(document.activeElement)) startToastTimer(); }}
-      onFocus={pauseToast}
-      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null) && !e.currentTarget.matches(":hover")) startToastTimer(); }}
+      onMouseEnter={() => holdToast("hover", true)}
+      onMouseLeave={() => holdToast("hover", false)}
+      onFocus={() => holdToast("focus", true)}
+      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) holdToast("focus", false); }}
       className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] sm:bottom-6 mx-auto w-fit max-w-sm bg-foreground text-background px-5 py-3 rounded-xl text-sm font-bold shadow-lg z-[var(--z-toast)] flex items-center gap-3"
     >
       <span>{toast.message}</span>
@@ -456,7 +491,7 @@ export default function BooksPage() {
         job={dialogJob}
         pageUrls={dialogPageUrls}
         pagesFailed={dialogPagesFailed}
-        onRetryPages={() => { if (dialogJobId) void signDialogPages(dialogJobId); }}
+        onRetryPages={(indexes) => void retryDialogPages(indexes)}
         notesEnabled={notesEnabled}
         openNoteFor={noteJobId}
         onDecide={handleDecide}

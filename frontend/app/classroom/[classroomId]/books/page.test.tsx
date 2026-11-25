@@ -706,7 +706,7 @@ describe("review dialog pictures and toast", () => {
     const urls = ["https://cdn.test/1.png", "https://cdn.test/2.png"];
     const { unmount } = render(<BookReviewDialog {...props} pageUrls={urls} />);
     expect(screen.getByRole("button", { name: "Share with class" })).toBeDisabled();
-    expect(screen.getByText("Pages are still loading. Scroll through the book to load every page.")).toBeDefined();
+    expect(screen.getByText("Loading pages 0 of 2")).toBeDefined();
     expect(notReadyButton()).toBeEnabled();
     fireEvent.load(screen.getByAltText("Page 1"));
     fireEvent.load(screen.getByAltText("Page 2"));
@@ -719,8 +719,70 @@ describe("review dialog pictures and toast", () => {
     expect(screen.getByText("This page's picture didn't load.")).toBeDefined();
     expect(screen.getByRole("alert")).toHaveTextContent("A page didn't load, so you can't share yet.");
     expect(screen.getByRole("button", { name: "Share with class" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Try loading page 2 again" }));
-    expect(props.onRetryPages).toHaveBeenCalledTimes(1);
+  });
+
+  it("loads every page at once and counts them in until Share turns on", () => {
+    const job = makeJob({ pages: [1, 2, 3].map((n) => ({ scene_id: `s${n}`, caption: `Page ${n}`, image_path: `job-1/s${n}.png` })) });
+    render(<BookReviewDialog job={job} pageUrls={["https://cdn.test/1.png", "https://cdn.test/2.png", "https://cdn.test/3.png"]}
+      onClose={vi.fn()} onDecide={vi.fn()} onRetryPages={vi.fn()} />);
+    expect(screen.getByAltText("Page 3")).not.toHaveAttribute("loading", "lazy");
+    fireEvent.load(screen.getByAltText("Page 1"));
+    fireEvent.load(screen.getByAltText("Page 2"));
+    expect(screen.getByText("Loading pages 2 of 3")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Share with class" })).toBeDisabled();
+    fireEvent.load(screen.getByAltText("Page 3"));
+    expect(screen.getByRole("button", { name: "Share with class" })).toBeEnabled();
+  });
+
+  it("says a page didn't load on an approved book too", () => {
+    render(<BookReviewDialog job={{ ...twoPages("job-1"), approved_at: "2026-11-26T00:00:00Z" }} pageUrls={[]} pagesFailed
+      onClose={vi.fn()} onDecide={vi.fn()} onRetryPages={vi.fn()} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("A page didn't load.");
+  });
+
+  it("re-signs only a broken page on Try again, keeps the loaded page, and keeps focus in the dialog", async () => {
+    serveJobs([twoPages("retry-one")]);
+    let n = 0;
+    const createSignedUrls = vi.fn(async (paths: string[]) =>
+      ({ data: paths.map((path) => ({ path, signedUrl: `https://cdn.test/${path}?v=${++n}`, error: null })) }));
+    Object.assign(supabase, { storage: { from: () => ({ createSignedUrls }) } });
+    render(<BooksPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /Review story by Alex/ }));
+    const dialog = document.querySelector("dialog")!;
+    const page2 = await within(dialog).findByAltText("Page 2");
+    const first = page2.getAttribute("src");
+    fireEvent.load(within(dialog).getByAltText("Page 1"));
+    fireEvent.error(page2);
+    const calls = createSignedUrls.mock.calls.length;
+    fireEvent.click(within(dialog).getByRole("button", { name: "Try loading page 2 again" }));
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toHaveTextContent("Page 2");
+    await waitFor(() => expect(within(dialog).getByAltText("Page 2").getAttribute("src")).not.toBe(first));
+    expect(createSignedUrls.mock.calls.slice(calls)).toEqual([[["retry-one/s2.png"], 3600]]);
+    fireEvent.load(within(dialog).getByAltText("Page 2"));
+    expect(within(dialog).getByRole("button", { name: "Share with class" })).toBeEnabled();
+  });
+
+  it("does not start the toast timer when a new toast appears under the pointer", async () => {
+    serveJobs([makeJob({ pages: [] })]);
+    let finish: ((r: Response) => void) | undefined;
+    vi.stubGlobal("fetch", vi.fn((url: string) => url.endsWith("/review")
+      ? new Promise<Response>((resolve) => { finish = resolve; }) : Promise.resolve(Response.json([]))));
+    render(<BooksPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /Review story by Alex/ }));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      fireEvent.click(notReadyButton());
+      fireEvent.mouseEnter(screen.getByText("Marked not ready").parentElement!);
+      await vi.waitUntil(() => finish);
+      finish!(new Response("down", { status: 503 }));
+      await vi.waitUntil(() => screen.queryByText("Could not save — try again"));
+      act(() => { vi.advanceTimersByTime(6000); });
+      expect(screen.getByText("Could not save — try again")).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
   });
 
   it("holds the toast while the pointer is on it, then dismisses it after leaving", async () => {
