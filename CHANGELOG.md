@@ -40,7 +40,7 @@ Branch `fix/ui-audit-2`, PR number pending. Batch 1 of `.scratch/ui-audit/issues
 
 ### Checks
 
-- Frontend: 1244 tests pass (6 new, each seen red first). Lint and build clean. Motion not driven in
+- Frontend: 1248 tests pass (10 new, each seen red first). Lint and build clean. Motion not driven in
   a browser.
 
 ---
