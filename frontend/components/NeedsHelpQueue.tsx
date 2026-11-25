@@ -635,13 +635,15 @@ function ReviewPicture({ jobId, reviewId, version, picture, onChanged, onInspect
       </div> : failed ? <div role="alert">
         <p>Picture unavailable. Your story context is still here.</p>
         <button className={control} onClick={() => { setUrl(null); setFailed(false); setLoaded(false); setAttempt(value => value + 1); }}>Try loading again</button>
-      </div> : <>
-        {!loaded && <p role="status">Loading picture…</p>}
+      </div> : <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-muted">
+        {/* A reserved 4:3 box, so the decision controls below do not jump when the picture arrives. */}
+        {!loaded && <div role="status" className="absolute inset-0 animate-pulse bg-muted/50"><span className="sr-only">Loading picture…</span></div>}
         {/* Guarded bytes only. No Storage URL is exposed to the browser. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        {url && <img src={url} alt={picture.label || "Story picture"} className="w-full h-auto rounded-2xl"
+        {url && <img src={url} alt={picture.label || "Story picture"}
+          className={`relative h-full w-full object-contain transition-opacity duration-[var(--duration-slow)] ${loaded ? "opacity-100" : "opacity-0"}`}
           onLoad={() => { setLoaded(true); onInspected?.(true); }}
           onError={() => { setFailed(true); onInspected?.(false); }} />}
-      </>}
+      </div>}
   </figure>;
 }
