@@ -260,7 +260,12 @@ Applies: SH-02
    `input_text`). `pages` stays: `classify` needs its length and `signPaths` needs page 0's
    `scene_id`. The `.eq("profile_id", …)` filter stays (classmate leak, spec §9.11).
 9. **Per-card cover state** (loading / ready / failed) lives in the bookshelf page, keyed by job id.
-   Cards follow the existing `BookCard` pattern. No new shared component.
+   Cards follow the existing `BookCard` pattern. ~~No new shared component.~~
+   *Superseded 2026-11-26 by owner decision Q1 (`.scratch/ui-audit/issues/02-audit-round-2.md`):*
+   one shared picture box (`frontend/components/PictureBox.tsx`) gives the teacher book cards and
+   table thumbs, the gallery covers and `GuardedCover` a pulse, a fade-in, a fixed 4:3 box, and a
+   "Picture didn't load" state whose Try again drops the cached link (`forgetSignedUrls`) and signs it
+   again. The bookshelf keeps its own cover state.
 
 ## 6. Verification
 

@@ -14,6 +14,37 @@ instead of repeating it.
 
 ---
 
+## UI audit round 2, batch 2: shared picture box · 2026-11-26
+
+Branch `fix/ui-audit-2`, PR number pending. Ticket `.scratch/ui-audit/issues/03-shared-picture-box.md`.
+
+### Code
+
+- **Picture box.** New `components/PictureBox.tsx`: a fixed 4:3 box that pulses while the link is
+  signed and the picture loads, fades in, and on a broken or missing link shows "Picture didn't load"
+  with a 44px Try again. Try again drops the cached link (`forgetSignedUrls`) and signs it again.
+- **Teacher books.** Book cards and table thumbs use it, so a thumb that cannot be signed no longer
+  pulses forever (A1, A2). Cards and thumbs are 4:3 (A8), and the card meta ellipsizes long titles
+  (C11). The card button now covers the card with its `::after`, since Try again cannot sit inside
+  it; Try again in a table row does not open the book.
+- **Gallery.** Every cover, baseline or teacher-review, goes through `GuardedCover` on the box at 4:3,
+  with its failed text above Try again (A5, A6). The card link covers the card the same way, so
+  tapping a cover still opens the book. The skeleton has the real card's title and avatar rows (A7).
+- **Needs your help.** A held picture loads in a reserved 4:3 box, so the decision controls do not
+  jump (A9).
+
+### Docs
+
+- `image-loading-ux.md` §5.9: "No new shared component" struck through and superseded by owner
+  decision Q1.
+
+### Checks
+
+- Frontend: 1253 tests pass (5 new, each seen red first). Lint and build clean. Not driven in a
+  browser.
+
+---
+
 ## UI audit round 2, batch 1: bug fixes · 2026-11-26
 
 Branch `fix/ui-audit-2`, PR number pending. Batch 1 of `.scratch/ui-audit/issues/02-audit-round-2.md`.
