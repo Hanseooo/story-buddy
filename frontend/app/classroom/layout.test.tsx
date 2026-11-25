@@ -38,8 +38,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("next/link", () => ({
-  default: ({ href, children }: { href: string; children: React.ReactNode }) => (
-    <a href={href}>{children}</a>
+  default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
+    <a href={href} {...rest}>{children}</a>
   ),
 }));
 
@@ -99,5 +99,14 @@ describe("ClassroomLayout / TeacherShell", () => {
     const jsx = await TeacherShell({ children: <div>Content</div> });
     render(jsx);
     expect(screen.getByText("Content")).toBeDefined();
+  });
+
+  it("gives a phone a Settings link next to Log out", async () => {
+    mockSelect.mockReturnValue({
+      eq: () => ({ single: () => Promise.resolve({ data: { id: "teacher-abc", role: "teacher", display_name: "Ms. Garcia" } }) }),
+    });
+    render(await TeacherShell({ children: <div /> }));
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+    expect(screen.getByRole("link", { name: "Ms. Garcia" })).toHaveAttribute("href", "/settings");
   });
 });
