@@ -208,7 +208,9 @@ describe("Teacher Auth Pages", () => {
 
     fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "newteacher@school.org" } });
     const password = screen.getByLabelText(/^password$/i);
-    expect(password).toHaveAttribute("minLength", "8");
+    // A native minlength makes a real browser block the submit with its own tooltip, so the
+    // inline error below never shows. jsdom does not enforce it, hence the explicit guard.
+    expect(password).not.toHaveAttribute("minlength");
     fireEvent.change(password, { target: { value: "short12" } });
     fireEvent.click(screen.getByRole("button", { name: /sign up/i }));
 

@@ -307,7 +307,7 @@ function PageVersions({ jobId, pageNumber, page, reviewed, busy, onBusy, onChang
         </div>
       )}
       <dialog ref={confirmRef} aria-labelledby={`${listId}-confirm`} onCancel={(event) => { event.preventDefault(); cancelConfirm(); }}
-        className="m-auto max-w-md rounded-2xl bg-background p-6 font-kid text-foreground backdrop:bg-foreground/50">
+        className="m-auto max-w-[min(28rem,calc(100%-2rem))] rounded-2xl bg-background p-6 font-kid text-foreground backdrop:bg-foreground/50">
         <h2 id={`${listId}-confirm`} className="text-xl font-bold">Your teacher will look at your book again before classmates can see it.</h2>
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" ref={confirmButtonRef} onClick={() => pending && void change(pending.version)}
@@ -576,7 +576,7 @@ function PagePencil({ jobId, pageNumber, page, status, reviewed, busy, onBusy, o
         </div>
       )}
       <dialog ref={confirmRef} aria-labelledby={`${formId}-confirm`} onCancel={(event) => { event.preventDefault(); confirmRef.current?.close(); }}
-        className="m-auto max-w-md rounded-2xl bg-background p-6 font-kid text-foreground backdrop:bg-foreground/50">
+        className="m-auto max-w-[min(28rem,calc(100%-2rem))] rounded-2xl bg-background p-6 font-kid text-foreground backdrop:bg-foreground/50">
         <h2 id={`${formId}-confirm`} className="text-xl font-bold">Your teacher will look at your book again before classmates can see it.</h2>
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" ref={confirmButtonRef} onClick={() => void decide("kept")} className={`${kidControl} bg-primary text-on-primary`}>

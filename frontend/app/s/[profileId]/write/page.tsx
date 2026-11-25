@@ -292,13 +292,13 @@ export default function WriteStoryPage() {
         <Link className="inline-flex min-h-11 items-center px-4 underline" href={`/s/${profileId}/process/${encodeURIComponent(recovery.jobId)}`}>Back to saved story</Link>
       </section>}
       <dialog ref={replacement} aria-labelledby="replace-draft" onCancel={event => { event.preventDefault(); keepExistingDraft(); }}
-        className="m-auto max-w-md rounded-2xl bg-background p-6 text-foreground backdrop:bg-foreground/50">
+        className="m-auto max-w-[min(28rem,calc(100%-2rem))] rounded-2xl bg-background p-6 text-foreground backdrop:bg-foreground/50">
         <h2 id="replace-draft" className="text-xl font-bold">Replace the writing in this draft?</h2>
         <button type="button" ref={keepDraft} className="min-h-11 px-4 font-bold" onClick={keepExistingDraft}>Keep my draft</button>
         <button type="button" className="min-h-11 px-4 font-bold" onClick={consumeWriting}>Replace my draft</button>
       </dialog>
       <dialog ref={startOverDialog} aria-labelledby="start-over" onCancel={event => { event.preventDefault(); keepStory(); }}
-        className="m-auto max-w-md rounded-2xl bg-background p-6 text-foreground backdrop:bg-foreground/50">
+        className="m-auto max-w-[min(28rem,calc(100%-2rem))] rounded-2xl bg-background p-6 text-foreground backdrop:bg-foreground/50">
         <h2 id="start-over" className="text-xl font-bold">Start over? Your story will be cleared.</h2>
         <div className="mt-4 flex flex-wrap gap-3">
           <button type="button" ref={keepStoryButton} className="min-h-11 px-4 rounded-xl bg-primary text-on-primary font-bold" onClick={keepStory}>Keep my story</button>

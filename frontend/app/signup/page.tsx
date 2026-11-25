@@ -167,7 +167,6 @@ export default function Signup() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  minLength={8}
                   aria-invalid={passwordError ? true : undefined}
                   aria-describedby={passwordError ? "password-hint password-error" : "password-hint"}
                   className="w-full min-h-[48px] px-4 py-3 rounded-xl border border-primary/20 bg-background text-foreground transition-colors focus:outline-none focus:border-primary focus-visible:ring-[3px] focus-visible:ring-secondary pr-24 text-base"

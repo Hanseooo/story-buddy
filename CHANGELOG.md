@@ -14,6 +14,30 @@ instead of repeating it.
 
 ---
 
+## UI audit review fixes and cast picture reload · 2026-11-26
+
+Fixes from the two-axis review of UI audit batches 1-4, plus one cast-screen bug.
+
+### Code
+
+- **Focus ring.** Batch 1's unlayered navy band (`globals.css`) replaced the yellow ring on every
+  control styled `focus-visible:outline-none focus-visible:ring-*` (13 files), leaving navy on
+  cobalt. Those controls now show their yellow ring with the navy band outside it.
+- **Sign-up.** Drops the native `minLength`: a real browser blocked the submit with its own tooltip,
+  so the inline 8-character error never showed. `lib/password.ts` stays the one source of the rule.
+- **Dialogs.** `ConfirmDialog` is named by its title. The two `/write` dialogs and the two book-page
+  change confirms keep a 16px gutter at 360px instead of running edge to edge.
+- **Cast screen.** The paused reveal reloaded every picture whenever a refetch (tab return,
+  realtime UPDATE) handed back the same reveal as a new object, blanking the pictures and disabling
+  every control. It now reloads only when a character's `char_id` or `image_path` changes.
+
+### Checks
+
+- Frontend: 1238 tests pass (2 new, each seen red first; the sign-up length test now guards against the
+  attribute, seen red with it). Lint and build clean. Focus ring, sign-up error and dialog gutter
+  measured in Chromium against the production build. Deferred items:
+  `.scratch/ui-audit/issues/01-deferred-after-review.md`.
+
 ## Teacher, student and sign-in UI fixes · 2026-11-25
 
 Direct main update. Batch 4 of the UI/UX audit.

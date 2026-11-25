@@ -109,6 +109,12 @@
   box-shadow: 0 0 0 3px var(--foreground);
 }
 
+/* Controls that swap the outline for a `focus-visible:ring-*` keep their yellow ring, with the
+   navy band moved outside it, so the same two tones show on cobalt and on ivory. */
+[class*="focus-visible:ring"]:focus-visible {
+  box-shadow: 0 0 0 3px var(--color-secondary), 0 0 0 6px var(--foreground);
+}
+
 /* A modal dialog must not let the page behind it scroll on touch. */
 html:has(dialog:modal) {
   overflow: hidden;
