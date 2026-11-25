@@ -743,7 +743,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   const characterImageLoadId = useRef(0);
   const moderationMode = row?.moderation_mode;
 
-  const loadCharacterImages = useCallback(async (characters: NonNullable<JobRow["reveal"]>["characters"]) => {
+  const loadCharacterImages = useCallback(async (characters: Array<{ char_id: string; image_path: string }>) => {
     imageRequest.current?.abort();
     const controller = new AbortController();
     imageRequest.current = controller;
@@ -788,13 +788,22 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
     setCharacterImageState((current) => ({ ...current, ...states }));
   }, [jobId, moderationMode]);
 
+  // Keyed on the pictures, not the reveal object: a tab-return refetch or realtime UPDATE hands
+  // back an identical reveal as a new object, and reloading on that blanked every picture and
+  // disabled every control until it downloaded again. A new draw always has a new path.
+  const revealImagesKey = bucket === "paused" && row?.reveal?.characters.length
+    ? JSON.stringify(row.reveal.characters.map(({ char_id, image_path }) => [char_id, image_path]))
+    : null;
+
   useEffect(() => {
-    if (bucket !== "paused" || !row?.reveal?.characters.length) return;
+    if (!revealImagesKey) return;
+    const characters = (JSON.parse(revealImagesKey) as Array<[string, string]>)
+      .map(([char_id, image_path]) => ({ char_id, image_path }));
     // Initialize the per-image read state when the paused reveal becomes authoritative.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadCharacterImages(row.reveal.characters);
+    void loadCharacterImages(characters);
     return () => { imageRequest.current?.abort(); };
-  }, [bucket, row?.reveal, loadCharacterImages]);
+  }, [revealImagesKey, loadCharacterImages]);
 
   // Push to /book on terminal-success. The bridge needs no teardown here: `isRedrawing` is read
   // only on the in-flight branch and only while the stage still matches, so a stale value cannot

@@ -290,6 +290,29 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Use these characters" })).toBeDefined());
   });
 
+  it("paused: a refetch with the same reveal keeps the picture and every control enabled", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
+    const view = await renderPausedPage();
+    const picture = screen.getByRole("img", { name: "Kiko" });
+
+    // A tab-return refetch or realtime UPDATE: identical content, new object.
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: structuredClone(PAUSED_ROW) }));
+    // Real scheduler, as in a browser: act() flushes React work at every await.
+    const actEnv = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    actEnv.IS_REACT_ACT_ENVIRONMENT = false;
+    try {
+      view.rerender(<ProcessingPage params={makeParams("j1")} />);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    } finally {
+      actEnv.IS_REACT_ACT_ENVIRONMENT = true;
+    }
+
+    // No load event is fired here: a browser fires none for an image it did not remount.
+    expect(screen.getByRole("img", { name: "Kiko" })).toBe(picture);
+    expect(screen.getByRole("button", { name: "Use these characters" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /orange sock/ })).toBeEnabled();
+  });
+
   it("paused: chips not rendered when taps_left == 0", async () => {
     const zeroTaps = {
       ...PAUSED_ROW,
