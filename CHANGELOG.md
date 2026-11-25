@@ -14,6 +14,34 @@ instead of repeating it.
 
 ---
 
+## UI audit round 2, batch 1: bug fixes · 2026-11-26
+
+Branch `fix/ui-audit-2`, PR number pending. Batch 1 of `.scratch/ui-audit/issues/02-audit-round-2.md`.
+
+### Code
+
+- **Reader.** Pages view reads the story text again: the caption is no longer `aria-hidden`, and the
+  picture inside the "bigger" button has an empty alt (B1). The change confirms say "Use the new
+  picture" / "Use this picture" and "Go back", so "Keep" never means the old picture (B2).
+- **Teacher shell.** A Settings gear link below `sm`, and a 44px log-out target (D1).
+- **Books review.** A signing failure or a broken page shows "A page didn't load" with Try again
+  instead of loading forever. Share with class stays off until every page has loaded (A3, A4). The
+  Review button signs once (C8). The toast waits while hovered or focused, and the save-failed toast
+  says Try again (C9).
+- **Motion.** Card entrances finish within 0.4s, hover lifts 2px without scale or bounce, and the
+  shelf's paused and held badges no longer bounce (D2, D3).
+
+### Docs
+
+- `kid-flow-reader-and-wait-states.md` §4.3: the caption is now the read text.
+
+### Checks
+
+- Frontend: 1244 tests pass (6 new, each seen red first). Lint and build clean. Motion not driven in
+  a browser.
+
+---
+
 ## UI audit review fixes and cast picture reload · 2026-11-26
 
 PR [#145](https://github.com/Hanseooo/story-buddy/pull/145). Fixes from the two-axis review of UI audit batches 1-4, plus one cast-screen bug.
