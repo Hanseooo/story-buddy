@@ -110,13 +110,30 @@ describe("WriteStoryPage", () => {
     );
   });
 
-  it("shows a live word count that updates as the user types", () => {
+  it("shows the word count and says how many words a story needs", () => {
     render(<WriteStoryPage />);
     const textarea = screen.getByLabelText("story text");
     fireEvent.change(textarea, { target: { value: "one two three" } });
 
-    const counter = screen.getByText(/3/i);
-    expect(counter).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByText("3")).toBeDefined();
+    expect(screen.getByText("Write 5 words to start")).toBeDefined();
+  });
+
+  it("announces the word count only when it crosses a limit, not on every word", () => {
+    render(<WriteStoryPage />);
+    const textarea = screen.getByLabelText("story text");
+    const status = () => screen.getByRole("status").textContent;
+    fireEvent.change(textarea, { target: { value: "one two three" } });
+    const belowMin = status();
+    fireEvent.change(textarea, { target: { value: "one two three four" } });
+    expect(status()).toBe(belowMin);
+    expect(screen.getByText("4")).not.toHaveAttribute("aria-live");
+
+    fireEvent.change(textarea, { target: { value: "one two three four five" } });
+    const ready = status();
+    expect(ready).not.toBe(belowMin);
+    fireEvent.change(textarea, { target: { value: "one two three four five six" } });
+    expect(status()).toBe(ready);
   });
 });
 
@@ -197,16 +214,26 @@ describe("WriteStoryPage — prefill and chain counter", () => {
     sessionStorage.setItem("sb.failChain", "3");
     sessionStorage.setItem("sb.prefill", JSON.stringify({ text: "A story.", title: "Book" }));
     render(<WriteStoryPage />);
-    expect(screen.getByText(/start over/i)).toBeDefined();
+    expect(screen.getByRole("button", { name: "Start over" })).toBeDefined();
   });
 
-  it("try-a-different-story clears the textarea", () => {
+  it("start over asks first: Keep my story keeps the writing, Clear it clears it", () => {
     sessionStorage.setItem("sb.failChain", "3");
     sessionStorage.setItem("sb.prefill", JSON.stringify({ text: "A story.", title: "Book" }));
     render(<WriteStoryPage />);
-    fireEvent.click(screen.getByText(/start over/i));
-    const textarea = screen.getByLabelText("story text") as HTMLTextAreaElement;
-    expect(textarea.value).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "Start over" }));
+    expect(screen.getByRole("dialog", { name: "Start over? Your story will be cleared." })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Keep my story" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Keep my story" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByLabelText("story text")).toHaveValue("A story.");
+    expect(screen.getByLabelText("Story title")).toHaveValue("Book");
+
+    fireEvent.click(screen.getByRole("button", { name: "Start over" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear it" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByLabelText("story text")).toHaveValue("");
+    expect(screen.getByLabelText("Story title")).toHaveValue("");
   });
 
   it("shows role=alert error when POST returns non-ok status (spec §4.6)", async () => {
@@ -260,7 +287,7 @@ describe("WriteStoryPage — the 500-word cap", () => {
     render(<WriteStoryPage />);
     fireEvent.change(screen.getByLabelText("story text"), { target: { value: words(501) } });
 
-    expect(screen.getByText("Too long!")).toBeDefined();
+    expect(screen.getByText("Too long! Use 500 words or fewer (you have 501).")).toBeDefined();
     expect(submitButton()).toBeDisabled();
   });
 

@@ -52,7 +52,9 @@ export default async function TeacherShell({ children }: Props) {
         </div>
       </header>
 
-      <main className="flex-1 isolate relative z-0 pb-20 sm:pb-0">{children}</main>
+      {/* No stacking context here: a fixed toast inside a page must be able to rise above the
+          header (z-40) and tab bar (z-30). Page content stays at z-20 or below. */}
+      <main className="flex-1 pb-20 sm:pb-0">{children}</main>
       <TeacherTabBar />
     </div>
   );

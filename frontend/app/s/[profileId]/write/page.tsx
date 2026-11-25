@@ -57,6 +57,9 @@ export default function WriteStoryPage() {
   const replacement = useRef<HTMLDialogElement>(null);
   const keepDraft = useRef<HTMLButtonElement>(null);
   const useWriting = useRef<HTMLButtonElement>(null);
+  const startOverDialog = useRef<HTMLDialogElement>(null);
+  const startOverButton = useRef<HTMLButtonElement>(null);
+  const keepStoryButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const jobId = new URLSearchParams(window.location.search).get("reuse");
     if (!jobId) return;
@@ -93,6 +96,15 @@ export default function WriteStoryPage() {
 
   function keepExistingDraft() {
     replacement.current?.close(); useWriting.current?.focus();
+  }
+
+  function keepStory() {
+    startOverDialog.current?.close(); startOverButton.current?.focus();
+  }
+
+  function clearStory() {
+    setText(""); setTitle(""); setTitleError(null);
+    startOverDialog.current?.close(); titleInputRef.current?.focus();
   }
 
   useEffect(() => {
@@ -142,6 +154,12 @@ export default function WriteStoryPage() {
   const wordCount = countWords(text);
   const overCap = wordCount > MAX_STORY_WORDS;
   const progress = Math.min((wordCount / MIN_STORY_WORDS) * 100, 100);
+  // Changes only when a limit is crossed, so screen readers are not told every word.
+  const wordLimitAnnouncement = overCap
+    ? `Too many words. Use ${MAX_STORY_WORDS} words or fewer.`
+    : wordCount < MIN_STORY_WORDS
+      ? `A story needs ${MIN_STORY_WORDS} words.`
+      : "Ready to make your book.";
 
   // The panel blocks a paid submission, so focus has to land on it (CC-6) — announcing it in a
   // live region is not enough when the next action is inside it.
@@ -279,6 +297,14 @@ export default function WriteStoryPage() {
         <button type="button" ref={keepDraft} className="min-h-11 px-4 font-bold" onClick={keepExistingDraft}>Keep my draft</button>
         <button type="button" className="min-h-11 px-4 font-bold" onClick={consumeWriting}>Replace my draft</button>
       </dialog>
+      <dialog ref={startOverDialog} aria-labelledby="start-over" onCancel={event => { event.preventDefault(); keepStory(); }}
+        className="m-auto max-w-md rounded-2xl bg-background p-6 text-foreground backdrop:bg-foreground/50">
+        <h2 id="start-over" className="text-xl font-bold">Start over? Your story will be cleared.</h2>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button type="button" ref={keepStoryButton} className="min-h-11 px-4 rounded-xl bg-primary text-on-primary font-bold" onClick={keepStory}>Keep my story</button>
+          <button type="button" className="min-h-11 px-4 rounded-xl border border-primary/20 text-primary font-bold" onClick={clearStory}>Clear it</button>
+        </div>
+      </dialog>
 
       {/* Title — story-titles spec §3 */}
       <div className="mb-3 shrink-0">
@@ -384,23 +410,27 @@ export default function WriteStoryPage() {
                   strokeLinecap="round" 
                 />
               </svg>
-              <span className="text-sm font-bold text-primary" aria-live="polite">{wordCount}</span>
+              <span className="text-sm font-bold text-primary">{wordCount}</span>
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-extrabold text-foreground leading-none mb-1">
-                {wordCount >= MIN_STORY_WORDS ? "Ready!" : "Keep going!"}
+                {overCap ? "A bit shorter" : wordCount >= MIN_STORY_WORDS ? "Ready!" : "Keep going!"}
               </span>
-              <span className="text-xs font-bold text-foreground/60 leading-none">
-                {overCap ? <span className="text-destructive">Too long!</span> : `${MIN_STORY_WORDS} words min`}
+              <span className="text-xs font-bold text-foreground/60 leading-tight">
+                {overCap
+                  ? <span className="text-destructive">{`Too long! Use ${MAX_STORY_WORDS} words or fewer (you have ${wordCount}).`}</span>
+                  : wordCount < MIN_STORY_WORDS ? `Write ${MIN_STORY_WORDS} words to start` : `Up to ${MAX_STORY_WORDS} words`}
               </span>
+              <span role="status" className="sr-only">{wordLimitAnnouncement}</span>
             </div>
           </div>
 
           {chainCount >= 3 && (
             <button
               type="button"
-              className="text-sm font-extrabold text-primary hover:text-primary-deep hover:underline px-2 transition-colors"
-              onClick={() => { setText(""); setTitle(""); setTitleError(null); }}
+              ref={startOverButton}
+              className="min-h-11 text-sm font-extrabold text-primary hover:text-primary-deep hover:underline px-2 transition-colors"
+              onClick={() => { startOverDialog.current?.showModal(); keepStoryButton.current?.focus(); }}
             >
               Start over
             </button>

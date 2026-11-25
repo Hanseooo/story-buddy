@@ -186,6 +186,10 @@ export default function JoinCodePage({
                   id="nickname"
                   autoFocus
                   type="text"
+                  autoComplete="username"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
                   placeholder="e.g. Maya"
@@ -239,6 +243,7 @@ export default function JoinCodePage({
                     id="password"
                     autoFocus
                     type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -247,20 +252,12 @@ export default function JoinCodePage({
                   />
                   <button
                     type="button"
+                    aria-pressed={showPassword}
                     onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-primary min-h-10 px-2 flex items-center gap-1 hover:text-primary-deep cursor-pointer"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-primary min-h-11 min-w-11 px-2 rounded-lg flex items-center justify-center gap-1 hover:text-primary-deep aria-pressed:bg-primary/10 cursor-pointer"
                   >
-                    {showPassword ? (
-                      <>
-                        <EyeSlash size={18} weight="bold" />
-                        Hide
-                      </>
-                    ) : (
-                      <>
-                        <Eye size={18} weight="bold" />
-                        Show
-                      </>
-                    )}
+                    {showPassword ? <EyeSlash size={18} weight="bold" /> : <Eye size={18} weight="bold" />}
+                    Show <span className="sr-only">secret word</span>
                   </button>
                 </div>
               </div>

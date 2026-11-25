@@ -13,6 +13,7 @@ export default function TeacherSettingsPage() {
   } | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [showPasswords, setShowPasswords] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
@@ -54,17 +55,24 @@ export default function TeacherSettingsPage() {
   async function handleSaveName(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
+    setNameError(null);
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
-      await supabase
+      const { error } = await supabase
         .from("profiles")
         .update({ display_name: displayName.trim() })
         .eq("id", user.id);
+      if (error) {
+        setNameError("Could not update your name — try again");
+        return;
+      }
       setProfile((p) => p && { ...p, display_name: displayName.trim() });
       showToast("Name updated");
+    } catch {
+      setNameError("Could not update your name — try again");
     } finally {
       setSaving(false);
     }
@@ -165,6 +173,11 @@ export default function TeacherSettingsPage() {
             {saving ? "Saving…" : "Save"}
           </button>
         </form>
+        {nameError && (
+          <p className="text-destructive text-sm mt-3" role="alert">
+            {nameError}
+          </p>
+        )}
       </section>
 
       {/* Email (read-only) */}
@@ -251,7 +264,7 @@ export default function TeacherSettingsPage() {
       {toast && (
         <div
           role="status"
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-foreground text-background px-5 py-3 rounded-xl text-sm font-bold shadow-lg z-50"
+          className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] sm:bottom-6 mx-auto w-fit max-w-sm bg-foreground text-background px-5 py-3 rounded-xl text-sm font-bold shadow-lg z-50"
         >
           {toast}
         </div>

@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, Eye, EyeSlash } from "@phosphor-icons/react";
+import { passwordLengthError } from "@/lib/password";
 
 export default function Signup() {
   const router = useRouter();
@@ -16,9 +17,15 @@ export default function Signup() {
   const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Supabase rejects these without sending an email, so the anti-enumeration
+    // "check your email" below would be untrue for them.
+    const lengthError = passwordLengthError(password);
+    setPasswordError(lengthError);
+    if (lengthError) return;
     setLoading(true);
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -99,15 +106,24 @@ export default function Signup() {
           </p>
 
           {submitted && (
-            <div
-              role="alert"
-              className="mb-6 p-4 rounded-xl bg-success/10 border border-success/20 text-success text-sm font-bold"
-            >
-              Check your email for a confirmation link.
+            <div className="mb-6">
+              <div
+                role="status"
+                className="mb-2 p-4 rounded-xl bg-success/10 border border-success/20 text-success text-sm font-bold"
+              >
+                Check your email for a confirmation link.
+              </div>
+              <button
+                type="button"
+                onClick={() => setSubmitted(false)}
+                className="min-h-11 px-2 -ml-2 text-sm font-bold text-primary hover:text-primary-deep underline decoration-primary/30 underline-offset-4 transition-colors rounded-xl focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary cursor-pointer"
+              >
+                Use a different email
+              </button>
             </div>
           )}
 
-          <form onSubmit={handleSignup} className="flex flex-col gap-4">
+          <form onSubmit={handleSignup} hidden={submitted} className="flex flex-col gap-4">
             <div>
               <label htmlFor="displayName" className="block text-sm font-bold mb-1.5 text-foreground">
                 Your name
@@ -115,6 +131,7 @@ export default function Signup() {
               <input
                 id="displayName"
                 type="text"
+                autoComplete="name"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 className="w-full min-h-[48px] px-4 py-3 rounded-xl border border-primary/20 bg-background text-foreground placeholder-foreground/40 transition-colors focus:outline-none focus:border-primary focus-visible:ring-[3px] focus-visible:ring-secondary text-base"
@@ -129,6 +146,7 @@ export default function Signup() {
               <input
                 id="email"
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -145,31 +163,30 @@ export default function Signup() {
                 <input
                   id="password"
                   type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full min-h-[48px] px-4 py-3 rounded-xl border border-primary/20 bg-background text-foreground transition-colors focus:outline-none focus:border-primary focus-visible:ring-[3px] focus-visible:ring-secondary pr-14 text-base"
+                  minLength={8}
+                  aria-invalid={passwordError ? true : undefined}
+                  aria-describedby={passwordError ? "password-hint password-error" : "password-hint"}
+                  className="w-full min-h-[48px] px-4 py-3 rounded-xl border border-primary/20 bg-background text-foreground transition-colors focus:outline-none focus:border-primary focus-visible:ring-[3px] focus-visible:ring-secondary pr-24 text-base"
                   placeholder="••••••••"
                 />
                 <button
                   type="button"
+                  aria-pressed={showPassword}
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 min-h-10 px-2 text-sm font-bold text-primary hover:text-primary-deep transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 min-h-11 min-w-11 px-2 rounded-lg text-sm font-bold text-primary hover:text-primary-deep aria-pressed:bg-primary/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  {showPassword ? (
-                    <>
-                      <EyeSlash size={18} weight="bold" />
-                      Hide
-                    </>
-                  ) : (
-                    <>
-                      <Eye size={18} weight="bold" />
-                      Show
-                    </>
-                  )}
+                  {showPassword ? <EyeSlash size={18} weight="bold" /> : <Eye size={18} weight="bold" />}
+                  Show <span className="sr-only">password</span>
                 </button>
               </div>
-              <p className="text-xs text-foreground/60 mt-1.5 ml-1 font-kid">Must be at least 6 characters</p>
+              <p id="password-hint" className="text-xs text-foreground/60 mt-1.5 ml-1 font-kid">Must be at least 8 characters</p>
+              {passwordError && (
+                <p id="password-error" role="alert" className="text-sm font-bold text-destructive mt-1.5 ml-1">{passwordError}</p>
+              )}
             </div>
 
             <button

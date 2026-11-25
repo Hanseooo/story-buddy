@@ -183,8 +183,10 @@ describe("Teacher Auth Pages", () => {
 
     await waitFor(() => {
       expect(mockSignUp).toHaveBeenCalledWith({ email: "newteacher@school.org", password: "secret123", options: expect.any(Object) });
-      expect(screen.getByRole("alert")).toHaveTextContent(/check your email/i);
+      expect(screen.getByRole("status")).toHaveTextContent(/check your email/i);
     });
+    expect(screen.queryByRole("button", { name: /^sign up$/i })).toBeNull();
+    expect(screen.getByLabelText(/^password$/i)).not.toBeVisible();
   });
 
   it("shows 'check your email' even when signUp returns an error (no account-existence disclosure)", async () => {
@@ -196,8 +198,47 @@ describe("Teacher Auth Pages", () => {
     fireEvent.click(screen.getByRole("button", { name: /sign up/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent(/check your email/i);
+      expect(screen.getByRole("status")).toHaveTextContent(/check your email/i);
       expect(screen.queryByText(/user already registered/i)).toBeNull();
     });
+  });
+
+  it("stops a password shorter than 8 characters inline without calling signUp", async () => {
+    render(<Signup />);
+
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "newteacher@school.org" } });
+    const password = screen.getByLabelText(/^password$/i);
+    expect(password).toHaveAttribute("minLength", "8");
+    fireEvent.change(password, { target: { value: "short12" } });
+    fireEvent.click(screen.getByRole("button", { name: /sign up/i }));
+
+    await waitFor(() => {
+      expect(password).toHaveAccessibleDescription(/use at least 8 characters/i);
+    });
+    expect(password).toHaveAttribute("aria-invalid", "true");
+    expect(mockSignUp).not.toHaveBeenCalled();
+    expect(screen.queryByText(/check your email/i)).toBeNull();
+  });
+
+  it("gives every auth field the autocomplete a password manager expects", () => {
+    const { unmount } = render(<Login />);
+    expect(screen.getByLabelText(/email/i)).toHaveAttribute("autocomplete", "email");
+    expect(screen.getByLabelText(/^password$/i)).toHaveAttribute("autocomplete", "current-password");
+    unmount();
+
+    render(<Signup />);
+    expect(screen.getByLabelText(/your name/i)).toHaveAttribute("autocomplete", "name");
+    expect(screen.getByLabelText(/email/i)).toHaveAttribute("autocomplete", "email");
+    expect(screen.getByLabelText(/^password$/i)).toHaveAttribute("autocomplete", "new-password");
+  });
+
+  it.each([["login", Login], ["signup", Signup]])("%s reveal button is a named 44px toggle", (_, Page) => {
+    render(<Page />);
+    const toggle = screen.getByRole("button", { name: "Show password" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(toggle).toHaveClass("min-h-11", "min-w-11");
+    fireEvent.click(toggle);
+    expect(screen.getByLabelText(/^password$/i)).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: "Show password" })).toHaveAttribute("aria-pressed", "true");
   });
 });

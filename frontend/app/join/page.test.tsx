@@ -17,6 +17,13 @@ describe("Join page — step 1 (§9.9, §9.8 code step)", () => {
     expect(inputs).toHaveLength(6);
   });
 
+  it("class code boxes are not offered one-time codes from messages", () => {
+    render(<JoinPage />);
+    for (const input of screen.getAllByRole("textbox")) {
+      expect(input).toHaveAttribute("autocomplete", "off");
+    }
+  });
+
   it("accepts every generated code character in either case, including L", () => {
     render(<JoinPage />);
     const input = screen.getAllByRole("textbox")[0];

@@ -14,6 +14,34 @@ instead of repeating it.
 
 ---
 
+## Teacher, student and sign-in UI fixes · 2026-11-25
+
+Direct main update. Batch 4 of the UI/UX audit.
+
+### Code
+
+- **Teacher.** `TeacherShell` drops `isolate z-0` from `<main>`, which trapped toasts under the
+  header and tab bar (page content stays at z-20 or below, the cap commit 250a760 set). The
+  reset-word slip is a native `<dialog>` with Escape and focus return, and no backdrop close so a
+  stray tap can't lose the word. Remove failure closes the dialog before its toast. Roster load,
+  single add and display-name save now show their failures (the name save used to say "Name
+  updated" regardless). `BookReviewDialog` shows whole 4:3 pictures, has an accessible name, and
+  its header no longer clips Close at 360px. Desktop `ClassroomTabs` mark the active tab. The four
+  toasts share one class that clears the mobile tab bar.
+- **Student.** "Start over" is 44px and asks first. The write page states the 5 and 500 word
+  limits and announces only limit crossings. Settings shows the child's own letter, plain labels
+  instead of avatar ids, `aria-pressed` filters and a visible avatar focus ring.
+- **Sign-in.** Sign-up checks the 8-character minimum (`lib/password.ts`, ADR-076) before
+  submitting, so a short password no longer shows "Check your email". Fields carry `autoComplete`.
+  Reveal buttons are 44px with `aria-pressed`. The `/join` code boxes fit at 320px.
+- **Dialogs.** `ConfirmDialog` gains `m-auto` (Tailwind's preflight zeroes the dialog's centring
+  margin), a surface background and a `dvh` height cap.
+
+### Checks
+
+- Frontend: 1236 tests pass (15 new, each seen red first), lint and build clean. `tsc` reports the
+  same one error in the unchanged `lib/signedUrls.test.ts`.
+
 ## Reader, progress screen and app-wide UI fixes · 2026-11-25
 
 Direct main update. From a code-read UI/UX and responsiveness audit (batches 1-3 of 5).

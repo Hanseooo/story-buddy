@@ -41,7 +41,7 @@ export default function ConfirmDialog({
   return (
     <dialog
       ref={ref}
-      className="rounded-2xl p-0 max-w-sm w-full border border-primary/20 shadow-[0_22px_60px_rgb(49_85_217/16%)] backdrop:bg-foreground/40 backdrop:backdrop-blur-sm"
+      className="m-auto rounded-2xl p-0 max-w-[calc(100%-2rem)] sm:max-w-sm w-full bg-surface max-h-[90dvh] overflow-y-auto border border-primary/20 shadow-[0_22px_60px_rgb(49_85_217/16%)] backdrop:bg-foreground/40 backdrop:backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === ref.current) onCancel();
       }}

@@ -154,10 +154,26 @@ describe("Join code page — §9.6–10", () => {
     const passwordInput = screen.getByLabelText(/secret word/i);
     fireEvent.change(passwordInput, { target: { value: "dragon" } });
     expect(passwordInput).toHaveAttribute("type", "password");
-    fireEvent.click(screen.getByRole("button", { name: /show/i }));
+    const toggle = screen.getByRole("button", { name: "Show secret word" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(toggle).toHaveClass("min-h-11", "min-w-11");
+    fireEvent.click(toggle);
     expect(passwordInput).toHaveAttribute("type", "text");
-    fireEvent.click(screen.getByRole("button", { name: /hide/i }));
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(toggle);
     expect(passwordInput).toHaveAttribute("type", "password");
     expect(passwordInput).toHaveValue("dragon");
+  });
+
+  it("nickname and secret word carry login autocomplete and no autocapitalize", async () => {
+    await renderJoinCode();
+    const nickname = screen.getByLabelText(/nickname/i);
+    expect(nickname).toHaveAttribute("autocomplete", "username");
+    expect(nickname).toHaveAttribute("autocapitalize", "off");
+    expect(nickname).toHaveAttribute("spellcheck", "false");
+    fireEvent.change(nickname, { target: { value: "Juan" } });
+    fireEvent.click(screen.getByRole("button", { name: /next/i }));
+    await waitFor(() => screen.getByRole("heading", { name: /secret word/i }));
+    expect(screen.getByLabelText(/secret word/i)).toHaveAttribute("autocomplete", "current-password");
   });
 });
