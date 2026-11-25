@@ -87,13 +87,14 @@ export default async function GalleryPage({
           </>
         );
         // The cover's Try again cannot sit inside a link, so the link's ::after covers the card
-        // (tapping the cover still opens the book) and Try again sits above it.
+        // (tapping the cover still opens the book) and Try again sits above it. The card, not the
+        // clipped link, draws the globals.css focus ring (yellow outline, navy band).
         return (
           <StaggerItem key={job.id}>
-            <div className="relative h-full overflow-hidden rounded-2xl border border-primary/15 bg-surface shadow-[0_6px_18px_rgba(49,85,217,0.1)]">
+            <div className="relative h-full overflow-hidden rounded-2xl border border-primary/15 bg-surface shadow-[0_6px_18px_rgba(49,85,217,0.1)] has-[>a:focus-visible]:outline-3 has-[>a:focus-visible]:outline-offset-3 has-[>a:focus-visible]:outline-secondary has-[>a:focus-visible]:shadow-[0_0_0_3px_var(--foreground)]">
               <GuardedCover job={job} alt={`Cover of book by ${nickname}`} src={coverUrl}
                 className="aspect-[4/3] w-full border-b border-primary/15" />
-              <Link href={href} className="p-3 flex flex-col gap-1 min-h-11 after:absolute after:inset-0 focus-visible:outline-3 focus-visible:outline-secondary">
+              <Link href={href} className="p-3 flex flex-col gap-1 min-h-11 after:absolute after:inset-0 focus-visible:outline-none focus-visible:shadow-none!">
                 {details}
               </Link>
             </div>
