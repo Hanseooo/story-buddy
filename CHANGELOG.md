@@ -16,7 +16,7 @@ instead of repeating it.
 
 ## UI audit review fixes and cast picture reload · 2026-11-26
 
-Fixes from the two-axis review of UI audit batches 1-4, plus one cast-screen bug.
+PR [#145](https://github.com/Hanseooo/story-buddy/pull/145). Fixes from the two-axis review of UI audit batches 1-4, plus one cast-screen bug.
 
 ### Code
 
@@ -40,7 +40,7 @@ Fixes from the two-axis review of UI audit batches 1-4, plus one cast-screen bug
 
 ## Teacher, student and sign-in UI fixes · 2026-11-25
 
-Direct main update. Batch 4 of the UI/UX audit.
+PR [#145](https://github.com/Hanseooo/story-buddy/pull/145). Batch 4 of the UI/UX audit.
 
 ### Code
 
@@ -68,7 +68,7 @@ Direct main update. Batch 4 of the UI/UX audit.
 
 ## Reader, progress screen and app-wide UI fixes · 2026-11-25
 
-Direct main update. From a code-read UI/UX and responsiveness audit (batches 1-3 of 5).
+PR [#145](https://github.com/Hanseooo/story-buddy/pull/145). From a code-read UI/UX and responsiveness audit (batches 1-3 of 5).
 
 ### Code
 
