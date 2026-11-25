@@ -889,3 +889,10 @@ describe("removed student visibility", () => {
     expect(pending).toHaveLength(2);
   });
 });
+
+describe("BookReviewDialog accessible name", () => {
+  it("names the dialog by the student and the book title", () => {
+    render(<BookReviewDialog job={makeJob({ title: "The Red Comb" })} pageUrls={[]} onClose={vi.fn()} onDecide={vi.fn()} />);
+    expect(screen.getByRole("dialog", { name: "Alex The Red Comb" })).toBeDefined();
+  });
+});

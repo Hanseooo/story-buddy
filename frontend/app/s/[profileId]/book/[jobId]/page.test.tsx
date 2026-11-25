@@ -451,6 +451,52 @@ describe("BookPage — reader (terminal-success)", () => {
     });
   });
 
+  it("keeps both arrows on the edge pages so focus stays, and announces the page", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+    await renderAndSwitchToPages(makeParams("j1"));
+    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    expect(screen.getByRole("button", { name: "Previous page" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText("Page 1 of 2")).toHaveAttribute("aria-live", "polite");
+    const next = screen.getByRole("button", { name: "Next page" });
+    next.focus();
+    fireEvent.click(next);
+    await waitFor(() => expect(screen.getByText("Page 2 of 2")).toBeDefined());
+    expect(next).toHaveFocus();
+    expect(next).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("offers to load a picture again when its link fails, and signs it again", async () => {
+    const noCache = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("QuotaExceededError"); });
+    onTestFinished(() => noCache.mockRestore());
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
+    mockCreateSignedUrls.mockResolvedValueOnce({ data: SIGNED, error: null })
+      .mockResolvedValueOnce({ data: [{ signedUrl: "https://cdn/0-again.png", error: null }], error: null });
+    await renderAndSwitchToPages(makeParams("j1"));
+    fireEvent.error(await screen.findByAltText("The dog ran."));
+    fireEvent.click(await screen.findByRole("button", { name: "Try loading this picture again" }));
+    await waitFor(() => expect(screen.getByAltText("The dog ran.")).toHaveAttribute("src", "https://cdn/0-again.png"));
+    expect(mockCreateSignedUrls).toHaveBeenLastCalledWith(["j1/s0-1.png"], 3600);
+  });
+
+  it("shows a picture big in a dialog that Close and Escape leave, returning focus", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
+    mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
+    await renderAndSwitchToPages(makeParams("j1"));
+    const trigger = await screen.findByRole("button", { name: "Show the picture for page 1 bigger" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const dialog = screen.getByAltText("Picture for page 1").closest("dialog")!;
+    expect(dialog).toHaveAttribute("open");
+    fireEvent.click(screen.getByRole("button", { name: "Close the big picture" }));
+    expect(dialog).not.toHaveAttribute("open");
+    expect(trigger).toHaveFocus();
+    fireEvent.click(trigger);
+    fireEvent(dialog, new Event("cancel", { cancelable: true }));
+    expect(dialog).not.toHaveAttribute("open");
+    expect(trigger).toHaveFocus();
+  });
+
   it("one-page book: no nav zones rendered", async () => {
     const onePageRow = { ...COMPLETE_ROW, pages: [PAGES[0]] };
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: onePageRow }));
@@ -771,6 +817,23 @@ describe("BookPage — magic pencil on a finished page (magic pencil 10)", () =>
     await waitFor(() => expect(REFETCH).toHaveBeenCalled());
     const chosen = network.mock.calls.find(([url]) => String(url).endsWith("/pages/s0/pencil/choice"))!;
     expect(JSON.parse(String(chosen[1]!.body))).toEqual({ use_id: "u1", choice: "kept", source: AFTER });
+  });
+
+  it("arrow keys stay in the pencil box and only a plain arrow on the page turns it", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
+    pencilNetwork([{ pencils_left: 5, disabled_reason: null, uses: [] }]);
+    await renderAndSwitchToPages(makeParams());
+    fireEvent.click(await screen.findByRole("button", { name: "Magic pencil for page 1" }));
+    const box = screen.getByLabelText("What should change on page 1?");
+    fireEvent.change(box, { target: { value: "a hat" } });
+    fireEvent.keyDown(box, { key: "ArrowRight" });
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    fireEvent.keyDown(window, { key: "ArrowRight", altKey: true });
+    await act(() => new Promise((done) => setTimeout(done, 600)));   // a page turn would finish its exit by now
+    expect(screen.getByLabelText("What should change on page 1?")).toHaveValue("a hat");
+    expect(screen.getByRole("button", { name: "Go to page 1" })).toHaveAttribute("aria-current", "page");
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Go to page 2" })).toHaveAttribute("aria-current", "page"));
   });
 
   it("Escape closes the pencil and returns focus to it", async () => {

@@ -69,3 +69,23 @@ describe("Teacher settings — password change", () => {
     expect(screen.getByRole("button", { name: /^change password$/i })).not.toBeDisabled();
   });
 });
+
+describe("Teacher settings — display name", () => {
+  it("shows a failure and keeps the old name when the update returns an error", async () => {
+    const update = vi.fn(() => ({ eq: async () => ({ data: null, error: { message: "permission denied" } }) }));
+    from.mockReturnValue({
+      select: () => ({ eq: () => ({ single: async () => ({ data: { display_name: "Teacher" } }) }) }),
+      update,
+    });
+    render(<TeacherSettingsPage />);
+    const input = await screen.findByDisplayValue("Teacher");
+    fireEvent.change(input, { target: { value: "Ms. Cruz" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not update your name — try again");
+    expect(update).toHaveBeenCalledWith({ display_name: "Ms. Cruz" });
+    expect(screen.queryByText("Name updated")).toBeNull();
+    // The saved name is still "Teacher": typing it back leaves nothing to save.
+    fireEvent.change(input, { target: { value: "Teacher" } });
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+});

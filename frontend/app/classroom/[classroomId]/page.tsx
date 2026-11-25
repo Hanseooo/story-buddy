@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { type Credential } from "@/lib/types";
@@ -28,23 +28,27 @@ export default function RosterPage() {
   const [slip, setSlip] = useState<Credential | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadError, setLoadError] = useState(false);
+  const slipRef = useRef<HTMLDialogElement>(null);
+  // The control that opened the slip; focus goes back to it when the slip closes.
+  const slipOpener = useRef<HTMLElement | null>(null);
 
-  async function fetchRoster() {
-    const [clsRes, studentsRes] = await Promise.all([
-      supabase
-        .from("classrooms")
-        .select("name, code")
-        .eq("id", classroomId)
-        .single(),
-      supabase
-        .from("profiles")
-        .select("id, nickname, display_nickname, removed_at, avatar_id")
-        .eq("classroom_id", classroomId)
-        .order("display_nickname"),
-    ]);
-    setClassroom(clsRes.data);
-    setStudents(studentsRes.data ?? []);
+  function fetchRoster() {
+    setLoadAttempt((n) => n + 1);
   }
+
+  useEffect(() => {
+    const el = slipRef.current;
+    if (!el) return;
+    if (slip) {
+      el.showModal?.();
+      return;
+    }
+    el.close?.();
+    if (slipOpener.current?.isConnected) slipOpener.current.focus();
+    slipOpener.current = null;
+  }, [slip]);
 
   useEffect(() => {
     async function load() {
@@ -60,11 +64,16 @@ export default function RosterPage() {
           .eq("classroom_id", classroomId)
           .order("display_nickname"),
       ]);
+      if (clsRes.error || studentsRes.error) {
+        setLoadError(true);
+        return;
+      }
+      setLoadError(false);
       setClassroom(clsRes.data);
       setStudents(studentsRes.data ?? []);
     }
     void load();
-  }, [classroomId]);
+  }, [classroomId, loadAttempt]);
 
   async function callApi(path: string, method = "POST") {
     const {
@@ -79,13 +88,14 @@ export default function RosterPage() {
     return resp.json();
   }
 
-  async function handleReset(student: Student) {
+  async function handleReset(student: Student, opener: HTMLElement | null) {
+    slipOpener.current = opener;
     try {
       const cred: Credential = await callApi(
         `/classrooms/${classroomId}/students/${student.id}/reset`
       );
+      // No toast here: the slip says the same, and a toast behind the modal is unreadable.
       setSlip(cred);
-      showToast(`Reset word for ${student.display_nickname}`);
     } catch {
       showToast("Could not reset — try again");
     }
@@ -99,11 +109,15 @@ export default function RosterPage() {
       setRemoving(null);
       fetchRoster();
     } catch {
+      // Close the modal first: while it is open the rest of the page is inert, so the
+      // toast would sit unreadable behind its backdrop.
+      setRemoving(null);
       showToast("Could not remove — try again");
     }
   }
 
-  async function handleAddBack(student: Student) {
+  async function handleAddBack(student: Student, opener: HTMLElement) {
+    slipOpener.current = opener;
     try {
       const cred: Credential = await callApi(
         `/classrooms/${classroomId}/students/${student.id}/restore`
@@ -124,6 +138,24 @@ export default function RosterPage() {
   const removed = students?.filter((s) => s.removed_at) ?? [];
 
   if (!students || !classroom) {
+    if (loadError) {
+      return (
+        <div className="flex flex-col items-center justify-center gap-4 min-h-[60vh] p-6 text-center">
+          <p role="alert" className="text-foreground/70">
+            Could not load the roster. Check your connection and try again.
+          </p>
+          <button
+            onClick={() => {
+              setLoadError(false);
+              setLoadAttempt((n) => n + 1);
+            }}
+            className="min-h-11 px-6 bg-primary text-on-primary rounded-xl font-bold text-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center animate-stepper-pulse">
@@ -227,7 +259,7 @@ export default function RosterPage() {
                 open={openMenuId === s.id}
                 onToggle={() => setOpenMenuId((cur) => (cur === s.id ? null : s.id))}
                 onClose={() => setOpenMenuId(null)}
-                onReset={() => handleReset(s)}
+                onReset={(opener) => handleReset(s, opener)}
                 onRemove={() => setRemoving(s)}
               />
             </motion.div>
@@ -250,7 +282,7 @@ export default function RosterPage() {
               >
                 <span className="font-bold text-foreground/80 text-base">{s.display_nickname}</span>
                 <button
-                  onClick={() => handleAddBack(s)}
+                  onClick={(e) => handleAddBack(s, e.currentTarget)}
                   className="text-primary text-xs font-bold hover:underline min-h-[36px] px-4 bg-primary/5 hover:bg-primary/10 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary"
                 >
                   Add back
@@ -272,18 +304,26 @@ export default function RosterPage() {
         confirmClass="bg-destructive text-on-destructive"
       />
 
-      {/* One-slip modal after reset/restore */}
-      {slip && (
-        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+      {/* One-slip modal after reset/restore. A native modal dialog sits in the top layer
+          above the header and tab bar, traps focus and closes on Escape. No backdrop-click
+          close: a stray tap would lose a word that is not shown again. */}
+      <dialog
+        ref={slipRef}
+        aria-labelledby="slip-title"
+        // Escape fires "cancel" on a modal dialog.
+        onCancel={() => setSlip(null)}
+        className="m-auto w-[calc(100%_-_2rem)] max-w-sm max-h-[90dvh] overflow-y-auto p-0 bg-transparent backdrop:bg-foreground/40 backdrop:backdrop-blur-sm"
+      >
+        {slip && (
           <motion.div 
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="bg-surface rounded-[32px] p-8 max-w-sm w-full border-2 border-primary/10 shadow-[0_22px_60px_rgba(49,85,217,0.16)] text-center"
+            className="bg-surface rounded-[32px] p-8 w-full border-2 border-primary/10 shadow-[0_22px_60px_rgba(49,85,217,0.16)] text-center"
           >
             <div className="w-16 h-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-4">
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
             </div>
-            <h2 className="font-display text-2xl font-extrabold mb-2 text-primary">Word reset</h2>
+            <h2 id="slip-title" className="font-display text-2xl font-extrabold mb-2 text-primary">Word reset</h2>
             <p className="text-sm text-foreground/70 mb-6">
               Give this to <span className="font-bold text-foreground">{slip.display_nickname}</span>. It won&apos;t be shown again.
             </p>
@@ -305,8 +345,8 @@ export default function RosterPage() {
               Done
             </motion.button>
           </motion.div>
-        </div>
-      )}
+        )}
+      </dialog>
 
       {/* Toast */}
       {toast && (
@@ -314,7 +354,7 @@ export default function RosterPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           role="status"
-          className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-foreground text-background px-6 py-4 rounded-2xl text-sm font-bold shadow-[0_10px_28px_rgba(0,0,0,0.2)] z-50 flex items-center gap-3"
+          className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] sm:bottom-6 mx-auto w-fit max-w-sm bg-foreground text-background px-5 py-3 rounded-xl text-sm font-bold shadow-lg z-50 flex items-center gap-3"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-background/80"><polyline points="20 6 9 17 4 12"></polyline></svg>
           {toast}
@@ -334,15 +374,17 @@ function RowMenu({
   open: boolean;
   onToggle: () => void;
   onClose: () => void;
-  onReset: () => void;
+  onReset: (opener: HTMLElement | null) => void;
   onRemove: () => void;
 }) {
+  const toggleRef = useRef<HTMLButtonElement>(null);
   return (
     <div className={`relative inline-block shrink-0 ${open ? "z-20" : ""}`}>
       {/* ponytail: plain conditional render + backdrop. The popover API put this in the
           top layer, where `position: absolute` resolves against the viewport, not the
           button — `top: 100%` painted the menu below the fold. */}
       <motion.button
+        ref={toggleRef}
         whileTap={{ scale: 0.95 }}
         onClick={onToggle}
         aria-expanded={open}
@@ -368,7 +410,7 @@ function RowMenu({
               role="menuitem"
               onClick={() => {
                 onClose();
-                onReset();
+                onReset(toggleRef.current);
               }}
               className="w-full text-left px-4 py-3 text-sm rounded-xl hover:bg-muted transition-colors font-bold focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary"
             >

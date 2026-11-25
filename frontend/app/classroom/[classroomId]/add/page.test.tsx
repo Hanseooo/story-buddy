@@ -1,4 +1,6 @@
 import { expect, it, describe, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import AddStudentsPage from "./page";
 
 // Test 18: beforeunload armed while slips show, disarmed after.
 // Tested as a unit of the useEffect logic (no full render needed).
@@ -47,5 +49,40 @@ describe("test 18: beforeunload armed while slips show, disarmed after", () => {
     }
     simulateNonSlipsPhase();
     expect(addedHandler).toBeNull();
+  });
+});
+
+vi.mock("next/navigation", () => ({
+  useParams: () => ({ classroomId: "cls-123" }),
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
+vi.mock("@/lib/supabaseClient", () => ({
+  supabase: {
+    from: (table: string) => ({
+      select: () => ({
+        eq: () => table === "classrooms"
+          ? { single: () => Promise.resolve({ data: { name: "Grade 3", code: "XYZ789" } }) }
+          : Promise.resolve({ data: [] }),
+      }),
+    }),
+    auth: { getSession: () => Promise.resolve({ data: { session: { access_token: "tok" } } }) },
+  },
+}));
+
+describe("single student add", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("shows the failure inline and keeps the typed name", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("boom", { status: 500 })));
+    render(<AddStudentsPage />);
+    const input = screen.getByRole("textbox", { name: "Single student name" });
+    fireEvent.change(input, { target: { value: "Juan D." } });
+    fireEvent.click(screen.getByRole("button", { name: "Add student" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not add student — try again");
+    expect(input).toHaveValue("Juan D.");
+    expect(screen.getByRole("button", { name: "Add student" })).toBeEnabled();
   });
 });

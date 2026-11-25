@@ -358,7 +358,7 @@ export default function ClassroomSettingsPage() {
       {toast && (
         <div
           role="status"
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-foreground text-background px-5 py-3 rounded-xl text-sm font-bold shadow-lg z-50"
+          className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] sm:bottom-6 mx-auto w-fit max-w-sm bg-foreground text-background px-5 py-3 rounded-xl text-sm font-bold shadow-lg z-50"
         >
           {toast}
         </div>

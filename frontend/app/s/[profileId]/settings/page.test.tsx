@@ -24,11 +24,11 @@ vi.mock("@/lib/supabaseClient", () => ({
 }));
 
 // Default: from returns avatar_id: null (avatar tests override per-test)
-function setupDefaultFrom(avatar_id: string | null = null) {
+function setupDefaultFrom(avatar_id: string | null = null, display_nickname = "Mia") {
   mockFrom.mockReturnValue({
     select: vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
-        single: vi.fn().mockResolvedValue({ data: { avatar_id } }),
+        single: vi.fn().mockResolvedValue({ data: { avatar_id, display_nickname } }),
       }),
     }),
   });
@@ -268,3 +268,31 @@ it("reverts selection and surfaces message when fetch throws a network exception
   vi.unstubAllGlobals();
 });
 
+
+it("previews the child's own initial and names the choice in plain words", async () => {
+  setupDefaultFrom(null, "mia");
+  const { unmount } = render(<SettingsPage />);
+  expect(await screen.findByText("M")).toBeDefined();
+  expect(screen.getByText("Your letter")).toBeDefined();
+  expect(screen.queryByText("?")).toBeNull();
+  unmount();
+
+  setupDefaultFrom("peeps-01", "mia");
+  render(<SettingsPage />);
+  expect(await screen.findByText("Your picture")).toBeDefined();
+  expect(screen.queryByText("peeps-01")).toBeNull();
+});
+
+it("marks the chosen category with aria-pressed and counts only the visible avatars", async () => {
+  setupDefaultFrom("peeps-01");
+  render(<SettingsPage />);
+
+  expect(screen.queryByRole("tablist")).toBeNull();
+  expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Pixel" })).toHaveAttribute("aria-pressed", "false");
+  fireEvent.click(screen.getByRole("button", { name: "Pixel" }));
+
+  expect(screen.getByRole("button", { name: "Pixel" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "false");
+  expect(screen.getByRole("radio", { name: "Avatar 1 of 6" })).toBeDefined();
+});

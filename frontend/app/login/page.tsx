@@ -167,6 +167,7 @@ export default function Login() {
               <input
                 id="email"
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -183,28 +184,21 @@ export default function Login() {
                 <input
                   id="password"
                   type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full min-h-[48px] px-4 py-3 rounded-xl border border-primary/20 bg-background text-foreground transition-colors focus:outline-none focus:border-primary focus-visible:ring-[3px] focus-visible:ring-secondary pr-14 text-base"
+                  className="w-full min-h-[48px] px-4 py-3 rounded-xl border border-primary/20 bg-background text-foreground transition-colors focus:outline-none focus:border-primary focus-visible:ring-[3px] focus-visible:ring-secondary pr-24 text-base"
                   placeholder="••••••••"
                 />
                 <button
                   type="button"
+                  aria-pressed={showPassword}
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 min-h-10 px-2 text-sm font-bold text-primary hover:text-primary-deep transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 min-h-11 min-w-11 px-2 rounded-lg text-sm font-bold text-primary hover:text-primary-deep aria-pressed:bg-primary/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  {showPassword ? (
-                    <>
-                      <EyeSlash size={18} weight="bold" />
-                      Hide
-                    </>
-                  ) : (
-                    <>
-                      <Eye size={18} weight="bold" />
-                      Show
-                    </>
-                  )}
+                  {showPassword ? <EyeSlash size={18} weight="bold" /> : <Eye size={18} weight="bold" />}
+                  Show <span className="sr-only">password</span>
                 </button>
               </div>
             </div>

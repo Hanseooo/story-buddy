@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { use, useEffect, useState, useCallback, useRef } from "react";
-import { motion, AnimatePresence, useScroll } from "framer-motion";
+import { motion, AnimatePresence, useScroll, useReducedMotion } from "framer-motion";
 import { useJob } from "@/lib/useJob";
 import { displayTitle } from "@/lib/displayTitle";
 import FailureScreen, { resetFailChain } from "@/components/FailureScreen";
@@ -14,24 +14,44 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { CaretLeft, CaretRight, BookOpen, Rows, ArrowLeft, DownloadSimple } from "@phosphor-icons/react";
 
-function ScrollImage({ src, alt, onClick }: { src: string; alt: string; onClick?: () => void }) {
+// Generated pictures are 1024x768 (backend `providers.GENERATED_IMAGE_SIZE`), so a 4:3 box holds
+// their place before they load.
+function ScrollImage({ src, alt, label, broken, onClick, onError, onRetry }: {
+  src: string; alt: string; label: string; broken: boolean;
+  onClick: (opener: HTMLElement) => void; onError: () => void; onRetry: () => void;
+}) {
   const [isLoaded, setIsLoaded] = useState(false);
+  if (broken) {
+    return (
+      <div role="alert" className="flex w-full aspect-[4/3] max-h-[50vh] md:max-h-none flex-col items-center justify-center gap-2 rounded-xl bg-muted/30 p-4 text-center font-kid">
+        <p>We couldn&apos;t load this picture right now.</p>
+        <button type="button" onClick={() => { setIsLoaded(false); onRetry(); }} className={`${kidControl} bg-surface text-foreground`}>
+          Try loading this picture again
+        </button>
+      </div>
+    );
+  }
   return (
-    <div className="relative w-full h-full flex items-center justify-center">
+    <button
+      type="button"
+      aria-label={label}
+      onClick={(event) => onClick(event.currentTarget)}
+      className="relative w-full aspect-[4/3] max-h-[50vh] md:max-h-none flex items-center justify-center rounded-xl cursor-zoom-in focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+    >
       {!isLoaded && <div className="absolute inset-0 bg-muted/30 animate-pulse rounded-xl" />}
-      <motion.img 
-         src={src} 
+      <motion.img
+         src={src}
          alt={alt}
          initial={{ opacity: 0 }}
          animate={{ opacity: isLoaded ? 1 : 0 }}
          transition={{ duration: 0.6, ease: "easeOut" }}
          onLoad={() => setIsLoaded(true)}
+         onError={onError}
          loading="lazy"
          decoding="async"
-         className={`w-full h-auto object-contain rounded-xl max-h-[50vh] md:max-h-none relative z-10 ${onClick ? 'cursor-zoom-in' : ''}`}
-         onClick={onClick}
+         className="absolute inset-0 h-full w-full object-contain rounded-xl z-10"
       />
-    </div>
+    </button>
   );
 }
 
@@ -52,7 +72,11 @@ function LoadingSkeleton() {
   );
 }
 
-function ScrollView({ signedPages, onImageClick }: { signedPages: SignedPage[]; onImageClick: (url: string) => void }) {
+function ScrollView({ signedPages, broken, onImageClick, onImageError, onRetry }: {
+  signedPages: SignedPage[]; broken: Record<string, boolean>;
+  onImageClick: (url: string, page: number, opener: HTMLElement) => void;
+  onImageError: (path: string) => void; onRetry: (path: string) => void;
+}) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ container: scrollRef });
 
@@ -63,7 +87,7 @@ function ScrollView({ signedPages, onImageClick }: { signedPages: SignedPage[]; 
         style={{ scaleX: scrollYProgress }}
       />
       <div className="flex flex-col gap-8 md:gap-16 max-w-5xl mx-auto">
-        {signedPages.map((page) => (
+        {signedPages.map((page, index) => (
           <motion.div
             key={page.scene_id}
             initial={{ opacity: 0, y: 30 }}
@@ -73,7 +97,10 @@ function ScrollView({ signedPages, onImageClick }: { signedPages: SignedPage[]; 
             className="flex flex-col md:flex-row bg-surface neo-shadow rounded-3xl overflow-hidden border border-muted"
           >
             <div className="w-full md:w-1/2 flex-shrink-0 bg-muted/20 p-4 md:p-8 border-b md:border-b-0 md:border-r border-muted flex items-center justify-center">
-               <ScrollImage src={page.signedUrl} alt={page.caption} onClick={() => onImageClick(page.signedUrl)} />
+               <ScrollImage src={page.signedUrl} alt={page.caption} label={`Show the picture for page ${index + 1} bigger`}
+                 broken={Boolean(broken[page.image_path])}
+                 onClick={(opener) => onImageClick(page.signedUrl, index + 1, opener)}
+                 onError={() => onImageError(page.image_path)} onRetry={() => onRetry(page.image_path)} />
             </div>
             <div className="w-full md:w-1/2 p-6 md:p-12 flex flex-col justify-center">
                <p className="font-kid text-lg md:text-2xl leading-relaxed text-foreground">
@@ -280,7 +307,7 @@ function PageVersions({ jobId, pageNumber, page, reviewed, busy, onBusy, onChang
         </div>
       )}
       <dialog ref={confirmRef} aria-labelledby={`${listId}-confirm`} onCancel={(event) => { event.preventDefault(); cancelConfirm(); }}
-        className="m-auto max-w-md rounded-2xl bg-background p-6 font-kid text-foreground backdrop:bg-foreground/50">
+        className="m-auto max-w-[min(28rem,calc(100%-2rem))] rounded-2xl bg-background p-6 font-kid text-foreground backdrop:bg-foreground/50">
         <h2 id={`${listId}-confirm`} className="text-xl font-bold">Your teacher will look at your book again before classmates can see it.</h2>
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" ref={confirmButtonRef} onClick={() => pending && void change(pending.version)}
@@ -549,7 +576,7 @@ function PagePencil({ jobId, pageNumber, page, status, reviewed, busy, onBusy, o
         </div>
       )}
       <dialog ref={confirmRef} aria-labelledby={`${formId}-confirm`} onCancel={(event) => { event.preventDefault(); confirmRef.current?.close(); }}
-        className="m-auto max-w-md rounded-2xl bg-background p-6 font-kid text-foreground backdrop:bg-foreground/50">
+        className="m-auto max-w-[min(28rem,calc(100%-2rem))] rounded-2xl bg-background p-6 font-kid text-foreground backdrop:bg-foreground/50">
         <h2 id={`${formId}-confirm`} className="text-xl font-bold">Your teacher will look at your book again before classmates can see it.</h2>
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" ref={confirmButtonRef} onClick={() => void decide("kept")} className={`${kidControl} bg-primary text-on-primary`}>
@@ -673,7 +700,11 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   const [direction, setDirection] = useState(0);
   const [hasInteracted, setHasInteracted] = useState(false);
   const [viewMode, setViewMode] = useState<"pages" | "scroll">("pages");
-  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  const [fullscreen, setFullscreen] = useState<{ url: string; page: number } | null>(null);
+  const fullscreenRef = useRef<HTMLDialogElement | null>(null);
+  const fullscreenOpener = useRef<HTMLElement | null>(null);
+  const [brokenPictures, setBrokenPictures] = useState<Record<string, boolean>>({});   // by image_path
+  const reduceMotion = useReducedMotion();
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const [changingPage, setChangingPage] = useState(false); // SH-07: one page change per book at a time
@@ -807,16 +838,43 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
     return () => { controller.abort(); };
   }, [bucket, signPages]);
 
-  // Arrow key navigation
+  // A picture whose link broke (an expired link, a dropped connection) goes back through the same
+  // re-sign as the whole book: dropping its URL makes it the only missing path (SH-05).
+  function markBroken(path: string) {
+    setBrokenPictures(b => ({ ...b, [path]: true }));
+  }
+
+  function retryPicture(path: string) {
+    delete collectedUrls.current[path];
+    setBrokenPictures(b => ({ ...b, [path]: false }));
+    void signPages(1);
+  }
+
+  function openFullscreen(url: string, page: number, opener: HTMLElement) {
+    fullscreenOpener.current = opener;
+    setFullscreen({ url, page });
+    fullscreenRef.current?.showModal();
+  }
+
+  function closeFullscreen() {
+    fullscreenRef.current?.close();
+    setFullscreen(null);
+    fullscreenOpener.current?.focus();
+  }
+
+  // Arrow key navigation. Up/Down stay with scrolling, and a key meant for a field, a dialog or
+  // the big picture never turns the page (that would remount the pencil and lose typed words).
   useEffect(() => {
-    if (!signedPages || viewMode !== "pages") return;
+    if (!signedPages || viewMode !== "pages" || fullscreen) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      if (e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable], dialog")) return;
+      if (e.key === "ArrowRight") {
         setHasInteracted(true);
         setDirection(1);
         setPageIndex(i => Math.min(i + 1, signedPages!.length - 1));
       }
-      if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      if (e.key === "ArrowLeft") {
         setHasInteracted(true);
         setDirection(-1);
         setPageIndex(i => Math.max(i - 1, 0));
@@ -824,7 +882,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [signedPages, viewMode]);
+  }, [signedPages, viewMode, fullscreen]);
 
   // ── Bucket routing ──────────────────────────────────────────────────────────
 
@@ -897,29 +955,35 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
       <div className="absolute bottom-[-10%] right-[-5%] w-[60vw] h-[60vw] rounded-full bg-secondary opacity-[0.06] md:opacity-[0.08] blur-[80px] md:blur-[140px] pointer-events-none" />
       <div className="absolute top-[40%] left-[60%] w-[40vw] h-[40vw] rounded-full bg-coral opacity-[0.04] blur-[80px] md:blur-[120px] pointer-events-none" />
 
-      {/* Lightbox Overlay */}
-      <AnimatePresence>
-        {fullscreenImage && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="fixed inset-0 z-[100] bg-[#18204A]/90 backdrop-blur-sm flex items-center justify-center p-4 md:p-8 cursor-zoom-out"
-            onClick={() => setFullscreenImage(null)}
-          >
+      {/* Big picture: a native modal dialog brings Escape, the focus trap and an inert page. */}
+      <dialog
+        ref={fullscreenRef}
+        aria-label={fullscreen ? `Picture for page ${fullscreen.page}` : undefined}
+        onCancel={(event) => { event.preventDefault(); closeFullscreen(); }}
+        onClick={(event) => { if (!(event.target as Element).closest("img, button")) closeFullscreen(); }}
+        className="m-0 h-dvh max-h-none w-screen max-w-none bg-transparent p-4 backdrop:bg-foreground/90 backdrop:backdrop-blur-sm md:p-8"
+      >
+        {fullscreen && (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-4">
+            <button
+              type="button"
+              aria-label="Close the big picture"
+              onClick={closeFullscreen}
+              className={`${kidControl} self-end bg-surface text-foreground`}
+            >
+              Close
+            </button>
             <motion.img
-              src={fullscreenImage}
-              alt="Fullscreen view"
-              initial={{ scale: 0.95, opacity: 0 }}
+              src={fullscreen.url}
+              alt={`Picture for page ${fullscreen.page}`}
+              initial={reduceMotion ? { opacity: 0 } : { scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              transition={{ type: "spring", bounce: 0, duration: 0.4 }}
-              className="max-w-full max-h-full object-contain pointer-events-none rounded-2xl neo-shadow-xl"
+              transition={reduceMotion ? { duration: 0.15 } : { type: "spring", bounce: 0, duration: 0.4 }}
+              className="min-h-0 max-w-full flex-1 object-contain rounded-2xl neo-shadow-xl"
             />
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
+      </dialog>
 
       {/* Navigation and export share a row; the mobile title always has its own width. */}
       <div className="relative z-30 mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 px-5 pt-5 pb-2 sm:px-8 lg:max-w-7xl lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:px-12">
@@ -1007,10 +1071,12 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
       {viewMode === "pages" ? (
         <>
           <div className="flex-1 flex w-full items-center justify-between relative px-2 sm:px-4 lg:px-8 py-4 sm:py-6">
-            {/* Left tap zone: absolute on mobile/tablet, relative column on desktop */}
+            {/* Left tap zone: absolute on mobile/tablet, relative column on desktop. Below lg only the
+                arrow takes taps, so the zone never covers the page's own controls; swipe covers the rest.
+                The arrow stays on the first page (aria-disabled keeps it focusable) so focus never drops. */}
             {totalPages > 1 && (
-              <div 
-                className={`absolute inset-y-0 left-0 w-[15%] lg:w-24 xl:w-32 z-30 cursor-pointer lg:relative lg:shrink-0 flex items-center justify-start px-2 sm:px-4 lg:justify-center lg:px-0 group ${pageIndex > 0 ? "" : "pointer-events-none"}`} 
+              <div
+                className={`absolute inset-y-0 left-0 w-[15%] lg:w-24 xl:w-32 z-30 pointer-events-none lg:relative lg:shrink-0 flex items-center justify-start px-2 sm:px-4 lg:justify-center lg:px-0 group ${pageIndex > 0 ? "lg:pointer-events-auto lg:cursor-pointer" : ""}`}
                 onClick={() => {
                   setHasInteracted(true);
                   if (pageIndex > 0) {
@@ -1019,15 +1085,15 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                   }
                 }}
               >
-                {pageIndex > 0 && (
-                  <button
-                    data-testid="nav-prev"
-                    aria-label="Previous page"
-                    className="flex h-11 w-11 lg:h-16 lg:w-16 items-center justify-center rounded-full bg-surface neo-shadow text-primary font-bold hover:scale-105 transition-all cursor-pointer"
-                  >
-                    <CaretLeft className="w-5 h-5 lg:w-8 lg:h-8" weight="bold" />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  data-testid="nav-prev"
+                  aria-label="Previous page"
+                  aria-disabled={pageIndex === 0}
+                  className="pointer-events-auto flex h-11 w-11 lg:h-16 lg:w-16 items-center justify-center rounded-full bg-surface neo-shadow text-primary font-bold hover:scale-105 transition-all cursor-pointer focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:scale-100"
+                >
+                  <CaretLeft className="w-5 h-5 lg:w-8 lg:h-8" weight="bold" aria-hidden="true" />
+                </button>
               </div>
             )}
 
@@ -1036,56 +1102,86 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
               className="flex-1 flex w-full h-full items-center justify-center z-20 mx-auto max-w-6xl"
               drag="x"
               dragConstraints={{ left: 0, right: 0 }}
-              dragElastic={0.2}
-              onDragEnd={(e, { offset }) => {
+              // Elastic 1 past zero-width constraints = the page follows the finger 1:1. The snap back
+              // takes the release velocity into a critically damped spring (damping = 2·√stiffness).
+              dragElastic={1}
+              dragTransition={{ bounceStiffness: 300, bounceDamping: 35 }}
+              onDragEnd={(e, { offset, velocity }) => {
                 setHasInteracted(true);
-                if (offset.x < -50 && pageIndex < totalPages - 1) {
+                // A quick flick commits in its own direction; a slow drag commits past 50px.
+                const turn = Math.abs(velocity.x) > 400 ? -Math.sign(velocity.x)
+                  : Math.abs(offset.x) > 50 ? -Math.sign(offset.x) : 0;
+                if (turn > 0 && pageIndex < totalPages - 1) {
                   setDirection(1);
                   setPageIndex(pageIndex + 1);
                 }
-                if (offset.x > 50 && pageIndex > 0) {
+                if (turn < 0 && pageIndex > 0) {
                   setDirection(-1);
                   setPageIndex(pageIndex - 1);
                 }
               }}
             >
+              {/* "wait" keeps one card in the flow, so the column never jumps between two card heights;
+                  the exit is short so the next page answers quickly. */}
               <AnimatePresence mode="wait" custom={direction}>
                 <motion.div
                   key={pageIndex}
                   custom={direction}
-                  variants={{
+                  variants={reduceMotion ? {
+                    enter: { opacity: 0 },
+                    center: { opacity: 1 },
+                    exit: { opacity: 0 },
+                  } : {
                     enter: (dir: number) => ({ x: dir > 0 ? 40 : -40, opacity: 0, scale: 0.98 }),
                     center: { x: 0, opacity: 1, scale: 1 },
-                    exit: (dir: number) => ({ x: dir < 0 ? 40 : -40, opacity: 0, scale: 0.98 })
+                    exit: (dir: number) => ({ x: dir < 0 ? 40 : -40, opacity: 0, scale: 0.98, transition: { duration: 0.15, ease: "easeIn" } })
                   }}
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                  transition={reduceMotion ? { duration: 0.15 } : { type: "spring", bounce: 0, duration: 0.4 }}
                   className="flex flex-col lg:flex-row w-full h-auto lg:max-h-[80vh] lg:min-h-[65vh] items-stretch justify-start lg:justify-center bg-surface neo-shadow rounded-3xl overflow-hidden mx-2 sm:mx-4 lg:mx-0 border border-muted"
                 >
                   {/* Left side: Illustration (Massive on Desktop, contained on mobile) */}
                   <div className="relative flex items-center justify-center w-full lg:w-[60%] xl:w-[65%] bg-muted/20 p-4 lg:p-10 border-b lg:border-b-0 lg:border-r border-muted shrink-0 lg:shrink">
-                    <img
-                      src={current.signedUrl}
-                      alt={current.caption}
-                      fetchPriority="high"
-                      className="w-full h-auto max-h-[40vh] lg:max-h-[60vh] object-contain rounded-xl lg:neo-shadow cursor-zoom-in pointer-events-auto"
-                      onClick={() => setFullscreenImage(current.signedUrl)}
-                    />
-                    {!loaded[pageIndex] && (
-                      <div
-                        aria-hidden="true"
-                        className="absolute inset-4 lg:inset-10 rounded-xl bg-muted animate-pulse pointer-events-none"
-                      />
+                    {/* A 4:3 box (generated pictures are 1024x768) holds the picture's place while it loads. */}
+                    {brokenPictures[current.image_path] ? (
+                      <div role="alert" className="flex w-full aspect-[4/3] max-h-[40vh] lg:max-h-[60vh] flex-col items-center justify-center gap-2 rounded-xl bg-muted/30 p-4 text-center font-kid">
+                        <p>We couldn&apos;t load this picture right now.</p>
+                        <button type="button" onClick={() => retryPicture(current.image_path)} className={`${kidControl} bg-surface text-foreground`}>
+                          Try loading this picture again
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label={`Show the picture for page ${pageIndex + 1} bigger`}
+                        onClick={(event) => openFullscreen(current.signedUrl, pageIndex + 1, event.currentTarget)}
+                        className="relative block w-full aspect-[4/3] max-h-[40vh] lg:max-h-[60vh] rounded-xl cursor-zoom-in pointer-events-auto focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+                      >
+                        <img
+                          src={current.signedUrl}
+                          alt={current.caption}
+                          fetchPriority="high"
+                          onLoad={() => setLoaded(l => (l[pageIndex] ? l : { ...l, [pageIndex]: true }))}
+                          onError={() => markBroken(current.image_path)}
+                          className="absolute inset-0 h-full w-full object-contain rounded-xl lg:neo-shadow"
+                        />
+                        {!loaded[pageIndex] && (
+                          <span
+                            aria-hidden="true"
+                            className="absolute inset-0 rounded-xl bg-muted animate-pulse pointer-events-none"
+                          />
+                        )}
+                      </button>
                     )}
                     
                     {/* Swipe Indicator (Mobile only, Page 0 only, disappears after interaction) */}
                     {pageIndex === 0 && !hasInteracted && (
                       <motion.div 
                         initial={{ opacity: 0 }}
-                        animate={{ opacity: [0, 1, 1, 0], x: [0, -20, -20, -40] }}
-                        transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                        animate={reduceMotion ? { opacity: 1 } : { opacity: [0, 1, 1, 0], x: [0, -20, -20, -40] }}
+                        transition={reduceMotion ? { duration: 0.15 } : { repeat: Infinity, duration: 2, ease: "easeInOut" }}
                         className="absolute bottom-6 right-6 hidden [@media(pointer:coarse)]:flex items-center gap-2 bg-surface/90 backdrop-blur-md rounded-full px-4 py-2 neo-shadow text-primary pointer-events-none z-30"
                       >
                         <span className="font-kid text-sm font-bold">Swipe</span>
@@ -1154,10 +1250,10 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
               ))}
             </div>
 
-            {/* Right tap zone: absolute on mobile/tablet, relative column on desktop */}
+            {/* Right tap zone: same rules as the left one. */}
             {totalPages > 1 && (
-              <div 
-                className={`absolute inset-y-0 right-0 w-[15%] lg:w-24 xl:w-32 z-30 cursor-pointer lg:relative lg:shrink-0 flex items-center justify-end px-2 sm:px-4 lg:justify-center lg:px-0 group ${pageIndex < totalPages - 1 ? "" : "pointer-events-none"}`} 
+              <div
+                className={`absolute inset-y-0 right-0 w-[15%] lg:w-24 xl:w-32 z-30 pointer-events-none lg:relative lg:shrink-0 flex items-center justify-end px-2 sm:px-4 lg:justify-center lg:px-0 group ${pageIndex < totalPages - 1 ? "lg:pointer-events-auto lg:cursor-pointer" : ""}`}
                 onClick={() => {
                   setHasInteracted(true);
                   if (pageIndex < totalPages - 1) {
@@ -1166,22 +1262,24 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                   }
                 }}
               >
-                {pageIndex < totalPages - 1 && (
-                  <button
-                    data-testid="nav-next"
-                    aria-label="Next page"
-                    className="flex h-11 w-11 lg:h-16 lg:w-16 items-center justify-center rounded-full bg-surface neo-shadow text-primary font-bold hover:scale-105 transition-all cursor-pointer"
-                  >
-                    <CaretRight className="w-5 h-5 lg:w-8 lg:h-8" weight="bold" />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  data-testid="nav-next"
+                  aria-label="Next page"
+                  aria-disabled={pageIndex === totalPages - 1}
+                  className="pointer-events-auto flex h-11 w-11 lg:h-16 lg:w-16 items-center justify-center rounded-full bg-surface neo-shadow text-primary font-bold hover:scale-105 transition-all cursor-pointer focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:scale-100"
+                >
+                  <CaretRight className="w-5 h-5 lg:w-8 lg:h-8" weight="bold" aria-hidden="true" />
+                </button>
               </div>
             )}
+            <p role="status" aria-live="polite" className="sr-only">{`Page ${pageIndex + 1} of ${totalPages}`}</p>
           </div>
         </>
       ) : (
         /* Scroll view mode */
-        <ScrollView signedPages={signedPages} onImageClick={(url) => setFullscreenImage(url)} />
+        <ScrollView signedPages={signedPages} broken={brokenPictures} onImageClick={openFullscreen}
+          onImageError={markBroken} onRetry={retryPicture} />
       )}
     </div>
   );

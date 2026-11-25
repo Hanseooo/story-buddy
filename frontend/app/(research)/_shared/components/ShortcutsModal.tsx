@@ -41,7 +41,7 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
       }}
       className="fixed inset-0 z-50 m-0 flex h-[100dvh] w-screen max-h-none max-w-none items-center justify-center border-0 bg-foreground/60 p-4 text-foreground backdrop-blur-sm animate-in fade-in duration-150"
     >
-      <div className="bg-surface rounded-2xl neo-border neo-shadow-lg max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="bg-surface rounded-2xl neo-border neo-shadow-lg max-w-2xl w-full max-h-[90dvh] flex flex-col overflow-hidden">
         <div className="p-6 border-b border-primary/10 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <BookOpen className="size-5 text-primary" weight="duotone" />

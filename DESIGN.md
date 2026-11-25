@@ -168,7 +168,7 @@ Do not use pure black shadows, decorative glow, or elevation on every container.
 - Minimum interactive target: `44x44px`.
 - Hover: lift by no more than `2px`; do not change semantic hue.
 - Active: return toward the surface and reduce the shadow.
-- Focus: `3px` sun-yellow outline with `3px` offset.
+- Focus: `3px` sun-yellow outline with `3px` offset, over a `3px` navy band that fills the offset. Yellow alone fails 3:1 on ivory; the navy band carries light surfaces, the yellow carries cobalt.
 - Disabled: lower contrast, remove lift, use `not-allowed`, and retain a readable label.
 - CTA labels remain on one line on desktop.
 

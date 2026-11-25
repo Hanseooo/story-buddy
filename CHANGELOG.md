@@ -14,6 +14,87 @@ instead of repeating it.
 
 ---
 
+## UI audit review fixes and cast picture reload · 2026-11-26
+
+PR [#145](https://github.com/Hanseooo/story-buddy/pull/145). Fixes from the two-axis review of UI audit batches 1-4, plus one cast-screen bug.
+
+### Code
+
+- **Focus ring.** Batch 1's unlayered navy band (`globals.css`) replaced the yellow ring on every
+  control styled `focus-visible:outline-none focus-visible:ring-*` (13 files), leaving navy on
+  cobalt. Those controls now show their yellow ring with the navy band outside it.
+- **Sign-up.** Drops the native `minLength`: a real browser blocked the submit with its own tooltip,
+  so the inline 8-character error never showed. `lib/password.ts` stays the one source of the rule.
+- **Dialogs.** `ConfirmDialog` is named by its title. The two `/write` dialogs and the two book-page
+  change confirms keep a 16px gutter at 360px instead of running edge to edge.
+- **Cast screen.** The paused reveal reloaded every picture whenever a refetch (tab return,
+  realtime UPDATE) handed back the same reveal as a new object, blanking the pictures and disabling
+  every control. It now reloads only when a character's `char_id` or `image_path` changes.
+
+### Checks
+
+- Frontend: 1238 tests pass (2 new, each seen red first; the sign-up length test now guards against the
+  attribute, seen red with it). Lint and build clean. Focus ring, sign-up error and dialog gutter
+  measured in Chromium against the production build. Deferred items:
+  `.scratch/ui-audit/issues/01-deferred-after-review.md`.
+
+## Teacher, student and sign-in UI fixes · 2026-11-25
+
+PR [#145](https://github.com/Hanseooo/story-buddy/pull/145). Batch 4 of the UI/UX audit.
+
+### Code
+
+- **Teacher.** `TeacherShell` drops `isolate z-0` from `<main>`, which trapped toasts under the
+  header and tab bar (page content stays at z-20 or below, the cap commit 250a760 set). The
+  reset-word slip is a native `<dialog>` with Escape and focus return, and no backdrop close so a
+  stray tap can't lose the word. Remove failure closes the dialog before its toast. Roster load,
+  single add and display-name save now show their failures (the name save used to say "Name
+  updated" regardless). `BookReviewDialog` shows whole 4:3 pictures, has an accessible name, and
+  its header no longer clips Close at 360px. Desktop `ClassroomTabs` mark the active tab. The four
+  toasts share one class that clears the mobile tab bar.
+- **Student.** "Start over" is 44px and asks first. The write page states the 5 and 500 word
+  limits and announces only limit crossings. Settings shows the child's own letter, plain labels
+  instead of avatar ids, `aria-pressed` filters and a visible avatar focus ring.
+- **Sign-in.** Sign-up checks the 8-character minimum (`lib/password.ts`, ADR-076) before
+  submitting, so a short password no longer shows "Check your email". Fields carry `autoComplete`.
+  Reveal buttons are 44px with `aria-pressed`. The `/join` code boxes fit at 320px.
+- **Dialogs.** `ConfirmDialog` gains `m-auto` (Tailwind's preflight zeroes the dialog's centring
+  margin), a surface background and a `dvh` height cap.
+
+### Checks
+
+- Frontend: 1236 tests pass (15 new, each seen red first), lint and build clean. `tsc` reports the
+  same one error in the unchanged `lib/signedUrls.test.ts`.
+
+## Reader, progress screen and app-wide UI fixes · 2026-11-25
+
+PR [#145](https://github.com/Hanseooo/story-buddy/pull/145). From a code-read UI/UX and responsiveness audit (batches 1-3 of 5).
+
+### Code
+
+- **App-wide.** `MotionProvider` wraps the root layout in `MotionConfig reducedMotion="user"`, so
+  framer-motion honours the OS setting (the CSS block only reached CSS animations). The focus ring
+  gains a navy band inside the yellow outline (yellow alone is about 1.4:1 on ivory). A modal
+  `<dialog>` locks page scroll. `BookReviewDialog` and `ShortcutsModal` cap height in `dvh`.
+- **Reader.** Arrow keys no longer turn the page from a text field or dialog (it lost the
+  magic-pencil text). Below `lg` only the arrow buttons take taps; the arrows stay on edge pages as
+  `aria-disabled`, and a status line says "Page N of M". Swipe follows the finger and commits on
+  distance or speed. Pictures hold a 4:3 box and a broken picture offers a retry. The big picture
+  is a native `<dialog>` with Escape, a Close button and a keyboard-reachable opener.
+- **Progress screen.** The step line now draws. The drawing bar shows pictures finished
+  (`(m-1)/n`, since the worker writes `done + 1`) instead of looping. Steps are an `<ol>` with
+  `aria-current` and a live status heading. Exit links are 44px. Bounce and perpetual pulses are
+  gone, and loops hold still under reduced motion. A failed redraw shows its error in its card.
+
+### Docs
+
+- `DESIGN.md` §7 focus rule names the navy band.
+
+### Checks
+
+- Frontend: 1218 tests pass (8 new, each seen red first), lint and build clean. `tsc` reports one
+  error in the unchanged `lib/signedUrls.test.ts`.
+
 ## Teacher-review pictures load through signed links · 2026-11-25
 
 PR [#144](https://github.com/Hanseooo/story-buddy/pull/144). Decision: [ADR-086](docs/product/adr/ADR-086-teacher-review-pictures-are-served-by-backend-signed-links.md), superseding ADR-080 Decision 7 and ADR-085 Decision 4 in part.

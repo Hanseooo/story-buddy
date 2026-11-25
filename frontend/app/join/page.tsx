@@ -148,7 +148,7 @@ export default function JoinPage() {
 
         <form onSubmit={handleSubmit}>
           <div
-            className="flex gap-2 sm:gap-3 justify-center mb-6"
+            className="flex gap-1.5 sm:gap-3 justify-center mb-6"
             role="group"
             aria-label="Class code"
             onPaste={handlePaste}
@@ -162,14 +162,14 @@ export default function JoinPage() {
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
-                autoComplete="one-time-code"
+                autoComplete="off"
                 maxLength={1}
                 value={val}
                 autoFocus={idx === 0}
                 aria-label={`Code character ${idx + 1}`}
                 onFocus={(e) => e.currentTarget.select()}
                 whileFocus={{ scale: 1.04, boxShadow: "0 10px 28px rgba(49,85,217,0.12)" }}
-                className="w-12 h-14 sm:w-14 sm:h-16 text-center text-2xl sm:text-3xl font-extrabold text-primary border-2 border-primary/20 rounded-[16px] bg-background focus:border-primary focus:outline-none transition-all uppercase caret-primary leading-none p-0 flex items-center justify-center"
+                className="flex-1 min-w-0 max-w-14 h-14 sm:h-16 text-center text-2xl sm:text-3xl font-extrabold text-primary border-2 border-primary/20 rounded-[16px] bg-background focus:border-primary focus:outline-none transition-all uppercase caret-primary leading-none p-0 flex items-center justify-center"
                 onKeyDown={(e) => handleKeyDown(idx, e)}
                 onChange={(e) => handleChange(idx, e)}
               />

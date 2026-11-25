@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 
 type Props = {
   open: boolean;
@@ -22,6 +22,7 @@ export default function ConfirmDialog({
   confirmClass = "bg-destructive text-on-destructive",
 }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     const el = ref.current;
@@ -41,13 +42,14 @@ export default function ConfirmDialog({
   return (
     <dialog
       ref={ref}
-      className="rounded-2xl p-0 max-w-sm w-full border border-primary/20 shadow-[0_22px_60px_rgb(49_85_217/16%)] backdrop:bg-foreground/40 backdrop:backdrop-blur-sm"
+      aria-labelledby={titleId}
+      className="m-auto rounded-2xl p-0 max-w-[calc(100%-2rem)] sm:max-w-sm w-full bg-surface max-h-[90dvh] overflow-y-auto border border-primary/20 shadow-[0_22px_60px_rgb(49_85_217/16%)] backdrop:bg-foreground/40 backdrop:backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === ref.current) onCancel();
       }}
     >
       <div className="p-6 font-sans">
-        <h2 className="text-lg font-bold text-foreground mb-2">{title}</h2>
+        <h2 id={titleId} className="text-lg font-bold text-foreground mb-2">{title}</h2>
         <p className="text-sm text-foreground/70 mb-6">{description}</p>
         <div className="flex gap-3 justify-end">
           <button

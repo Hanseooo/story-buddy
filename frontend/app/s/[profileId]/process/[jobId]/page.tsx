@@ -12,7 +12,7 @@ import StopStory from "@/components/StopStory";
 import StoppedStory from "@/components/StoppedStory";
 import { supabase } from "@/lib/supabaseClient";
 import { signPaths } from "@/lib/signedUrls";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { BookOpen, Users, PaintBrush, MagicWand, Check, MagnifyingGlass } from "@phosphor-icons/react";
 
 // ponytail: 90s is chosen so the line arrives before a child gives up; will fire on slow image calls
@@ -35,10 +35,16 @@ function getStep(stage: string | null): StepperStep | null {
   return null;
 }
 
+// The worker writes "<node>:{done + 1}/{n}" during the scene nodes (run_job._stage_string).
+function getPictureCount(stage: string | null): { m: number; n: number } | null {
+  const m = (stage ?? "").match(/:(\d+)\/(\d+)$/);
+  return m ? { m: Number(m[1]), n: Number(m[2]) } : null;
+}
+
 function getStepLabel(step: StepperStep, stage: string | null): string {
   if (step === 3) {
-    const m = (stage ?? "").match(/:(\d+)\/(\d+)$/);
-    if (m) return `Drawing picture ${m[1]} of ${m[2]}`;
+    const count = getPictureCount(stage);
+    if (count) return `Drawing picture ${count.m} of ${count.n}`;
     return "Drawing your pictures";
   }
   return [
@@ -64,7 +70,7 @@ function KineticText({ text, className }: { text: string; className?: string }) 
                 animate={{ opacity: 1, y: 0 }}
                 transition={{
                   type: "spring",
-                  bounce: 0.5,
+                  bounce: 0,
                   delay: (i * 5 + j) * 0.04,
                 }}
                 className="inline-block"
@@ -79,7 +85,9 @@ function KineticText({ text, className }: { text: string; className?: string }) 
   );
 }
 
-const ReadingVignette = () => (
+const ReadingVignette = () => {
+  const reduce = useReducedMotion();
+  return (
   <div className="relative flex flex-col justify-center items-center h-32 w-48 my-4">
     <div className="w-full p-5 bg-[var(--color-surface)] border border-[var(--color-primary)]/20 rounded-[20px] shadow-[0_10px_28px_rgba(49,85,217,0.12)] flex flex-col gap-3 relative overflow-hidden">
       <div className="w-full h-3 bg-[var(--color-muted)] rounded-full opacity-60" />
@@ -88,15 +96,18 @@ const ReadingVignette = () => (
     </div>
     <motion.div
       className="absolute z-10 text-[var(--color-primary)] drop-shadow-md"
-      animate={{ x: [-40, 40, -40], y: [-10, 10, -10] }}
+      animate={reduce ? undefined : { x: [-40, 40, -40], y: [-10, 10, -10] }}
       transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
     >
       <MagnifyingGlass size={48} weight="duotone" />
     </motion.div>
   </div>
-);
+  );
+};
 
-const CharactersVignette = () => (
+const CharactersVignette = () => {
+  const reduce = useReducedMotion();
+  return (
   <div className="relative w-48 h-32 my-4 flex items-center justify-center">
     {[
       { rotate: -15, x: -30, delay: 0 },
@@ -109,60 +120,82 @@ const CharactersVignette = () => (
         initial={{ y: 20, opacity: 0, rotate: 0, x: 0 }}
         animate={{ y: 0, opacity: 1, rotate: card.rotate, x: card.x }}
         transition={{ 
-          y: { type: "spring", bounce: 0.3, delay: card.delay },
+          y: { type: "spring", bounce: 0, delay: card.delay },
           opacity: { duration: 0.4, delay: card.delay },
-          rotate: { type: "spring", bounce: 0.3, delay: card.delay },
-          x: { type: "spring", bounce: 0.3, delay: card.delay }
+          rotate: { type: "spring", bounce: 0, delay: card.delay },
+          x: { type: "spring", bounce: 0, delay: card.delay }
         }}
         style={{ zIndex: i }}
       >
         <motion.div
           className="w-full h-full bg-[var(--color-surface)] border border-[var(--color-primary)]/20 rounded-[12px] shadow-[0_10px_28px_rgba(49,85,217,0.12)] flex items-center justify-center"
-          animate={{ y: [-4, 4, -4], rotate: [-2, 2, -2] }}
+          animate={reduce ? undefined : { y: [-4, 4, -4], rotate: [-2, 2, -2] }}
           transition={{ repeat: Infinity, duration: 3, delay: i * 0.5, ease: "easeInOut" }}
         >
           <motion.div 
             className="w-6 h-6 rounded-full bg-[var(--color-primary)]/10"
-            animate={{ scale: [0.85, 1.15, 0.85], opacity: [0.4, 1, 0.4] }}
+            animate={reduce ? undefined : { scale: [0.85, 1.15, 0.85], opacity: [0.4, 1, 0.4] }}
             transition={{ repeat: Infinity, duration: 2, delay: card.delay, ease: "easeInOut" }}
           />
         </motion.div>
       </motion.div>
     ))}
   </div>
-);
+  );
+};
 
-const DrawingVignette = () => (
+// `count` is the stage's picture m of n; null when the stage carries none (a redraw, or a scene
+// node before scenes exist), and the bar then claims no amount at all.
+const DrawingVignette = ({ count }: { count: { m: number; n: number } | null }) => {
+  const reduce = useReducedMotion();
+  const finished = count ? Math.min(count.m - 1, count.n) : null;
+  return (
   <div className="relative w-48 h-32 flex flex-col items-center justify-center my-4">
     <motion.div
       className="absolute top-0 z-10 text-[var(--color-primary)] origin-bottom drop-shadow-md"
-      animate={{ x: [-40, 40, -40], rotate: [-15, 15, -15] }}
+      animate={reduce ? undefined : { x: [-40, 40, -40], rotate: [-15, 15, -15] }}
       transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
     >
       <PaintBrush size={48} weight="duotone" />
     </motion.div>
-    <div className="w-36 h-24 mt-8 border border-[var(--color-primary)]/20 rounded-[16px] overflow-hidden bg-[var(--color-surface)] shadow-[0_10px_28px_rgba(49,85,217,0.12)] relative">
-      <motion.div
-        className="absolute inset-0 bg-[var(--color-secondary)]/30 origin-left"
-        animate={{ scaleX: [0, 1, 1] }}
-        transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
-      />
+    <div
+      role="progressbar"
+      aria-label="Pictures finished"
+      aria-valuemin={0}
+      aria-valuemax={count?.n}
+      aria-valuenow={finished ?? undefined}
+      className="w-36 h-24 mt-8 border border-[var(--color-primary)]/20 rounded-[16px] overflow-hidden bg-[var(--color-surface)] shadow-[0_10px_28px_rgba(49,85,217,0.12)] relative"
+    >
+      {count && finished !== null ? (
+        <div
+          className="absolute inset-y-0 left-0 bg-[var(--color-secondary)]/30 transition-[width] duration-[var(--duration-slow)] ease-[var(--ease-out)]"
+          style={{ width: `${(finished / count.n) * 100}%` }}
+        />
+      ) : (
+        <div className="absolute inset-0 bg-[var(--color-secondary)]/15 animate-pulse" />
+      )}
     </div>
   </div>
-);
+  );
+};
 
-const StackingVignette = () => (
+const StackingVignette = () => {
+  const reduce = useReducedMotion();
+  return (
   <div className="relative w-32 h-32 my-4 flex justify-center">
     {[0, 1, 2, 3].map((i) => {
       const isCover = i === 3;
+      const tilt = isCover ? 0 : (i % 2 === 0 ? -4 : 4);
       return (
         <motion.div
           key={i}
           className={`absolute h-24 w-20 border border-[var(--color-primary)]/20 rounded-[8px] shadow-[0_6px_18px_rgba(49,85,217,0.10)] overflow-hidden ${isCover ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-surface)]'}`}
-          animate={{ 
-            y: [-40, i * 4, i * 4], 
+          // Reduced motion: the finished stack as a still frame.
+          initial={reduce ? false : undefined}
+          animate={reduce ? { y: i * 4, opacity: 1, rotate: tilt } : {
+            y: [-40, i * 4, i * 4],
             opacity: [0, 1, 0],
-            rotate: [0, isCover ? 0 : (i % 2 === 0 ? -4 : 4), isCover ? 0 : (i % 2 === 0 ? -4 : 4)]
+            rotate: [0, tilt, tilt]
           }}
           transition={{
             repeat: Infinity,
@@ -180,7 +213,8 @@ const StackingVignette = () => (
       );
     })}
   </div>
-);
+  );
+};
 
 function HoldRecovery({jobId, profileId, refetch, held = false}: {jobId: string; profileId: string; refetch: () => Promise<boolean>; held?: boolean}) {
   const [stopState, setStopState] = useState<{review_id: string; generation_epoch: number; worker_finished: boolean} | null>(null);
@@ -591,7 +625,8 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   // would only ever lift on some *other* render.
   const [bridgeStage, setBridgeStage] = useState<string | null>(null);
   const [submissionState, setSubmissionState] = useState<SubmissionState>("idle");
-  const [confirmError, setConfirmError] = useState(false);
+  // Which card sent the request that failed; null is "Use these characters".
+  const [confirmError, setConfirmError] = useState<{ charId: string | null } | null>(null);
   const [selectedTrait, setSelectedTrait] = useState<SelectedTrait>(null);
   const [pendingRedrawName, setPendingRedrawName] = useState<string | null>(null);
   const [changingPicture, setChangingPicture] = useState(false);
@@ -708,7 +743,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   const characterImageLoadId = useRef(0);
   const moderationMode = row?.moderation_mode;
 
-  const loadCharacterImages = useCallback(async (characters: NonNullable<JobRow["reveal"]>["characters"]) => {
+  const loadCharacterImages = useCallback(async (characters: Array<{ char_id: string; image_path: string }>) => {
     imageRequest.current?.abort();
     const controller = new AbortController();
     imageRequest.current = controller;
@@ -753,13 +788,22 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
     setCharacterImageState((current) => ({ ...current, ...states }));
   }, [jobId, moderationMode]);
 
+  // Keyed on the pictures, not the reveal object: a tab-return refetch or realtime UPDATE hands
+  // back an identical reveal as a new object, and reloading on that blanked every picture and
+  // disabled every control until it downloaded again. A new draw always has a new path.
+  const revealImagesKey = bucket === "paused" && row?.reveal?.characters.length
+    ? JSON.stringify(row.reveal.characters.map(({ char_id, image_path }) => [char_id, image_path]))
+    : null;
+
   useEffect(() => {
-    if (bucket !== "paused" || !row?.reveal?.characters.length) return;
+    if (!revealImagesKey) return;
+    const characters = (JSON.parse(revealImagesKey) as Array<[string, string]>)
+      .map(([char_id, image_path]) => ({ char_id, image_path }));
     // Initialize the per-image read state when the paused reveal becomes authoritative.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadCharacterImages(row.reveal.characters);
+    void loadCharacterImages(characters);
     return () => { imageRequest.current?.abort(); };
-  }, [bucket, row?.reveal, loadCharacterImages]);
+  }, [revealImagesKey, loadCharacterImages]);
 
   // Push to /book on terminal-success. The bridge needs no teardown here: `isRedrawing` is read
   // only on the in-flight branch and only while the stage still matches, so a stale value cannot
@@ -784,7 +828,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
     // bridging it made the continue path claim a redraw was under way.
     setBridgeStage(action !== "confirm" ? row?.current_stage ?? null : null);
     setSubmissionState("sending");
-    setConfirmError(false);
+    setConfirmError(null);
     let requestFailed = false;
     try {
       const {
@@ -817,7 +861,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
     }
 
     if (requestFailed) {
-      setConfirmError(true);
+      setConfirmError({ charId: char_id ?? null });
       setChangingPicture(false);
     }
     setSubmissionState("idle");
@@ -892,7 +936,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
         <div className="w-full flex justify-start mb-4 z-20">
           <Link
             href={`/s/${profileId}`}
-            className="inline-flex items-center gap-1.5 font-kid text-sm font-bold text-foreground/60 hover:text-primary transition-colors focus-visible:outline-secondary focus-visible:outline-2 rounded-lg py-1 px-2.5"
+            className="inline-flex min-h-11 items-center gap-1.5 font-kid text-sm font-bold text-foreground/60 hover:text-primary transition-colors focus-visible:outline-secondary focus-visible:outline-2 rounded-lg py-1 px-2.5"
           >
             ← Bookshelf
           </Link>
@@ -961,9 +1005,9 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
               ref={(node) => { characterCardRefs.current[c.char_id] = node; }}
               variants={{
                 hidden: { opacity: 0, y: 40, scale: 0.8 },
-                show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", bounce: 0.4 } }
+                show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", bounce: 0 } }
               }}
-              className="flex flex-col items-center gap-4 neo-border bg-[var(--color-surface)] rounded-[24px] p-5 shadow-[0_10px_28px_rgba(49,85,217,0.12)] hover:-translate-y-1 transition-transform max-w-xs w-full"
+              className="flex flex-col items-center gap-4 neo-border bg-[var(--color-surface)] rounded-[24px] p-5 shadow-[0_10px_28px_rgba(49,85,217,0.12)] max-w-xs w-full"
             >
               {characterImageState[c.char_id] === "error" ? (
                 <div role="alert" className="flex aspect-square w-full flex-col items-center justify-center gap-3 rounded-[16px] bg-[var(--color-muted)] p-4 text-center font-kid">
@@ -1106,6 +1150,11 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                 </div>
               )}
               </>)}
+              {confirmError?.charId === c.char_id && (
+                <p role="alert" className="w-full font-kid text-base text-[var(--color-destructive)] bg-[var(--color-destructive)]/10 px-4 py-3 rounded-xl">
+                  We couldn&apos;t send that choice. Please try again.
+                </p>
+              )}
             </motion.div>
           ))}
         </motion.div>
@@ -1128,7 +1177,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
           </button>
         </div>
         
-        <div className="h-16 mt-8 flex items-center justify-center">
+        <div className="min-h-16 mt-8 flex items-center justify-center">
           <AnimatePresence>
             {submissionState === "unknown" ? (
               <motion.div
@@ -1148,7 +1197,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                   Load character choices again
                 </button>
               </motion.div>
-            ) : confirmError && (
+            ) : confirmError?.charId === null && (
               <motion.p 
                 initial={{ opacity: 0, height: 0, scale: 0.9 }}
                 animate={{ opacity: 1, height: "auto", scale: 1 }}
@@ -1177,6 +1226,13 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
     3: PaintBrush,
     4: MagicWand,
   };
+  const STEP_NAMES = { 1: "Story", 2: "Characters", 3: "Pictures", 4: "Book" };
+
+  const headline = isRedrawing
+    ? changingPicture ? "Changing your picture…" : pendingRedrawName ? `Redrawing ${pendingRedrawName}…` : "Redrawing your character…"
+    : currentStepRaw !== null
+    ? getStepLabel(currentStep, row?.current_stage ?? null)
+    : "Warming up...";
 
   return (
     <div className="w-full flex-1 min-h-[calc(100dvh-5rem)] flex flex-col justify-center items-center p-5 sm:p-6 max-w-4xl mx-auto relative">
@@ -1185,7 +1241,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
       <div className="w-full flex justify-start mb-4 z-20">
         <Link
           href={`/s/${profileId}`}
-          className="inline-flex items-center gap-1.5 font-kid text-sm font-bold text-foreground/60 hover:text-primary transition-colors focus-visible:outline-secondary focus-visible:outline-2 rounded-lg py-1 px-2.5"
+          className="inline-flex min-h-11 items-center gap-1.5 font-kid text-sm font-bold text-foreground/60 hover:text-primary transition-colors focus-visible:outline-secondary focus-visible:outline-2 rounded-lg py-1 px-2.5"
         >
           ← Bookshelf
         </Link>
@@ -1206,24 +1262,27 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
       </div>
 
       {/* The Journey Tracker */}
-      <div className="flex items-center justify-center gap-4 md:gap-8 w-full max-w-2xl z-10 mb-8 sm:mb-16 relative">
-         {/* Connecting line behind */}
-         <div className="absolute top-1/2 left-8 right-8 h-1 bg-[var(--color-muted)] -translate-y-1/2 z-0 hidden sm:block" />
-         <motion.div 
-           className="absolute top-1/2 left-8 h-1 bg-[var(--color-primary)] -translate-y-1/2 z-0 hidden sm:block origin-left"
+      <div className="w-full max-w-2xl z-10 mb-8 sm:mb-16 relative">
+         {/* Connecting line behind. Its ends sit on the first and last circle centres (half of
+             w-14 / md:w-16), so (step - 1) / 3 of it reaches the current circle's centre. */}
+         <div className="absolute top-1/2 left-7 right-7 md:left-8 md:right-8 h-1 bg-[var(--color-muted)] -translate-y-1/2 z-0 hidden sm:block" />
+         <motion.div
+           className="absolute top-1/2 left-7 right-7 md:left-8 md:right-8 h-1 bg-[var(--color-primary)] -translate-y-1/2 z-0 hidden sm:block origin-left"
            initial={{ scaleX: 0 }}
            animate={{ scaleX: (currentStep - 1) / 3 }}
            transition={{ duration: 0.8, ease: "easeInOut" }}
          />
 
+         <ol aria-label="Book steps" className="relative flex items-center justify-between gap-4 md:gap-8">
          {STEPS.map(step => {
            const isDone = currentStepRaw !== null && step < currentStepRaw;
            const isActive = step === currentStep && !isRedrawing && currentStepRaw !== null;
            const Icon = ICONS[step];
-           
+
            return (
-             <div key={step} className="relative z-10 flex flex-col items-center gap-2">
-                <motion.div 
+             <li key={step} aria-current={isActive ? "step" : undefined} className="relative z-10 flex flex-col items-center gap-2">
+                <motion.div
+                  aria-hidden="true"
                   animate={{
                     scale: isActive ? 1.15 : 1
                   }}
@@ -1236,13 +1295,15 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                 >
                   {isDone ? <Check size={28} weight="bold" /> : <Icon size={28} weight={isActive ? "fill" : "regular"} />}
                 </motion.div>
-             </div>
+                <span className="sr-only">{`Step ${step}: ${STEP_NAMES[step]}${isDone ? ", done" : ""}`}</span>
+             </li>
            );
          })}
+         </ol>
       </div>
 
       {/* Spotlight Theater Vignettes & Text */}
-      <div className="z-10 text-center min-h-[220px] flex flex-col items-center justify-center w-full">
+      <div className="z-10 text-center min-h-[220px] flex flex-col items-center justify-center gap-4 w-full">
         <AnimatePresence mode="wait">
           {isRedrawing ? (
             <motion.div
@@ -1252,10 +1313,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
               exit={{ opacity: 0, scale: 0.8, y: -10 }}
               className="flex flex-col items-center gap-6"
             >
-               <DrawingVignette />
-               <h2 className="font-display text-3xl md:text-4xl text-foreground tracking-tight">
-                 {changingPicture ? "Changing your picture…" : pendingRedrawName ? `Redrawing ${pendingRedrawName}…` : "Redrawing your character…"}
-               </h2>
+               <DrawingVignette count={null} />
             </motion.div>
           ) : (
             <motion.div
@@ -1263,28 +1321,32 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.4, type: "spring", bounce: 0.3 }}
+              transition={{ duration: 0.4, type: "spring", bounce: 0 }}
               className="flex flex-col items-center gap-4 w-full px-4"
             >
                <div className="h-[140px] flex items-center justify-center">
                  {currentStep === 1 && <ReadingVignette />}
                  {currentStep === 2 && <CharactersVignette />}
-                 {currentStep === 3 && <DrawingVignette />}
+                 {currentStep === 3 && <DrawingVignette count={getPictureCount(row?.current_stage ?? null)} />}
                  {currentStep === 4 && <StackingVignette />}
                </div>
-               
-               <motion.h2 
-                 animate={{ scale: [0.98, 1, 0.98] }}
-                 transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
-                 className="font-display text-3xl md:text-4xl text-foreground text-center tracking-tight"
-               >
-                 {currentStepRaw !== null 
-                    ? getStepLabel(currentStep, row?.current_stage ?? null)
-                    : "Warming up..."}
-               </motion.h2>
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Stays mounted so screen readers hear each step change; the heading inside re-enters once
+            per change instead of pulsing. */}
+        <div role="status" className="w-full px-4">
+          <motion.h2
+            key={headline}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            className="font-display text-3xl md:text-4xl text-foreground text-center tracking-tight"
+          >
+            {headline}
+          </motion.h2>
+        </div>
       </div>
 
       {/* Stalling Text */}
@@ -1303,7 +1365,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
               </div>
               <Link
                 href={"/s/" + profileId}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-surface border border-primary/20 text-foreground font-bold hover:bg-muted/40 transition shrink-0 whitespace-nowrap focus-visible:outline-secondary focus-visible:outline-2 text-sm"
+                className="inline-flex min-h-11 items-center gap-2 px-4 py-2 rounded-xl bg-surface border border-primary/20 text-foreground font-bold hover:bg-muted/40 transition shrink-0 whitespace-nowrap focus-visible:outline-secondary focus-visible:outline-2 text-sm"
               >
                 Return to Bookshelf
               </Link>

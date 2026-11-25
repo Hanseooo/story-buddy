@@ -56,6 +56,7 @@ export default function BookReviewDialog({
   return (
     <dialog
       ref={ref}
+      aria-labelledby="book-review-name book-review-title"
       className="
         m-0 p-0 border-none bg-transparent
         w-full h-full max-w-none max-h-none
@@ -67,14 +68,17 @@ export default function BookReviewDialog({
       }}
     >
       {job && (
-        <div className="bg-surface w-full max-w-3xl mx-4 sm:mx-auto rounded-2xl flex flex-col max-h-[95vh] shadow-[0_22px_60px_rgb(49_85_217/16%)] overflow-hidden">
+        <div className="bg-surface w-full max-w-3xl mx-4 sm:mx-auto rounded-2xl flex flex-col max-h-[95dvh] shadow-[0_22px_60px_rgb(49_85_217/16%)] overflow-hidden">
           {/* Header */}
-          <div className="px-6 py-4 border-b border-primary/10 flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-3">
+          {/* min-w-0 lets the text block shrink so Close is never pushed out at 360px.
+              Below sm the badge drops to a second row under the name (avatar 36px + gap 12px
+              = ml-12); from sm it sits between the text and Close. */}
+          <div className="px-6 py-4 border-b border-primary/10 grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-1 shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
               <Avatar avatarId={job?.profiles?.avatar_id ?? null} displayNickname={name} size={36} />
-              <div>
-                <p className="font-bold text-foreground">{name}</p>
-                <p className="text-sm text-foreground/70 truncate max-w-[24ch]">
+              <div className="min-w-0">
+                <p id="book-review-name" className="font-bold text-foreground truncate">{name}</p>
+                <p id="book-review-title" className="text-sm text-foreground/70 truncate max-w-[24ch]">
                   {displayTitle(job.title, job.input_text)}
                 </p>
                 <p className="text-xs text-foreground/50">
@@ -86,16 +90,14 @@ export default function BookReviewDialog({
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <StateBadge state={state} />
-              <button
-                onClick={onClose}
-                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl hover:bg-muted transition-colors text-foreground/60 font-bold text-xl"
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
+            <StateBadge state={state} className="row-start-2 col-start-1 justify-self-start ml-12 sm:row-start-1 sm:col-start-2 sm:ml-0" />
+            <button
+              onClick={onClose}
+              className="row-start-1 col-start-2 sm:col-start-3 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl hover:bg-muted transition-colors text-foreground/60 font-bold text-xl"
+              aria-label="Close"
+            >
+              ✕
+            </button>
           </div>
 
           {/* Pages */}
@@ -120,10 +122,12 @@ export default function BookReviewDialog({
                     // actually scroll to, not the whole book on open.
                     loading={i === 0 ? "eager" : "lazy"}
                     decoding="async"
-                    className="w-full aspect-[3/2] object-cover"
+                    // Whole picture, never cropped: the teacher approves what the class
+                    // will see. Generated pictures are 1024x768 (4:3).
+                    className="w-full aspect-[4/3] object-contain bg-muted"
                   />
                 ) : (
-                  <div className="w-full aspect-[3/2] bg-muted animate-pulse" />
+                  <div className="w-full aspect-[4/3] bg-muted animate-pulse" />
                 )}
                 <p className="font-kid text-lg leading-relaxed px-6 py-5 text-center text-foreground">
                   {page.caption}

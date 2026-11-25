@@ -24,6 +24,7 @@ export default function SettingsPage() {
 
   // Avatar state
   const [avatarId, setAvatarId] = useState<string | null>(null);
+  const [nickname, setNickname] = useState("");
   const [avatarMessage, setAvatarMessage] = useState("");
   const [activeCategory, setActiveCategory] = useState<CategoryId>("all");
 
@@ -47,11 +48,14 @@ export default function SettingsPage() {
     if (!profileId) return;
     supabase
       .from("profiles")
-      .select("avatar_id")
+      .select("avatar_id, display_nickname")
       .eq("id", profileId)
       .single()
       .then(({ data }) => {
-        if (data) setAvatarId(data.avatar_id ?? null);
+        if (data) {
+          setAvatarId(data.avatar_id ?? null);
+          setNickname(data.display_nickname ?? "");
+        }
       });
   }, [profileId]);
 
@@ -163,25 +167,26 @@ export default function SettingsPage() {
 
           {/* Active Avatar Hero Preview Header */}
           <div className="flex items-center gap-4 p-4 rounded-2xl bg-primary/5 border border-primary/10 mb-6">
-            <Avatar avatarId={avatarId} displayNickname="?" size={64} />
+            <Avatar avatarId={avatarId} displayNickname={nickname} size={64} />
             <div>
               <div className="text-xs font-bold uppercase tracking-wider text-primary/70 mb-0.5 font-display">
                 Current Choice
               </div>
               <div className="font-kid font-bold text-foreground text-lg">
-                {avatarId ? avatarId : "Letter Initial Circle"}
+                {avatarId ? "Your picture" : "Your letter"}
               </div>
             </div>
           </div>
 
           {/* Category Filter Tabs */}
-          <div className="flex flex-wrap gap-2 mb-6" role="tablist" aria-label="Avatar style categories">
+          <div className="flex flex-wrap gap-2 mb-6" role="group" aria-label="Avatar style categories">
             {CATEGORIES.map((cat) => (
               <button
                 key={cat.id}
                 type="button"
+                aria-pressed={activeCategory === cat.id}
                 onClick={() => setActiveCategory(cat.id)}
-                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all touch-manipulation cursor-pointer ${
+                className={`min-h-11 px-4 py-2 rounded-xl text-sm font-bold transition-all touch-manipulation cursor-pointer ${
                   activeCategory === cat.id
                     ? "bg-primary text-surface shadow-[0_4px_12px_rgba(49,85,217,0.2)]"
                     : "bg-surface border border-primary/15 text-foreground/70 hover:bg-primary/5 hover:text-primary"
@@ -223,11 +228,11 @@ export default function SettingsPage() {
                     value={id}
                     checked={avatarId === id}
                     onChange={() => handleAvatarSelect(id)}
-                    className="sr-only"
-                    aria-label={`Avatar ${i + 1} of ${AVATAR_IDS.length}`}
+                    className="sr-only peer"
+                    aria-label={`Avatar ${i + 1} of ${visibleAvatars.length}`}
                   />
                   <div
-                    className={`rounded-full p-1.5 transition-all relative ${
+                    className={`rounded-full p-1.5 transition-all relative peer-focus-visible:outline-3 peer-focus-visible:outline-primary peer-focus-visible:outline-offset-4 ${
                       avatarId === id
                         ? "bg-secondary/20 ring-4 ring-secondary ring-offset-2 ring-offset-surface shadow-[0_0_15px_rgba(242,200,95,0.5)]"
                         : "hover:bg-primary/5"

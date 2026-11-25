@@ -38,6 +38,7 @@ export default function AddStudentsPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [singleName, setSingleName] = useState("");
   const [singleSubmitting, setSingleSubmitting] = useState(false);
+  const [singleError, setSingleError] = useState<string | null>(null);
   const [copyDone, setCopyDone] = useState(false);
 
   // Fetch classroom + existing nicknames for collision check
@@ -113,13 +114,14 @@ export default function AddStudentsPage() {
   async function handleSubmitSingle(e: React.FormEvent) {
     e.preventDefault();
     setSingleSubmitting(true);
+    setSingleError(null);
     try {
       const body = await postStudents([{ display_nickname: singleName.trim() }]);
       setCreated(body.created);
       setRejected(body.rejected);
       setPhase("slips");
     } catch {
-      // ponytail: single-student errors are rare; a toast is overkill for now
+      setSingleError("Could not add student — try again");
     } finally {
       setSingleSubmitting(false);
     }
@@ -405,6 +407,11 @@ export default function AddStudentsPage() {
               className="w-full bg-background border border-primary/20 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
               aria-label="Single student name"
             />
+            {singleError && (
+              <p className="text-destructive text-sm" role="alert">
+                {singleError}
+              </p>
+            )}
             <button
               type="submit"
               disabled={!singleName.trim() || singleSubmitting}
