@@ -211,6 +211,17 @@ describe("FailureScreen — kind=retry", () => {
     ));
   });
 
+  it("retry carries the original picture checker (judge-selector SH-06)", async () => {
+    render(<FailureScreen kind="retry" inputText="A dog runs." title="A Dog Runs" stylePresetId="gouache" judgeChoice="qwen_finetuned" />);
+    fireEvent.click(screen.getByRole("button", { name: /make this story again/i }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/storybooks"),
+      expect.objectContaining({
+        body: JSON.stringify({ text: "A dog runs.", title: "A Dog Runs", style_preset_id: "gouache", judge_choice: "qwen_finetuned" }),
+      })
+    ));
+  });
+
   it("a failed retry says so instead of silently doing nothing", async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 }) as unknown as typeof fetch;
     render(<FailureScreen kind="retry" inputText="x" title="Retry this story" />);
