@@ -241,6 +241,10 @@ class IdentityCheck(BaseModel):
 
     same_character: bool
     failure_reasons: list[FailureReason] = Field(default_factory=list)
+    # judge-selector OD-02, ADR-087: the model id that actually answered this subject (a Qwen id,
+    # or the Gemma id after a SH-04 fallback). None = recorded before the field existed. Additive,
+    # declared last → no schema_version bump.
+    judge_model: Optional[str] = None
 
 
 class Attempt(BaseModel):

@@ -319,7 +319,7 @@ def _mock_call_points(monkeypatch):
     )
     monkeypatch.setattr(
         "pipeline.consistency_check.judge_attempt",
-        lambda image_path, subjects, prompt="": (
+        lambda image_path, subjects, prompt="", judge_choice="gemma": (
             [],
             SceneConstraintVerdict(differences_observed="none", contradictions=[]),
         ),   # unchecked identity + clean composition
@@ -488,8 +488,8 @@ def test_a_failing_scene_retries_once_then_passes_and_the_run_reaches_compose(mo
     # counter would carry across both runs and the second would never see a failure.
     monkeypatch.setattr(
         "pipeline.consistency_check.judge_attempt",
-        lambda image_path, subjects, prompt="": (
-            [_judge_returning(same=not image_path.endswith("s0-1.png"))],
+        lambda image_path, subjects, prompt="", judge_choice="gemma": (
+            [(_judge_returning(same=not image_path.endswith("s0-1.png")), "google/gemma-3-27b-it")],
             SceneConstraintVerdict(differences_observed="none", contradictions=[]),
         ),
     )
@@ -530,8 +530,8 @@ def test_a_book_whose_every_judge_call_fails_still_reaches_compose(monkeypatch):
     _two_scenes(monkeypatch)
     monkeypatch.setattr(
         "pipeline.consistency_check.judge_attempt",
-        lambda image_path, subjects, prompt="": (
-            [_judge_returning(same=False)],
+        lambda image_path, subjects, prompt="", judge_choice="gemma": (
+            [(_judge_returning(same=False), "google/gemma-3-27b-it")],
             SceneConstraintVerdict(differences_observed="none", contradictions=[]),
         ),
     )
