@@ -915,6 +915,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
         inputText={row?.input_text}
         title={row?.title}
         stylePresetId={row?.style_preset_id}
+        judgeChoice={row?.judge_choice}
       />
     );
   }

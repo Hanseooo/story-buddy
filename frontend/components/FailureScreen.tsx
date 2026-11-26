@@ -39,6 +39,8 @@ type Props = {
   inputText?: string;
   title?: string | null;
   stylePresetId?: string | null;
+  // Carried into the write draft only; the write page validates it and resets it when Qwen is down.
+  judgeChoice?: string | null;
   countable?: boolean;
   onReload?: () => void;
 };
@@ -329,6 +331,7 @@ export default function FailureScreen({
   inputText = "",
   title = null,
   stylePresetId = null,
+  judgeChoice = null,
   countable = true,
   onReload,
 }: Props) {
@@ -388,6 +391,7 @@ export default function FailureScreen({
           text: inputText,
           title: suggestedTitle,
           ...(stylePresetId ? { style_preset_id: stylePresetId } : {}),
+          ...(judgeChoice ? { judge_choice: judgeChoice } : {}),
         })
       );
     } catch {

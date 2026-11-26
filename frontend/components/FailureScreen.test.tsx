@@ -336,6 +336,25 @@ describe("FailureScreen — kind=retry", () => {
     });
   });
 
+  it("preserves the picture checker in the revise prefill (judge-selector AC-05)", () => {
+    render(
+      <FailureScreen
+        kind="revise"
+        inputText="Once upon a time"
+        title="My Dragon Book"
+        stylePresetId="cut_paper"
+        judgeChoice="qwen_finetuned"
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /change my words/i }));
+    expect(JSON.parse(sessionStorage.getItem("sb.prefill") as string)).toEqual({
+      text: "Once upon a time",
+      title: "My Dragon Book",
+      style_preset_id: "cut_paper",
+      judge_choice: "qwen_finetuned",
+    });
+  });
+
   it("prefills the legacy excerpt as an editable title suggestion", () => {
     render(
       <FailureScreen
