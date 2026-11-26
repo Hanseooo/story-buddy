@@ -28,7 +28,7 @@ Branch `fix/ui-audit-2`, PR number pending. Ticket `.scratch/ui-audit/issues/06-
   above its loading view (D4).
 - **Reader and making screen.** The decorative blurred blobs are gone (D5).
 - **Press feedback.** Teacher Books, Needs your help and roster controls, and the kid reader and
-  making-screen controls, press in with `active:scale-[0.98]` (DESIGN §7 Active) (D6).
+  making-screen controls, press in with the repo's existing `active:scale-[0.98]` press (D6).
 - **Shelf.** The in-flight badge says "Making..." instead of "Writing..." (D7).
 
 ### Checks
@@ -36,6 +36,63 @@ Branch `fix/ui-audit-2`, PR number pending. Ticket `.scratch/ui-audit/issues/06-
 - Frontend: 1271 tests pass (4 new, each seen red first; 2 shelf expectations changed for D7). Lint
   and typecheck clean apart from the known `lib/signedUrls.test.ts:106` error. Not driven in a
   browser.
+
+---
+
+## UI audit round 2, batch 4: magic pencil and picture choices · 2026-11-26
+
+Branch `fix/ui-audit-2`, PR number pending. Ticket `.scratch/ui-audit/issues/05-magic-pencil-ux.md`.
+
+### Code
+
+- **Old and New.** The page pencil and reveal pencil choices show the old and new pictures at 4:3,
+  labelled, through one shared `components/OldNewPictures.tsx`. They sit side by side once the
+  choice is 28rem wide and stack on a phone (B3, A10). In the reader the choice takes a full-width
+  row of the card instead of the text column. On the reveal the card widens while the choice is
+  open, and the New picture offers Try again.
+- **Reader.** The page picture shows "Drawing your change…" while a change draws (B4). Only a press
+  on the picture starts a swipe, and the picture is not natively draggable (B5). Below `lg` the
+  arrows sit under the card, and a disabled arrow does not press in (B6).
+- **Reveal.** Other versions stays visible. Magic pencil and the trait chips with Redraw sit behind
+  one **Change this picture** disclosure that keeps its open state across a redraw and keeps the
+  typed words when it closes (B9).
+
+### Docs
+
+- `magic-pencil.md` AC-06 and its traceability row describe the disclosure.
+  `kid-flow-reader-and-wait-states.md` Controls describes the arrows and the picture-only swipe.
+
+### Checks
+
+- Targeted reader and reveal tests pass; the swipe test drives a real framer-motion drag. Not
+  driven in a browser.
+
+---
+
+## UI audit round 2, batch 3: teacher held-story screen · 2026-11-26
+
+Branch `fix/ui-audit-2`, PR number pending. Ticket `.scratch/ui-audit/issues/04-held-story-redesign.md`.
+
+### Code
+
+- **Held story.** The header and its Back stay pinned while the story scrolls. The Decision region is
+  pinned to the bottom on phones (at most 45dvh) and is a sticky side panel at `lg`. Scroll padding
+  keeps focused rows clear of both (C2).
+- **Actions.** One filled primary per view. Stop this story is outlined in red with dark text on the
+  screen and filled red in its confirm. These controls use the DESIGN §7 focus ring (C1).
+- **Evidence.** The classifier explanations and captured settings version stay in view. Model IDs,
+  instruction and policy versions and the raw classifier records sit in a closed **Technical
+  record** that stays in the page (C3, ADR-080).
+- **Queue.** Loading shows a skeleton in the row's shape. Review criteria show on the queue, even
+  when it is empty, and once inside each held story (C5, ticket 13).
+
+### Docs
+
+- `moderation-stack.md` §1506 describes the Technical record and where Review criteria show.
+
+### Checks
+
+- Targeted Books tests pass. Not driven in a browser.
 
 ---
 

@@ -98,8 +98,11 @@ fix one thing without losing what I liked.
 
 Applies: SH-01, SH-02, SH-03, SH-04, SH-05, SH-06, SH-07, SH-08, SH-10
 
-- **AC-06.** Each character with a picture shows a "Magic pencil" control beside "Draw again" (today's
-  chip button, unchanged). Both use the book's 3 character goes.
+- **AC-06.** Each character with a picture shows "Other versions" and a **Change this picture**
+  disclosure. Other versions stays visible, one tap away, whether the disclosure is open or closed.
+  The disclosure holds the "Magic pencil" control and the trait chips with their Redraw button
+  ("Draw again"); it keeps its open state and the typed pencil words while the child works, including
+  across a redraw (UI audit round 2, B9). The pencil and Redraw use the book's 3 character goes.
 - **AC-07.** The pencil opens a labelled text box, max `MAX_PENCIL_CHARS` (about 200). Submit is
   disabled while empty. The count of goes left is shown.
 - **AC-08.** On submit, the text is PII-redacted before it is stored (SH-03), then moderated (SH-02).
@@ -378,7 +381,7 @@ setting stays off by default. US-07 is a baseline-mode bug fix and ships normall
 | Pencil: write change, one edit, keep new or old; redact, moderate, hold; log | US-02, US-04, US-06, SH-03, SH-05 |
 | Rejected: blank custom prompt; pausing per failed page | §1 exclusions |
 | Contradicting change becomes this book's note, used by later pages | AC-12, SH-06 |
-| Reveal: chip button stays as "Draw again", pencil beside it, shared 3 goes | AC-06, SH-04 |
+| Reveal: Other versions stays visible; pencil and "Draw again" chips sit behind Change this picture, shared 3 goes | AC-06, SH-04 |
 | Budget: 3 character goes + 5 page pencils, within 55, disabled state | SH-04 |
 | Keep unchosen reference draws, moderate on open; first-draw accept has one | AC-02, AC-03, AC-05 |
 | Approved book edit returns to the teacher | US-05 |
