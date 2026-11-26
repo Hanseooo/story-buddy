@@ -8,7 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
-from app.config import MAX_PENCIL_CHARS, MAX_TITLE_CHARS, MIN_STORY_WORDS, SELECTABLE_STYLE_PRESET_IDS, settings
+from app.config import (
+    DEFAULT_JUDGE_CHOICE, JUDGE_CHOICES, MAX_PENCIL_CHARS, MAX_TITLE_CHARS, MIN_STORY_WORDS,
+    SELECTABLE_STYLE_PRESET_IDS, settings,
+)
 from app.moderation_policy import TEACHER_MODERATION_POLICY_VERSION
 from app.length import clamp_story, word_count
 from app.db import get_supabase_client
@@ -87,6 +90,8 @@ class CreateStorybookRequest(BaseModel):
     text: str
     title: str
     style_preset_id: str | None = None
+    # judge-selector SH-01: a choice id, never a model id. None (old client) stores the default.
+    judge_choice: str | None = None
     # Set only on a resubmission after a 409 asked the child to confirm a redacted title.
     title_ack: str | None = None
 
@@ -117,6 +122,13 @@ class CreateStorybookRequest(BaseModel):
             return v
         if v is not None and v not in SELECTABLE_STYLE_PRESET_IDS:
             raise ValueError(f"Unknown style_preset_id: {v!r}")
+        return v
+
+    @field_validator("judge_choice")
+    @classmethod
+    def validate_judge_choice(cls, v: str | None) -> str | None:
+        if v is not None and v not in JUDGE_CHOICES:
+            raise ValueError(f"Unknown judge_choice: {v!r}")
         return v
 
 
@@ -220,6 +232,7 @@ def create_storybook(
             "title": checked_title,
             "truncated": truncated,
             "style_preset_id": payload.style_preset_id or "gouache",
+            "judge_choice": payload.judge_choice or DEFAULT_JUDGE_CHOICE,
             "profile_id": user.id,
             "classroom_id": classroom_id,
             **({

@@ -387,3 +387,9 @@ class StoryMemory(BaseModel):
     reference_pencil: Optional[str] = None             # a `pencil_uses` id `char_bible` edits for
     reference_pencil_choice: Optional[PencilChoice] = None  # set by `reveal`, consumed by `char_bible`
     pencil_uses: list[PencilUse] = Field(default_factory=list)
+    # judge-selector AC-11, ADR-087: the identity-judge choice id, copied from `jobs.judge_choice` at
+    # job start and fixed for the book (SH-06). Additive, defaulted → no schema_version bump; an old
+    # checkpoint loads as "gemma". The ids live in `app.config.JUDGE_CHOICES` (validated at the API and
+    # by migration 0034). Not imported here: `app.config` builds Settings at import and needs the app's
+    # secrets, while finetune scripts import this contract without them.
+    judge_choice: str = "gemma"

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from langgraph.types import Command
 
-from app.config import RECURSION_LIMIT, STYLE_PRESETS
+from app.config import DEFAULT_JUDGE_CHOICE, RECURSION_LIMIT, STYLE_PRESETS
 from contracts.story_memory import CURRENT_SCHEMA_VERSION, Scene
 from worker.run_job import _run_with_progress, _stage_string, resume_storybook_job, run_storybook_job
 
@@ -15,16 +15,28 @@ def mock_langfuse_handler():
         yield mock
 
 
-def _fake_supabase(style_preset_id: str | None = None, truncated: bool = False) -> MagicMock:
+def _fake_supabase(style_preset_id: str | None = None, truncated: bool = False,
+                   judge_choice: str = "gemma") -> MagicMock:
     fake = MagicMock()
-    select_chain = fake.table.return_value.select.return_value.eq.return_value.single.return_value
-    select_chain.execute.return_value.data = {
+    row = {
         "input_text": "A dog runs in a field.",
         "style_preset_id": style_preset_id,
         "truncated": truncated,
         "classroom_id": "00000000-0000-0000-0000-000000000001",
         "profile_id": "00000000-0000-0000-0000-000000000002",
+        "judge_choice": judge_choice,
     }
+
+    def select(columns: str) -> MagicMock:
+        # Like PostgREST, return only the named columns, so a column missing from
+        # run_job's select string reads as absent rather than silently present.
+        chain = MagicMock()
+        named = [c.strip() for c in columns.split(",")]
+        chain.eq.return_value.single.return_value.execute.return_value.data = {
+            k: row[k] for k in named if k in row}
+        return chain
+
+    fake.table.return_value.select.side_effect = select
     return fake
 
 
@@ -268,6 +280,89 @@ def test_run_storybook_job_defaults_style_to_cel_when_preset_is_null():
     state = fake_graph.stream.call_args.args[0]
     assert state.style.style_preset_id == "cel"
     assert state.style.prompt_fragment == STYLE_PRESETS["cel"]
+
+
+@pytest.mark.parametrize("judge_choice", ["qwen_base", "qwen_finetuned"])
+def test_run_storybook_job_loads_the_judge_choice_from_the_job_row(judge_choice):
+    """judge-selector AC-11: the plain start path reads judge_choice next to style_preset_id."""
+    fake_supabase = _fake_supabase(judge_choice=judge_choice)
+    fake_cm = MagicMock()
+    fake_cm.__enter__.return_value = MagicMock()
+    fake_graph = _fake_graph()
+
+    with patch("worker.run_job.get_supabase_client", return_value=fake_supabase),          patch("worker.run_job.PostgresSaver.from_conn_string", return_value=fake_cm),          patch("worker.run_job.build_graph", return_value=fake_graph):
+        run_storybook_job("job-1")
+
+    assert fake_graph.stream.call_args.args[0].judge_choice == judge_choice
+
+
+class _FakeReviewConn:
+    """psycopg stand-in for the teacher-review start path: answers by table, records writes."""
+
+    def __init__(self, job: dict):
+        self.job = job
+
+    def execute(self, sql: str, params=None):
+        if "advisory_lock" in sql:
+            row = {"locked": True}
+        elif "from jobs" in sql:
+            row = self.job
+        elif "from profiles" in sql:
+            row = {"?column?": 1}
+        else:
+            row = None
+        return SimpleNamespace(fetchone=lambda: row, fetchall=lambda: [])
+
+    def transaction(self):
+        return MagicMock()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+@pytest.mark.parametrize("judge_choice", ["gemma", "qwen_finetuned"])
+def test_review_start_path_loads_the_judge_choice_from_the_job_row(judge_choice):
+    """judge-selector AC-11: the teacher-review start path builds StoryMemory from `select *`."""
+    from worker.run_job import run_review_storybook_job
+
+    job = {
+        "id": "job-1", "status": "queued", "moderation_mode": "teacher_review_v1",
+        "generation_epoch": 0, "image_count": 0, "worker_finished_at": None, "error": None,
+        "classroom_id": "00000000-0000-0000-0000-000000000001",
+        "profile_id": "00000000-0000-0000-0000-000000000002",
+        "input_text": "A dog runs in a field.", "title": "My Story", "truncated": False,
+        "style_preset_id": "gouache", "judge_choice": judge_choice,
+        "moderation_settings_snapshot": {"policy_version": "teacher_review_policy_v1"},
+    }
+    fake_cm = MagicMock()
+    fake_cm.__enter__.return_value = MagicMock()
+    fake_graph = MagicMock()
+    fake_graph.get_state.return_value = SimpleNamespace(values={}, next=(), tasks=[])
+    fake_graph.stream.side_effect = RuntimeError("stop after the initial state is built")
+
+    with patch("app.moderation_hold.connect", return_value=_FakeReviewConn(job)),          patch("worker.run_job.PostgresSaver.from_conn_string", return_value=fake_cm),          patch("worker.run_job.build_graph", return_value=fake_graph),          pytest.raises(RuntimeError, match="stop after the initial state"):
+        run_review_storybook_job("job-1", expected_epoch=0)
+
+    assert fake_graph.stream.call_args.args[0].judge_choice == judge_choice
+
+
+def test_a_checkpoint_saved_before_judge_choice_loads_as_gemma():
+    """judge-selector AC-11 / §4 "Old jobs before migration": additive, defaulted field."""
+    from contracts.story_memory import Input, StoryMemory
+
+    blob = StoryMemory(schema_version=CURRENT_SCHEMA_VERSION, story_id="job-1", classroom_id="c",
+                       profile_id="p", input=Input(raw_text="A dog runs.")).model_dump()
+    blob.pop("judge_choice", None)
+
+    restored = StoryMemory.model_validate(blob)
+
+    assert restored.judge_choice == "gemma"
+    assert restored.schema_version == 1
+    # The contract cannot import app.config, so pin its literal default to the one source.
+    assert StoryMemory.model_fields["judge_choice"].default == DEFAULT_JUDGE_CHOICE
 
 
 def test_run_storybook_job_passes_the_recursion_limit_to_invoke():
