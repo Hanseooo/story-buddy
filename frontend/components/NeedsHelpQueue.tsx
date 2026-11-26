@@ -32,7 +32,12 @@ type Policy = { policy_version: string; audience: string; basis: string; scope: 
   guidance: string; theme_scope: string; criteria: Criterion[]; optional_themes: Criterion[] };
 // magic-pencil 10: a held page pencil request waits alone on a finished, readable book.
 const pagePencilKinds = ["page_pencil_text", "page_pencil_result"];
-const control = "min-h-[44px] px-4 py-2 rounded-xl font-bold text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50";
+const decisionKinds = ["scene_image", "character_reference", "story_text", "title", "optional_themes", "character_pencil_text", ...pagePencilKinds];
+const control = "min-h-[44px] px-4 py-2 rounded-xl font-bold text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-[0.98] disabled:opacity-50";
+// Ticket 04 (DESIGN §7): one filled primary per view; a stop is outlined in destructive red.
+// Ink text, not red text: destructive on ivory is ~4.3:1, under AA for 16px bold.
+const primary = "min-h-[44px] px-4 py-2 rounded-xl font-bold bg-primary text-on-primary hover:bg-primary-deep active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary";
+const destructive = "min-h-[44px] px-4 py-2 rounded-xl font-bold border-2 border-destructive text-foreground hover:bg-destructive/10 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent";
 
 async function reviewFetch(path: string, signal: AbortSignal, options?: RequestInit) {
   const { data: { session } } = await supabase.auth.getSession();
@@ -93,11 +98,21 @@ export default function NeedsHelpQueue({ classroomId, active, onCount, onBack }:
 
   return (
     <section ref={queue} tabIndex={-1} hidden={!active} aria-label="Needs your help" className="focus-visible:outline-2 focus-visible:outline-primary">
-      <ReviewCriteria />
       {failed ? <div role="alert" className="p-6 bg-surface rounded-2xl border border-primary/15">
         <p>Could not load stories needing your help.</p>
         <button className={control} onClick={() => void load()}>Try loading again</button>
-      </div> : items === null ? <p role="status" className="p-6">Loading stories needing your help…</p>
+      </div> : items === null ? <div role="status" className="divide-y divide-primary/15 rounded-2xl border border-primary/15 bg-surface">
+          <span className="sr-only">Loading stories needing your help…</span>
+          {/* Ticket 04: the skeleton has the queue row's shape (title, meta, held time, Inspect). */}
+          {[0, 1, 2].map(row => <div key={row} aria-hidden="true" className="p-4 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex-1 min-w-40 space-y-2">
+              <div className="h-5 w-1/2 rounded-lg bg-muted animate-pulse" />
+              <div className="h-4 w-3/4 rounded-lg bg-muted animate-pulse" />
+              <div className="h-4 w-1/3 rounded-lg bg-muted animate-pulse" />
+            </div>
+            <div className="h-11 w-32 rounded-xl bg-muted animate-pulse" />
+          </div>)}
+        </div>
         : items.length === 0 ? <div className="p-8 bg-surface rounded-2xl border border-primary/15">
           <p className="font-bold">No stories need your help</p>
           <button className={control} onClick={onBack}>Back to Books</button>
@@ -114,6 +129,8 @@ export default function NeedsHelpQueue({ classroomId, active, onCount, onBack }:
             }}>Inspect story</button>
           </li>)}
         </ul>}
+      {/* Ticket 13: the criteria reference is reachable from Books, held stories or not. */}
+      <ReviewCriteria />
       {selected && <HeldStory key={selected} jobId={selected} onClose={close} />}
     </section>
   );
@@ -174,13 +191,23 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
     onClose();
   }
 
+  const reviewing = !!detail?.review_id && !loading && !error;
+  const resolving = reviewing && !stopped && decisionKinds.includes(detail?.kind || "");
+  const stoppable = reviewing && detail?.kind !== "character_pencil_text" && !pagePencilKinds.includes(detail?.kind || "");
+
+  // Ticket 04: the header and its Back stay pinned while the story scrolls. The decision is pinned to the
+  // bottom on phones and is a sticky side panel at lg. Scroll padding keeps focused controls out from under both.
+  // Below sm the header wraps to two rows (~113px), so the top padding is 128px there and 96px above.
   return <dialog ref={dialog} aria-labelledby="held-story-title" onCancel={event => { event.preventDefault(); close(); }}
-    className="m-0 h-dvh w-screen max-h-none max-w-none border-0 bg-background text-foreground p-0 backdrop:bg-foreground/50">
-    <div className="max-w-3xl mx-auto px-5 py-6 sm:px-8 space-y-6">
-      <div className="flex flex-wrap justify-between gap-3 items-center">
+    className="m-0 h-dvh w-screen max-h-none max-w-none overflow-y-auto scroll-pt-32 sm:scroll-pt-24 scroll-pb-[46dvh] lg:scroll-pb-0 border-0 bg-background text-foreground p-0 backdrop:bg-foreground/50">
+    <header className="sticky top-0 z-[var(--z-raised)] border-b border-primary/15 bg-background">
+      <div className="max-w-3xl lg:max-w-6xl mx-auto px-5 py-3 sm:px-8 flex flex-wrap justify-between gap-3 items-center">
         <h2 id="held-story-title" className="text-2xl font-bold">Needs your help</h2>
         <button autoFocus className={control} onClick={close}>Back to Needs your help</button>
       </div>
+    </header>
+    <div className="max-w-3xl lg:max-w-6xl mx-auto px-5 pt-6 sm:px-8 lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-8 lg:items-start lg:pb-6">
+    <div className="min-w-0 space-y-6 pb-6">
       {!stopped && <p className="text-sm text-foreground/70">Inspection leaves this story waiting. No picture is released to the child.</p>}
       <button className={control} disabled={loading || pending} onClick={() => void load()}>Refresh story status</button>
       {loading && <p role="status">Loading current story…</p>}
@@ -227,43 +254,57 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
             <h4 className="font-bold">Why this story is held</h4>
             <p>{detail.kind === "optional_themes" ? "Optional classroom themes" : "Shared safety"}</p>
             <p>Recorded criteria: {detail.criteria?.length ? detail.criteria.map(id => id.replaceAll("_", " ")).join(", ") : "Unavailable"}</p>
-            <p>Policy at submission: {detail.policy_version || "Unavailable"}</p>
-            <p>Current policy: {detail.current_policy_version || "Unavailable"}</p>
-            <p>Captured settings version: {detail.settings_snapshot?.settings_version ?? "Unavailable"}</p>
             <p>Optional themes at submission: {detail.settings_snapshot?.theme_ids
               ? detail.settings_snapshot.theme_ids.map(id => id.replaceAll("_", " ")).join(", ") || "None enabled"
               : "Unavailable"}</p>
             {detail.kind === "optional_themes" && <>
               <p>These classroom preferences request extra review. They do not label the story unsafe. Shared safety checks still apply.</p>
               {detail.detected_themes?.map(theme => <p key={theme.theme_id}>{theme.theme_id.replaceAll("_", " ")}: {theme.reason}</p>)}
-              <p>Recorded detector: {detail.theme_check?.model_id || "Unavailable"}</p>
-              <p>Instruction version: {detail.theme_check?.instruction_version || "Unavailable"}</p>
             </>}
             {detail.kind !== "optional_themes" && !detail.classifier_evidence?.length && <p>The recorded reason is unavailable</p>}
-            {detail.classifier_evidence?.map((evidence, index) => <div key={index} className="space-y-2 border-t border-primary/15 pt-3">
+            {/* ADR-080 / ticket 13 AC-09: the recorded explanation and captured settings stay in view. */}
+            {detail.classifier_evidence?.map((evidence, index) => <div key={index} className="space-y-1">
               <h5 className="font-bold">{evidence.layer === "primary" ? "Primary classifier" : "Backstop classifier"}</h5>
-              <dl className="space-y-1 text-sm">
-                <dt>Recorded model</dt><dd>{evidence.model_id || "Unavailable"}</dd>
-                <dt>Instruction version</dt><dd>{evidence.instruction_version || "Unavailable"}</dd>
-                <dt>Recorded outcome</dt><dd>{evidence.outcome.replaceAll("_", " ")}</dd>
-                <dt>Checked at</dt><dd>{evidence.checked_at ? new Date(evidence.checked_at).toLocaleString() : "Unavailable"}</dd>
-                <dt>Recorded labels</dt><dd>{evidence.categories?.join(", ") || "Unavailable"}</dd>
-              </dl>
               <p className="whitespace-pre-wrap">{evidence.reason?.trim() || "The recorded reason is unavailable"}</p>
             </div>)}
+            <p>Captured settings version: {detail.settings_snapshot?.settings_version ?? "Unavailable"}</p>
             <ReviewCriteria />
+            {/* Ticket 04: machine evidence starts closed but stays in the page for the teacher (ADR-080). */}
+            <details className="py-4 space-y-4">
+              <summary className={`${control} cursor-pointer`}>Technical record</summary>
+              <p>Policy at submission: {detail.policy_version || "Unavailable"}</p>
+              <p>Current policy: {detail.current_policy_version || "Unavailable"}</p>
+              {detail.kind === "optional_themes" && <>
+                <p>Recorded detector: {detail.theme_check?.model_id || "Unavailable"}</p>
+                <p>Instruction version: {detail.theme_check?.instruction_version || "Unavailable"}</p>
+              </>}
+              {detail.classifier_evidence?.map((evidence, index) => <div key={index} className="space-y-2 border-t border-primary/15 pt-3">
+                <h5 className="font-bold">{evidence.layer === "primary" ? "Primary classifier" : "Backstop classifier"}</h5>
+                <dl className="space-y-1 text-sm">
+                  <dt>Recorded model</dt><dd>{evidence.model_id || "Unavailable"}</dd>
+                  <dt>Instruction version</dt><dd>{evidence.instruction_version || "Unavailable"}</dd>
+                  <dt>Recorded outcome</dt><dd>{evidence.outcome.replaceAll("_", " ")}</dd>
+                  <dt>Checked at</dt><dd>{evidence.checked_at ? new Date(evidence.checked_at).toLocaleString() : "Unavailable"}</dd>
+                  <dt>Recorded labels</dt><dd>{evidence.categories?.join(", ") || "Unavailable"}</dd>
+                </dl>
+              </div>)}
+            </details>
           </section>}
-          {!loading && !error && (detail.kind === "scene_image" || detail.kind === "character_reference" || detail.kind === "story_text" || detail.kind === "title" || detail.kind === "optional_themes" || detail.kind === "character_pencil_text" || pagePencilKinds.includes(detail.kind || "")) && <ResolveSubject
-            key={`${detail.review_id}-${detail.subject_version}-${detail.generation_epoch}-${revision}`}
-            jobId={jobId} detail={detail} inspected={detail.kind === "title" ? !!detail.subject_title : detail.kind === "character_pencil_text" || detail.kind === "page_pencil_text" ? !!detail.pencil_text : detail.kind === "story_text" || detail.kind === "optional_themes" ? !!detail.story_text : inspected}
-            busy={pending} onPending={setPending} />}
           </>}
-          {!loading && !error && detail.kind !== "character_pencil_text" && !pagePencilKinds.includes(detail.kind || "") && <StopStory jobId={jobId} reviewId={detail.review_id}
-            epoch={detail.generation_epoch!} ready={!!detail.ready && !pending}
-            teacher={{ subjectVersion: detail.subject_version!, policyVersion: detail.current_policy_version || "" }}
-            onStopped={() => setStopped(true)} onRefresh={load} onPending={setPending} />}
         </>}
       </>}
+    </div>
+    {detail && (resolving || stoppable) && <section aria-label="Decision"
+      className="sticky bottom-0 z-[var(--z-raised)] -mx-5 sm:-mx-8 max-h-[45dvh] overflow-y-auto border-t border-primary/15 bg-surface px-5 sm:px-8 py-4 space-y-4 lg:top-24 lg:bottom-auto lg:mx-0 lg:max-h-[calc(100dvh-7rem)] lg:rounded-2xl lg:border lg:px-5">
+      {resolving && <ResolveSubject
+        key={`${detail.review_id}-${detail.subject_version}-${detail.generation_epoch}-${revision}`}
+        jobId={jobId} detail={detail} inspected={detail.kind === "title" ? !!detail.subject_title : detail.kind === "character_pencil_text" || detail.kind === "page_pencil_text" ? !!detail.pencil_text : detail.kind === "story_text" || detail.kind === "optional_themes" ? !!detail.story_text : inspected}
+        busy={pending} onPending={setPending} />}
+      {stoppable && <StopStory jobId={jobId} reviewId={detail.review_id!}
+        epoch={detail.generation_epoch!} ready={!!detail.ready && !pending}
+        teacher={{ subjectVersion: detail.subject_version!, policyVersion: detail.current_policy_version || "" }}
+        onStopped={() => setStopped(true)} onRefresh={load} onPending={setPending} />}
+    </section>}
     </div>
   </dialog>;
 }
@@ -297,7 +338,7 @@ function ContinueSavedDecision({ jobId, command, onChanged }: {
     {success ? <h4 ref={summary} tabIndex={-1} className="font-bold focus-visible:outline-2 focus-visible:outline-primary">Story continuing</h4> : <>
       <p>Your decision is saved. Continue story retries its pending delivery.</p>
       {message && <h4 ref={summary} tabIndex={-1} role="alert">{message}</h4>}
-      <button className={control} disabled={pending} onClick={() => void retry()}>{pending ? "Continuing…" : "Continue story"}</button>
+      <button className={primary} disabled={pending} onClick={() => void retry()}>{pending ? "Continuing…" : "Continue story"}</button>
     </>}
   </section>;
 }
@@ -357,7 +398,7 @@ function ResolveSubject({ jobId, detail, inspected, busy, onPending }: {
     }
   }
 
-  return <section aria-label={`Resolve the inspected ${subject}`} className="space-y-4 border-t border-primary/15 pt-5">
+  return <section aria-label={`Resolve the inspected ${subject}`} className="space-y-4">
     {success ? <h4 ref={summary} tabIndex={-1} className="font-bold text-lg focus-visible:outline-2 focus-visible:outline-primary">{outcome}</h4> : <>
       <h4 className="font-bold text-lg">{themes ? "Accept these themes together" : `Allow this exact ${subject}`}</h4>
       <p>If you are uncertain, leave this story waiting and return later. {themes ? "Accepting themes" : "Allowing safety clearance"} does not approve classroom sharing.</p>
@@ -378,13 +419,13 @@ function ResolveSubject({ jobId, detail, inspected, busy, onPending }: {
       </fieldset>
       {message && <h4 ref={summary} tabIndex={-1} role="alert" className="font-bold focus-visible:outline-2 focus-visible:outline-primary">{message}</h4>}
       {pending && <p role="status">Saving your decision…</p>}
-      <button className={control} disabled={busy || pending || !detail.ready || (!submitted &&
+      <button className={primary} disabled={busy || pending || !detail.ready || (!submitted &&
         (!inspected || !detail.current_policy_version || !detail.criteria?.length || confirmed.length !== detail.criteria.length))}
         onClick={() => void decide(submitted || "allow")}>{pending ? "Saving…" : submitted ? "Continue story" : themes ? "Accept these themes" : `Allow this ${subject}`}</button>
       {!submitted && pencil && <>
         <p>{page ? "Stopping ends only this change. The book keeps its current picture."
           : "Stopping ends only this change. The story continues with the old picture."}</p>
-        <button className={control} disabled={busy || pending || !detail.ready || !inspected}
+        <button className={destructive} disabled={busy || pending || !detail.ready || !inspected}
           onClick={() => void decide("stop")}>Stop this change</button>
       </>}
       {!submitted && !themes && (!pencil || detail.kind === "page_pencil_result") && detail.kind !== "story_text" && detail.kind !== "title" && <>
@@ -635,13 +676,15 @@ function ReviewPicture({ jobId, reviewId, version, picture, onChanged, onInspect
       </div> : failed ? <div role="alert">
         <p>Picture unavailable. Your story context is still here.</p>
         <button className={control} onClick={() => { setUrl(null); setFailed(false); setLoaded(false); setAttempt(value => value + 1); }}>Try loading again</button>
-      </div> : <>
-        {!loaded && <p role="status">Loading picture…</p>}
+      </div> : <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-muted">
+        {/* A reserved 4:3 box, so the decision controls below do not jump when the picture arrives. */}
+        {!loaded && <div role="status" className="absolute inset-0 animate-pulse bg-muted/50"><span className="sr-only">Loading picture…</span></div>}
         {/* Guarded bytes only. No Storage URL is exposed to the browser. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        {url && <img src={url} alt={picture.label || "Story picture"} className="w-full h-auto rounded-2xl"
+        {url && <img src={url} alt={picture.label || "Story picture"}
+          className={`relative h-full w-full object-contain transition-opacity duration-[var(--duration-slow)] ${loaded ? "opacity-100" : "opacity-0"}`}
           onLoad={() => { setLoaded(true); onInspected?.(true); }}
           onError={() => { setFailed(true); onInspected?.(false); }} />}
-      </>}
+      </div>}
   </figure>;
 }

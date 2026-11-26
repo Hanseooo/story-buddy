@@ -183,7 +183,7 @@ describe("Bookshelf — §9.11–12", () => {
         (el) => el.getAttribute("href") === `/s/${PROFILE_ID}/process/j2`
       );
       expect(cardLink).toBeDefined();
-      expect(screen.getByText("Writing...")).toBeDefined();
+      expect(screen.getByText("Making...")).toBeDefined();
     });
   });
 
@@ -369,7 +369,7 @@ describe("Bookshelf — §9.11–12", () => {
         id: "tr1", title: "Held Book", status: "running", moderation_mode: "teacher_review_v1", pages: [],
       })] });
       const view = render(<BookshelfPage params={Promise.resolve({ profileId: PROFILE_ID })} />);
-      await screen.findByText("Writing...");
+      await screen.findByText("Making...");
       return view;
     }
 

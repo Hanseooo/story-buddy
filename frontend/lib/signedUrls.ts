@@ -68,6 +68,13 @@ async function fetchLinks(byJob: Map<string, Map<string, Set<string>>>, out: Rec
   }));
 }
 
+/** Drops the cached links for `paths`, so the next signPaths call signs them again (a link that failed to load). */
+export function forgetSignedUrls(paths: string[]) {
+  const cache = load();
+  for (const p of paths) delete cache[p];
+  save(cache);
+}
+
 /**
  * Sign `paths`, reusing any still-fresh URL from sessionStorage.
  *

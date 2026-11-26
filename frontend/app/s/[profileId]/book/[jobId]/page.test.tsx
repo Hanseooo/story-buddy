@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, onTestFinished } from "vitest";
 import { imageLinksResponse } from "@/lib/imageLinksFake";
-import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent, within } from "@testing-library/react";
 import BookPage from "./page";
 
 const pushMock = vi.fn();
@@ -59,6 +59,15 @@ async function renderAndSwitchToPages(paramsPromise: Promise<{ jobId: string }>)
   await waitFor(() => expect(screen.getByLabelText("Pages View")).toBeDefined());
   fireEvent.click(screen.getByLabelText("Pages View"));
   return res;
+}
+
+// The Pages view picture sits in its "bigger" button, which names it, so its own alt is empty (spec §4.3).
+const BIGGER = /^Show the picture for page \d+ bigger$/;
+const queryPicture = () => screen.queryByRole("button", { name: BIGGER })?.querySelector("img") ?? null;
+function picture() {
+  const img = queryPicture();
+  if (!img) throw new Error("no page picture");
+  return img;
 }
 
 const REFETCH = vi.fn();
@@ -153,7 +162,7 @@ describe("BookPage — teacher note", () => {
       .mockRejectedValue(new Error("offline"));
     vi.stubGlobal("fetch", network);
     await renderPage(makeParams());
-    await waitFor(() => expect(screen.getByRole("img")).toBeVisible());
+    await waitFor(() => expect(picture()).toBeVisible());
     await waitFor(() => expect(network).toHaveBeenCalledTimes(1));
     fireEvent.focus(window);
     await waitFor(() => expect(network).toHaveBeenCalledTimes(2));
@@ -183,7 +192,7 @@ describe("BookPage — PDF download", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /download pdf/i })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
     if (kind === "peer") {
-      await waitFor(() => expect(screen.queryByRole("img")).toBeNull());
+      await waitFor(() => expect(queryPicture()).toBeNull());
       expect(screen.queryByRole("button", { name: /download pdf/i })).toBeNull();
     } else if (kind === "owner") {
       await waitFor(() => expect(screen.getByRole("button", { name: /download pdf/i })).toBeDisabled());
@@ -192,7 +201,7 @@ describe("BookPage — PDF download", () => {
     } else {
       await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("We couldn't download your book. Try again."));
       expect(screen.getByRole("button", { name: /download pdf/i })).toBeEnabled();
-      expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
+      expect(picture()).toHaveAttribute("src", "https://cdn/0.png");
     }
   });
 
@@ -242,7 +251,7 @@ describe("BookPage — PDF download", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /download pdf/i })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("We couldn't download your book. Try again."));
-    expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
+    expect(picture()).toHaveAttribute("src", "https://cdn/0.png");
     fireEvent.click(screen.getByRole("button", { name: /download pdf/i }));
     await waitFor(() => expect(fetchPdf).toHaveBeenCalledTimes(2));
     const signal = fetchPdf.mock.calls[1][1].signal as AbortSignal;
@@ -259,7 +268,7 @@ describe("BookPage — PDF download", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row }));
     mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
     await renderPage(makeParams("j1"));
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    await waitFor(() => expect(picture()).toBeDefined());
     if (kind.startsWith("peer")) expect(screen.queryByRole("button", { name: /download pdf/i })).toBeNull();
     else {
       expect(screen.getByRole("button", { name: /download pdf/i })).toBeDisabled();
@@ -291,7 +300,27 @@ describe("BookPage — bucket routing (spec invariant 1)", () => {
     }));
     await renderPage(makeParams("j1"));
     // Should NOT show the reader — shows a loading/wait state
-    expect(screen.queryByRole("img")).toBeNull();
+    expect(queryPicture()).toBeNull();
+  });
+
+  it.each([
+    ["in-flight", "running"],
+    ["paused", "awaiting_confirm"],
+  ] as const)("%s wait state has a way back to the bookshelf (ui-audit D4)", async (bucket, status) => {
+    mockUseJob.mockReturnValue(jobState({
+      bucket,
+      row: { id: "j1", status, current_stage: null, failure_reason: null, input_text: "x", style_preset_id: null, pages: [], reveal: null },
+    }));
+    await renderPage(makeParams("j1"));
+    expect(screen.getByRole("link", { name: "Back to bookshelf" })).toHaveAttribute("href", "/s/p1");
+  });
+
+  it("signing wait has a way back to the bookshelf (ui-audit D4)", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
+    mockCreateSignedUrls.mockReturnValue(new Promise(() => {}));
+    await renderPage(makeParams("j1"));
+    expect(queryPicture()).toBeNull();
+    expect(screen.getByRole("link", { name: "Back to bookshelf" })).toHaveAttribute("href", "/s/p1");
   });
 
   it("not-found renders not-found FailureScreen", async () => {
@@ -308,8 +337,8 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await renderAndSwitchToPages(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
-    expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
+    await waitFor(() => expect(picture()).toBeDefined());
+    expect(picture()).toHaveAttribute("src", "https://cdn/0.png");
     expect(mockCreateSignedUrls).toHaveBeenCalledTimes(1);
     expect(mockCreateSignedUrls).toHaveBeenCalledWith(["j1/s0-1.png", "j1/s1-1.png"], 3600);
   });
@@ -320,8 +349,8 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await renderPage(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
-    expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
+    await waitFor(() => expect(picture()).toBeDefined());
+    expect(picture()).toHaveAttribute("src", "https://cdn/0.png");
   });
 
   it("renders back button linking to student bookshelf", async () => {
@@ -395,16 +424,16 @@ describe("BookPage — reader (terminal-success)", () => {
     expect(buttons[1].getAttribute("aria-label")).toBe("Scroll View");
   });
 
-  it("image alt = caption; visible caption is aria-hidden (spec §4.3 double-read fix)", async () => {
+  it("reads the story text once from the caption; the picture button names the picture (spec §4.3)", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
     mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
 
     await renderAndSwitchToPages(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
-    expect(screen.getByRole("img")).toHaveAttribute("alt", "The dog ran.");
-    const caption = screen.getByText("The dog ran.");
-    expect(caption).toHaveAttribute("aria-hidden", "true");
+    const bigger = await screen.findByRole("button", { name: "Show the picture for page 1 bigger" });
+    expect(bigger.querySelector("img")).toHaveAttribute("alt", "");
+    expect(screen.getByText("The dog ran.").closest('[aria-hidden="true"]')).toBeNull();
+    expect(screen.queryByAltText("The dog ran.")).toBeNull();
   });
 
   it("identifies the current page when jumping with the page controls", async () => {
@@ -427,10 +456,10 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await renderAndSwitchToPages(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    await waitFor(() => expect(picture()).toBeDefined());
     fireEvent.click(screen.getByTestId("nav-next"));
     await waitFor(() => {
-      expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/1.png");
+      expect(picture()).toHaveAttribute("src", "https://cdn/1.png");
     });
   });
 
@@ -440,14 +469,14 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await renderAndSwitchToPages(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    await waitFor(() => expect(picture()).toBeDefined());
     fireEvent.click(screen.getByTestId("nav-next"));
     await waitFor(() => {
-      expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/1.png");
+      expect(picture()).toHaveAttribute("src", "https://cdn/1.png");
     });
     fireEvent.click(screen.getByTestId("nav-prev"));
     await waitFor(() => {
-      expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
+      expect(picture()).toHaveAttribute("src", "https://cdn/0.png");
     });
   });
 
@@ -455,7 +484,7 @@ describe("BookPage — reader (terminal-success)", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
     mockCreateSignedUrls.mockResolvedValue({ data: SIGNED, error: null });
     await renderAndSwitchToPages(makeParams("j1"));
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    await waitFor(() => expect(picture()).toBeDefined());
     expect(screen.getByRole("button", { name: "Previous page" })).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByText("Page 1 of 2")).toHaveAttribute("aria-live", "polite");
     const next = screen.getByRole("button", { name: "Next page" });
@@ -473,9 +502,9 @@ describe("BookPage — reader (terminal-success)", () => {
     mockCreateSignedUrls.mockResolvedValueOnce({ data: SIGNED, error: null })
       .mockResolvedValueOnce({ data: [{ signedUrl: "https://cdn/0-again.png", error: null }], error: null });
     await renderAndSwitchToPages(makeParams("j1"));
-    fireEvent.error(await screen.findByAltText("The dog ran."));
+    fireEvent.error(await waitFor(picture));
     fireEvent.click(await screen.findByRole("button", { name: "Try loading this picture again" }));
-    await waitFor(() => expect(screen.getByAltText("The dog ran.")).toHaveAttribute("src", "https://cdn/0-again.png"));
+    await waitFor(() => expect(picture()).toHaveAttribute("src", "https://cdn/0-again.png"));
     expect(mockCreateSignedUrls).toHaveBeenLastCalledWith(["j1/s0-1.png"], 3600);
   });
 
@@ -506,7 +535,7 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await renderAndSwitchToPages(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    await waitFor(() => expect(picture()).toBeDefined());
     expect(screen.queryByTestId("nav-next")).toBeNull();
     expect(screen.queryByTestId("nav-prev")).toBeNull();
   });
@@ -517,7 +546,7 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await renderAndSwitchToPages(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    await waitFor(() => expect(picture()).toBeDefined());
     expect(resetFailChain).toHaveBeenCalledTimes(1);
   });
 
@@ -529,7 +558,7 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await renderAndSwitchToPages(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    await waitFor(() => expect(picture()).toBeDefined());
     expect(mockCreateSignedUrls).toHaveBeenCalledTimes(2);
   });
 
@@ -558,7 +587,7 @@ describe("BookPage — reader (terminal-success)", () => {
 
     await renderAndSwitchToPages(makeParams("j1"));
 
-    await waitFor(() => expect(screen.getByRole("img")).toBeDefined());
+    await waitFor(() => expect(picture()).toBeDefined());
     expect(network.mock.calls.map(([url]) => url).filter((url) => url.includes("/image-links"))
       .map((url) => url.slice(url.indexOf("/jobs/")))).toEqual([
       "/jobs/j1/image-links?asset=scene-s0&asset=scene-s1", "/jobs/j1/image-links?asset=scene-s1",
@@ -634,7 +663,7 @@ describe("BookPage — reader fetches only missing pages (image-loading AC-13, A
     });
 
     await waitFor(() => expect(screen.queryByTestId("failure-screen")).toBeNull());
-    await waitFor(() => expect(screen.getAllByRole("img").length).toBeGreaterThan(0));
+    await waitFor(() => expect(picture()).toBeDefined());
     expect(network.mock.calls.map(([url]) => url).filter((url) => url.includes("/image-links"))
       .map((url) => url.slice(url.indexOf("/jobs/")))).toEqual([
       "/jobs/j1/image-links?asset=scene-s0&asset=scene-s1", "/jobs/j1/image-links?asset=scene-s1", "/jobs/j1/image-links?asset=scene-s1",
@@ -659,7 +688,7 @@ describe("BookPage — reader fetches only missing pages (image-loading AC-13, A
       [["j1/s1-1.png"], 3600],
     ]);
     fireEvent.click(await screen.findByLabelText("Pages View"));
-    expect(screen.getByRole("img")).toHaveAttribute("src", "https://cdn/0.png");
+    expect(picture()).toHaveAttribute("src", "https://cdn/0.png");
   });
 });
 
@@ -708,14 +737,14 @@ describe("BookPage — other versions of a page (magic pencil 09)", () => {
 
     fireEvent.click(choice);
     expect(screen.getByText("Your teacher will look at your book again before classmates can see it.")).toBeVisible();
-    const confirm = screen.getByRole("button", { name: "Change page 1" });
+    const confirm = screen.getByRole("button", { name: "Use this picture" });
     expect(confirm).toHaveFocus();
-    fireEvent.click(screen.getByRole("button", { name: "Keep page 1 as it is" }));
+    fireEvent.click(screen.getByRole("button", { name: "Go back" }));
     expect(choice).toHaveFocus();
     expect(network.mock.calls.some(([url]) => String(url).endsWith("/pages/s0/version"))).toBe(false);
 
     fireEvent.click(choice);
-    fireEvent.click(screen.getByRole("button", { name: "Change page 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use this picture" }));
     await waitFor(() => expect(REFETCH).toHaveBeenCalled());
     const sent = network.mock.calls.find(([url]) => String(url).endsWith("/pages/s0/version"))!;
     expect(JSON.parse(String(sent[1]!.body))).toEqual({ version_id: "s0-attempt-0", source: "j1/s0-1.png" });
@@ -750,7 +779,7 @@ describe("BookPage — other versions of a page (magic pencil 09)", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: { ...FEATURE_ROW, profile_id: "someone-else" } }));
     featureNetwork();
     await renderAndSwitchToPages(makeParams());
-    await screen.findByAltText("The dog ran.");
+    await waitFor(picture);
     expect(screen.queryByRole("button", { name: /Other versions/ })).toBeNull();
   });
 });
@@ -811,12 +840,100 @@ describe("BookPage — magic pencil on a finished page (magic pencil 10)", () =>
     fireEvent.load(await screen.findByAltText("Your changed picture for page 1"));
     await waitFor(() => expect(keep).toBeEnabled());
     fireEvent.click(keep);
-    const confirm = screen.getByRole("button", { name: "Change page 1" });
+    // "Keep this" opened the dialog, so no button in it says "Keep" for the old picture.
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(/keep/i);
+    expect(screen.getByRole("button", { name: "Go back" })).toBeDefined();
+    const confirm = screen.getByRole("button", { name: "Use the new picture" });
     expect(confirm).toHaveFocus();
     fireEvent.click(confirm);
     await waitFor(() => expect(REFETCH).toHaveBeenCalled());
     const chosen = network.mock.calls.find(([url]) => String(url).endsWith("/pages/s0/pencil/choice"))!;
     expect(JSON.parse(String(chosen[1]!.body))).toEqual({ use_id: "u1", choice: "kept", source: AFTER });
+  });
+
+  it("labels the old and new pictures under the page text, and Use the old one still sends old (ticket 05)", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
+    const network = pencilNetwork([{ pencils_left: 4, disabled_reason: null, uses: [use("choice", AFTER)] }],
+      (url) => url.endsWith("/pages/s0/pencil/choice") ? Response.json({ choice: "old" }) : undefined);
+    await renderAndSwitchToPages(makeParams());
+    const old = await screen.findByRole("figure", { name: "Old" });
+    // A full-width row of the card, not the narrow text column beside the picture.
+    expect(screen.getByText("The dog ran.").parentElement).not.toContainElement(old);
+    expect(within(old).getByRole("img", { name: "Old picture for page 1" })).toHaveAttribute("src", "https://cdn.test/j1/s0-1.png");
+    const fresh = screen.getByRole("figure", { name: "New" });
+    expect(await within(fresh).findByRole("img", { name: "Your changed picture for page 1" })).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Use the old picture for page 1" }));
+    await waitFor(() => expect(REFETCH).toHaveBeenCalled());
+    const chosen = network.mock.calls.find(([url]) => String(url).endsWith("/pages/s0/pencil/choice"))!;
+    expect(JSON.parse(String(chosen[1]!.body))).toEqual({ use_id: "u1", choice: "old", source: "j1/s0-pencil-u1.png" });
+  });
+
+  it("a broken old picture in the choice offers Try again, which signs a fresh link", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
+    let round = 0;
+    pencilNetwork([{ pencils_left: 4, disabled_reason: null, uses: [use("choice", AFTER)] }], (url) => {
+      if (!url.includes("/image-links?")) return undefined;
+      round += 1;
+      return Response.json({ links: new URLSearchParams(url.split("?")[1]).getAll("asset")
+        .filter((a) => a === "scene-s0" || a === "scene-s1").map((a) => ({ asset_id: a, path: LINKED[a], url: `https://cdn.test/${LINKED[a]}?round=${round}` })) });
+    });
+    await renderAndSwitchToPages(makeParams());
+    const old = await screen.findByRole("figure", { name: "Old" });
+    fireEvent.error(within(old).getByRole("img", { name: "Old picture for page 1" }));
+    fireEvent.click(within(old).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(within(old).getByRole("img", { name: "Old picture for page 1" }))
+      .toHaveAttribute("src", "https://cdn.test/j1/s0-1.png?round=2"));
+  });
+
+  it("covers the page picture while the change is drawing (ticket 05)", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
+    pencilNetwork([{ pencils_left: 5, disabled_reason: null, uses: [use("drawing")] }]);
+    await renderAndSwitchToPages(makeParams());
+    await screen.findByText("Changing your picture…");
+    const button = screen.getByRole("button", { name: "Show the picture for page 1 bigger" });
+    expect(button).toHaveAttribute("aria-busy", "true");
+    // The page card fades in; on a slow runner the overlay is still under a transparent parent.
+    await waitFor(() => expect(within(button).getByText("Drawing your change…")).toBeVisible());
+  });
+
+  // A real framer-motion drag: press, move 200px left, release. jsdom runs it through to onDragEnd.
+  async function swipeLeft(target: Element) {
+    const at = (clientX: number) => ({ clientX, clientY: 10, pointerId: 1, button: 0, isPrimary: true, pointerType: "mouse" });
+    await act(async () => {
+      fireEvent.pointerDown(target, at(300));
+      for (const x of [290, 250, 200, 150, 100]) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        fireEvent.pointerMove(window, at(x));
+      }
+      fireEvent.pointerUp(window, at(100));
+      // onDragEnd runs on the next animation frame.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+  }
+
+  it("only the picture starts a swipe; the pencil box and other versions do not (ticket 05)", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success",
+      row: { ...FEATURE_ROW, pages: [{ ...PAGES[0], other_versions: true }, PAGES[1]] } }));
+    pencilNetwork([{ pencils_left: 5, disabled_reason: null, uses: [] }],
+      (url) => url.endsWith("/pages/s0/versions/open")
+        ? Response.json({ versions: [{ version_id: "s0-attempt-0", image_path: "j1/s0-0.png" }], unavailable: 0 }) : undefined);
+    await renderAndSwitchToPages(makeParams());
+    fireEvent.click(await screen.findByRole("button", { name: "Other versions of page 1" }));
+    const versions = await screen.findByRole("button", { name: "Use other picture 1 for page 1" });
+    fireEvent.click(screen.getByRole("button", { name: "Magic pencil for page 1" }));
+    const box = screen.getByLabelText("What should change on page 1?");
+    fireEvent.change(box, { target: { value: "a hat" } });
+    await swipeLeft(box);
+    await swipeLeft(versions);
+    // Outside the animated card, so it shows the page index the moment a swipe would turn it.
+    expect(screen.getByTestId("nav-prev")).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByLabelText("What should change on page 1?")).toHaveValue("a hat");
+    expect(box.closest('[style*="user-select: none"]')).toBeNull();
+    // A mouse press on the picture must start the swipe, not the browser's own image drag.
+    expect(picture()).toHaveAttribute("draggable", "false");
+    await swipeLeft(picture());
+    expect(screen.getByTestId("nav-prev")).toHaveAttribute("aria-disabled", "false");
+    expect(await screen.findByText("It found a stick.")).toBeDefined();
   });
 
   it("arrow keys stay in the pencil box and only a plain arrow on the page turns it", async () => {
@@ -855,7 +972,7 @@ describe("BookPage — magic pencil on a finished page (magic pencil 10)", () =>
     pencilNetwork([{ pencils_left: 5, disabled_reason: null, uses: [use(state)] }]);
     await renderAndSwitchToPages(makeParams());
     expect(await screen.findByText(copy)).toBeDefined();
-    expect(screen.getByAltText("The dog ran.")).toBeDefined();
+    expect(picture()).toBeDefined();
     const opener = screen.getByRole("button", { name: "Magic pencil for page 1" });
     if (state === "held") expect(opener).toBeDisabled();   // one request per book (SH-07)
     else expect(opener).toBeEnabled();
@@ -894,7 +1011,7 @@ describe("BookPage — magic pencil on a finished page (magic pencil 10)", () =>
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: { ...FEATURE_ROW, profile_id: "someone-else" } }));
     pencilNetwork([{ pencils_left: 5, disabled_reason: null, uses: [] }]);
     await renderAndSwitchToPages(makeParams());
-    await screen.findByAltText("The dog ran.");
+    await waitFor(picture);
     expect(screen.queryByRole("button", { name: /Magic pencil/ })).toBeNull();
   });
 });

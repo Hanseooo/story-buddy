@@ -3,15 +3,18 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { use, useEffect, useState, useCallback, useRef } from "react";
-import { motion, AnimatePresence, useScroll, useReducedMotion } from "framer-motion";
+import { motion, AnimatePresence, useScroll, useReducedMotion, useDragControls } from "framer-motion";
 import { useJob } from "@/lib/useJob";
 import { displayTitle } from "@/lib/displayTitle";
 import FailureScreen, { resetFailChain } from "@/components/FailureScreen";
 import StoppedStory from "@/components/StoppedStory";
-import { signPaths } from "@/lib/signedUrls";
+import { forgetSignedUrls, signPaths } from "@/lib/signedUrls";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import PictureBox from "@/components/PictureBox";
+import OldNewPictures from "@/components/OldNewPictures";
+import { createPortal } from "react-dom";
 import { CaretLeft, CaretRight, BookOpen, Rows, ArrowLeft, DownloadSimple } from "@phosphor-icons/react";
 
 // Generated pictures are 1024x768 (backend `providers.GENERATED_IMAGE_SIZE`), so a 4:3 box holds
@@ -55,10 +58,22 @@ function ScrollImage({ src, alt, label, broken, onClick, onError, onRetry }: {
   );
 }
 
-function LoadingSkeleton() {
+function LoadingSkeleton({ backHref }: { backHref?: string }) {
   return (
-    <div className="relative flex min-h-[calc(100dvh-5rem)] flex-1 w-full overflow-hidden bg-background text-foreground">
-      <div className="flex flex-col md:flex-row w-full h-full items-center justify-center gap-8 md:gap-16 p-6 md:p-12">
+    <div className="relative flex min-h-[calc(100dvh-5rem)] flex-1 w-full flex-col overflow-hidden bg-background text-foreground">
+      {backHref && (
+        <div className="px-5 pt-5 sm:px-8 lg:px-12">
+          <Link
+            href={backHref}
+            aria-label="Back to bookshelf"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-2 font-kid text-sm font-bold text-foreground/75 transition-colors hover:bg-muted/30 hover:text-primary focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 active:scale-[0.98] sm:px-3"
+          >
+            <ArrowLeft size={20} weight="bold" aria-hidden="true" />
+            <span>Bookshelf</span>
+          </Link>
+        </div>
+      )}
+      <div className="flex flex-1 flex-col md:flex-row w-full h-full items-center justify-center gap-8 md:gap-16 p-6 md:p-12">
         <div className="relative flex items-center justify-center w-full md:w-1/2">
           <div className="w-full max-w-md aspect-[4/3] rounded-2xl animate-shimmer neo-border" />
         </div>
@@ -235,7 +250,7 @@ function PageVersions({ jobId, pageNumber, page, reviewed, busy, onBusy, onChang
           setChangeError("");
           setOpen((value) => !value);
         }}
-        className="min-h-11 rounded-xl border border-primary/20 bg-background px-4 py-2 font-kid text-sm font-bold text-foreground hover:bg-primary/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50"
+        className="min-h-11 rounded-xl border border-primary/20 bg-background px-4 py-2 font-kid text-sm font-bold text-foreground hover:bg-primary/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.98]"
       >
         Other versions
       </button>
@@ -263,7 +278,7 @@ function PageVersions({ jobId, pageNumber, page, reviewed, busy, onBusy, onChang
               <button
                 type="button"
                 onClick={() => { setState("loading"); setAttempt((value) => value + 1); }}
-                className="min-h-11 rounded-xl bg-surface px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+                className="min-h-11 rounded-xl bg-surface px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 active:scale-[0.98]"
               >
                 Try loading the pictures for page {pageNumber} again
               </button>
@@ -281,7 +296,7 @@ function PageVersions({ jobId, pageNumber, page, reviewed, busy, onBusy, onChang
                     aria-label={`Use other picture ${index + 1} for page ${pageNumber}`}
                     disabled={busy || !loaded[version.version_id]}
                     onClick={(event) => choose(version, event.currentTarget)}
-                    className="w-full rounded-xl border border-primary/20 bg-background p-1 hover:bg-primary/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="w-full rounded-xl border border-primary/20 bg-background p-1 hover:bg-primary/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.98]"
                   >
                     <img
                       src={urls[version.image_path]}
@@ -300,7 +315,7 @@ function PageVersions({ jobId, pageNumber, page, reviewed, busy, onBusy, onChang
             aria-label={`Close other versions of page ${pageNumber}`}
             disabled={busy}
             onClick={close}
-            className="mt-3 min-h-11 rounded-xl px-4 py-2 font-kid font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-3 min-h-11 rounded-xl px-4 py-2 font-kid font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.98]"
           >
             Cancel
           </button>
@@ -311,12 +326,12 @@ function PageVersions({ jobId, pageNumber, page, reviewed, busy, onBusy, onChang
         <h2 id={`${listId}-confirm`} className="text-xl font-bold">Your teacher will look at your book again before classmates can see it.</h2>
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" ref={confirmButtonRef} onClick={() => pending && void change(pending.version)}
-            className="min-h-11 rounded-xl bg-primary px-4 font-bold text-on-primary focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3">
-            Change page {pageNumber}
+            className="min-h-11 rounded-xl bg-primary px-4 font-bold text-on-primary focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 active:scale-[0.98]">
+            Use this picture
           </button>
           <button type="button" onClick={cancelConfirm}
-            className="min-h-11 rounded-xl px-4 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3">
-            Keep page {pageNumber} as it is
+            className="min-h-11 rounded-xl px-4 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 active:scale-[0.98]">
+            Go back
           </button>
         </div>
       </dialog>
@@ -332,7 +347,7 @@ const PENCIL_DISABLED: Record<string, string> = {
   no_pencils: "No pencils left for this book",
   image_budget: "This book can't have any more new pictures",
 };
-const kidControl = "min-h-11 rounded-xl px-4 py-2 font-kid text-sm font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50";
+const kidControl = "min-h-11 rounded-xl px-4 py-2 font-kid text-sm font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50";
 
 async function pencilPost(path: string, body: object) {
   const { data: { session } } = await supabase.auth.getSession();
@@ -345,9 +360,11 @@ async function pencilPost(path: string, body: object) {
 // ADR-082 / magic-pencil 10 (US-04): the child's words change this page's current picture once. The
 // edit runs server-side, so a closed tab still completes, and the result waits for "Keep this" or
 // "Use the old one". A request carries its id and source picture, so a retry spends once (SH-08).
-function PagePencil({ jobId, pageNumber, page, status, reviewed, busy, onBusy, onChanged }: {
+function PagePencil({ jobId, pageNumber, page, status, reviewed, busy, onBusy, onChanged, onRetryOld, choiceSlot }: {
   jobId: string; pageNumber: number; page: SignedPage; status: PencilStatus; reviewed: boolean; busy: boolean;
-  onBusy: (busy: boolean) => void; onChanged: () => Promise<unknown>;
+  onBusy: (busy: boolean) => void; onChanged: () => Promise<unknown>; onRetryOld: () => void;
+  /** Where the Old/New choice renders: a full-width row of the card, not this narrow text column. */
+  choiceSlot: HTMLElement | null;
 }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
@@ -368,6 +385,7 @@ function PagePencil({ jobId, pageNumber, page, status, reviewed, busy, onBusy, o
     : !active && latest?.scene_id === page.scene_id && ["refused", "stopped", "stale"].includes(latest.state) ? latest : undefined;
   const reason = status.disabled_reason ? PENCIL_DISABLED[status.disabled_reason] ?? PENCIL_DISABLED.no_pencils : null;
   const choiceUse = mine?.state === "choice" ? mine.use_id : null;
+  const portal = (node: React.ReactNode) => (choiceSlot ? createPortal(node, choiceSlot) : node);
 
   useEffect(() => { if (open) boxRef.current?.focus(); }, [open]);
 
@@ -543,25 +561,25 @@ function PagePencil({ jobId, pageNumber, page, status, reviewed, busy, onBusy, o
           </button>
         </div>
       )}
-      {mine?.state === "choice" && (
+      {mine?.state === "choice" && portal(
         <div role="group" aria-label={`Your changed picture for page ${pageNumber}`} className="mt-3 w-full rounded-2xl bg-primary/5 p-4 text-left">
-          {afterState === "error" ? (
-            <div role="alert" className="flex flex-col items-start gap-2 font-kid text-sm">
-              <p>We couldn&apos;t load this picture right now.</p>
-              <button type="button" className={`${kidControl} bg-surface`}
-                onClick={() => { setAfterState("loading"); setAfterAttempt((value) => value + 1); }}>
-                Try loading the changed picture for page {pageNumber} again
-              </button>
-            </div>
-          ) : afterUrl && (
-            <img
-              src={afterUrl}
-              alt={`Your changed picture for page ${pageNumber}`}
-              className="aspect-square w-full max-w-xs rounded-lg bg-muted object-contain"
-              onLoad={() => setAfterState("loaded")}
-              onError={() => setAfterState("error")}
-            />
-          )}
+          {/* Old and New side by side when there is room for both, stacked on a phone (audit B3). */}
+          <OldNewPictures
+            old={<PictureBox src={page.signedUrl} alt={`Old picture for page ${pageNumber}`} className="aspect-[4/3] w-full rounded-lg" onRetry={onRetryOld} />}
+            fresh={afterState === "error" ? (
+              <div role="alert" className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-lg bg-muted p-3 text-center font-kid text-sm">
+                <p>We couldn&apos;t load this picture right now.</p>
+                <button type="button" className={`${kidControl} bg-surface`}
+                  onClick={() => { setAfterUrl(null); setAfterState("loading"); setAfterAttempt((value) => value + 1); }}>
+                  Try loading the changed picture for page {pageNumber} again
+                </button>
+              </div>
+            ) : (
+              <PictureBox src={afterUrl ?? undefined} alt={`Your changed picture for page ${pageNumber}`}
+                className="aspect-[4/3] w-full rounded-lg"
+                onLoad={() => setAfterState("loaded")} onError={() => setAfterState("error")} />
+            )}
+          />
           {afterState === "loading" && <p role="status" className="font-kid text-sm">Loading your changed picture…</p>}
           <div className="mt-2 flex flex-wrap gap-2">
             <button type="button" disabled={busy || afterState !== "loaded"} onClick={keep}
@@ -580,10 +598,10 @@ function PagePencil({ jobId, pageNumber, page, status, reviewed, busy, onBusy, o
         <h2 id={`${formId}-confirm`} className="text-xl font-bold">Your teacher will look at your book again before classmates can see it.</h2>
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" ref={confirmButtonRef} onClick={() => void decide("kept")} className={`${kidControl} bg-primary text-on-primary`}>
-            Change page {pageNumber}
+            Use the new picture
           </button>
           <button type="button" onClick={() => confirmRef.current?.close()} className={`${kidControl} text-foreground`}>
-            Keep page {pageNumber} as it is
+            Go back
           </button>
         </div>
       </dialog>
@@ -679,10 +697,10 @@ function TeacherNote({ jobId }: { jobId: string }) {
       <div className="pb-4">
         <p className="max-w-prose whitespace-pre-wrap break-words text-lg leading-relaxed">{note.body}</p>
         <div aria-live="polite">
-          {saveError && <p className="mt-3 text-sm">We couldn&apos;t save your place. <button type="button" onClick={() => setRetry(value => value + 1)} className="min-h-11 underline focus-visible:outline-secondary">Try again</button></p>}
+          {saveError && <p className="mt-3 text-sm">We couldn&apos;t save your place. <button type="button" onClick={() => setRetry(value => value + 1)} className="min-h-11 underline focus-visible:outline-secondary active:scale-[0.98]">Try again</button></p>}
         </div>
         <button type="button" onClick={() => { setOpen(false); summary.current?.focus(); }}
-          className="mt-3 min-h-11 rounded-xl px-4 font-bold text-primary hover:bg-muted/30 focus-visible:outline-secondary focus-visible:outline-3">Close</button>
+          className="mt-3 min-h-11 rounded-xl px-4 font-bold text-primary hover:bg-muted/30 focus-visible:outline-secondary focus-visible:outline-3 active:scale-[0.98]">Close</button>
       </div>
     </details>
   );
@@ -692,6 +710,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   const { jobId } = use(params);
   const routeParams = useParams<{ profileId: string }>();
   const profileId = routeParams?.profileId;
+  const shelfHref = profileId ? `/s/${profileId}` : "/";
   const { bucket, row, refetch } = useJob(jobId);
   const [pageIndex, setPageIndex] = useState(0);
   const [signedPages, setSignedPages] = useState<SignedPage[] | null>(null);
@@ -705,9 +724,11 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   const fullscreenOpener = useRef<HTMLElement | null>(null);
   const [brokenPictures, setBrokenPictures] = useState<Record<string, boolean>>({});   // by image_path
   const reduceMotion = useReducedMotion();
+  const swipe = useDragControls();
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const [changingPage, setChangingPage] = useState(false); // SH-07: one page change per book at a time
+  const [choiceSlot, setChoiceSlot] = useState<HTMLDivElement | null>(null);
   const downloadRequest = useRef<AbortController | null>(null);
   const imageRequest = useRef<AbortController | null>(null);
   // Page URLs collected for the current imageRequest. Blobs here die with that controller, so a new
@@ -845,6 +866,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   }
 
   function retryPicture(path: string) {
+    forgetSignedUrls([path]);
     delete collectedUrls.current[path];
     setBrokenPictures(b => ({ ...b, [path]: false }));
     void signPages(1);
@@ -909,11 +931,11 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
     return <main className="flex flex-1 flex-col items-center justify-center gap-6 p-6 text-center">
       <h1 className="font-display text-3xl font-extrabold">Waiting for your teacher</h1>
       <p>Your story is saved. Your teacher will help it continue.</p>
-      <Link href={`/s/${profileId}`} className="min-h-11 rounded-2xl bg-primary px-6 py-3 font-bold text-on-primary">Back to my books</Link>
+      <Link href={`/s/${profileId}`} className="min-h-11 rounded-2xl bg-primary px-6 py-3 font-bold text-on-primary active:scale-[0.98]">Back to my books</Link>
     </main>;
   }
   if (bucket === "in-flight" || bucket === "paused") {
-    return <LoadingSkeleton />;
+    return <LoadingSkeleton backHref={shelfHref} />;
   }
 
   // terminal-success — wait for signing
@@ -938,22 +960,20 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   }
 
   if (!signedPages) {
-    return <LoadingSkeleton />;
+    return <LoadingSkeleton backHref={shelfHref} />;
   }
 
   const totalPages = signedPages.length;
   const current = signedPages[pageIndex];
+  const drawing = Boolean(pencil?.uses.some((u) => u.state === "drawing" && u.scene_id === current.scene_id));
+  // The pencil's Old/New choice for this page takes a full-width row under the picture and the text.
+  const choosing = Boolean(pencilBook && pencil?.uses.some((u) => u.state === "choice" && u.scene_id === current.scene_id));
 
   return (
     // Layout: Mobile-first stacking, desktop splits symmetrically
     <div className="relative flex min-h-[calc(100dvh-5rem)] flex-1 w-full flex-col justify-between overflow-hidden bg-background text-foreground">
       
       {row?.profile_id === profileId && <TeacherNote key={jobId} jobId={jobId} />}
-
-      {/* Ambient magical background blobs */}
-      <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-primary opacity-[0.03] md:opacity-[0.06] blur-[80px] md:blur-[140px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-5%] w-[60vw] h-[60vw] rounded-full bg-secondary opacity-[0.06] md:opacity-[0.08] blur-[80px] md:blur-[140px] pointer-events-none" />
-      <div className="absolute top-[40%] left-[60%] w-[40vw] h-[40vw] rounded-full bg-coral opacity-[0.04] blur-[80px] md:blur-[120px] pointer-events-none" />
 
       {/* Big picture: a native modal dialog brings Escape, the focus trap and an inert page. */}
       <dialog
@@ -988,9 +1008,9 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
       {/* Navigation and export share a row; the mobile title always has its own width. */}
       <div className="relative z-30 mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 px-5 pt-5 pb-2 sm:px-8 lg:max-w-7xl lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:px-12">
         <Link
-          href={profileId ? `/s/${profileId}` : "/"}
+          href={shelfHref}
           aria-label="Back to bookshelf"
-          className="order-1 inline-flex min-h-11 items-center justify-self-start gap-1.5 rounded-xl px-2 font-kid text-sm font-bold text-foreground/75 transition-colors hover:bg-muted/30 hover:text-primary focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 sm:px-3"
+          className="order-1 inline-flex min-h-11 items-center justify-self-start gap-1.5 rounded-xl px-2 font-kid text-sm font-bold text-foreground/75 transition-colors hover:bg-muted/30 hover:text-primary focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 sm:px-3 active:scale-[0.98]"
         >
           <ArrowLeft size={20} weight="bold" aria-hidden="true" />
           <span>Bookshelf</span>
@@ -1011,7 +1031,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
             disabled={!canDownload || exporting}
             aria-busy={exporting}
             aria-describedby={!canDownload ? "pdf-approval-hint" : undefined}
-            className="order-2 col-start-2 row-start-1 inline-flex min-h-11 items-center justify-center justify-self-end gap-1.5 rounded-xl border border-primary/20 bg-surface px-3 py-2 font-kid text-sm font-bold whitespace-nowrap text-primary transition-colors hover:bg-muted/30 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50 lg:order-3 lg:col-start-3"
+            className="order-2 col-start-2 row-start-1 inline-flex min-h-11 items-center justify-center justify-self-end gap-1.5 rounded-xl border border-primary/20 bg-surface px-3 py-2 font-kid text-sm font-bold whitespace-nowrap text-primary transition-colors hover:bg-muted/30 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50 lg:order-3 lg:col-start-3 active:scale-[0.98]"
           >
             <DownloadSimple size={18} weight="bold" aria-hidden="true" />
             {exporting ? "Preparing PDF…" : "Download PDF"}
@@ -1046,7 +1066,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
               viewMode === "pages"
                 ? "bg-primary text-on-primary"
                 : "text-foreground/75 hover:text-primary hover:bg-muted/30"
-            }`}
+            } active:scale-[0.98]`}
           >
             <BookOpen size={18} weight={viewMode === "pages" ? "bold" : "regular"} aria-hidden="true" />
             <span>Pages</span>
@@ -1060,7 +1080,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
               viewMode === "scroll"
                 ? "bg-primary text-on-primary"
                 : "text-foreground/75 hover:text-primary hover:bg-muted/30"
-            }`}
+            } active:scale-[0.98]`}
           >
             <Rows size={18} weight={viewMode === "scroll" ? "bold" : "regular"} aria-hidden="true" />
             <span>Scroll</span>
@@ -1070,13 +1090,14 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
 
       {viewMode === "pages" ? (
         <>
-          <div className="flex-1 flex w-full items-center justify-between relative px-2 sm:px-4 lg:px-8 py-4 sm:py-6">
-            {/* Left tap zone: absolute on mobile/tablet, relative column on desktop. Below lg only the
-                arrow takes taps, so the zone never covers the page's own controls; swipe covers the rest.
-                The arrow stays on the first page (aria-disabled keeps it focusable) so focus never drops. */}
+          <div className="flex-1 flex flex-wrap lg:flex-nowrap w-full items-center justify-between relative px-2 sm:px-4 lg:px-8 py-4 sm:py-6">
+            {/* Left tap zone: a row under the card on mobile/tablet, a column beside it on desktop. Below
+                lg the arrows sit under the card, so they never land on the pencil form however tall the
+                card grows (audit B6), and only the arrow takes taps. The arrow stays on the first page
+                (aria-disabled keeps it focusable) so focus never drops. */}
             {totalPages > 1 && (
               <div
-                className={`absolute inset-y-0 left-0 w-[15%] lg:w-24 xl:w-32 z-30 pointer-events-none lg:relative lg:shrink-0 flex items-center justify-start px-2 sm:px-4 lg:justify-center lg:px-0 group ${pageIndex > 0 ? "lg:pointer-events-auto lg:cursor-pointer" : ""}`}
+                className={`relative order-2 w-1/2 pt-3 lg:order-none lg:pt-0 lg:self-stretch lg:w-24 xl:w-32 z-30 pointer-events-none lg:shrink-0 flex items-center justify-start px-2 sm:px-4 lg:justify-center lg:px-0 group ${pageIndex > 0 ? "lg:pointer-events-auto lg:cursor-pointer" : ""}`}
                 onClick={() => {
                   setHasInteracted(true);
                   if (pageIndex > 0) {
@@ -1090,17 +1111,21 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                   data-testid="nav-prev"
                   aria-label="Previous page"
                   aria-disabled={pageIndex === 0}
-                  className="pointer-events-auto flex h-11 w-11 lg:h-16 lg:w-16 items-center justify-center rounded-full bg-surface neo-shadow text-primary font-bold hover:scale-105 transition-all cursor-pointer focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:scale-100"
+                  className="pointer-events-auto flex h-11 w-11 lg:h-16 lg:w-16 items-center justify-center rounded-full bg-surface neo-shadow text-primary font-bold hover:scale-105 transition-all cursor-pointer focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:scale-100 active:scale-[0.98] aria-disabled:active:scale-100"
                 >
                   <CaretLeft className="w-5 h-5 lg:w-8 lg:h-8" weight="bold" aria-hidden="true" />
                 </button>
               </div>
             )}
 
-            {/* Page content with swipe */}
+            {/* Page content with swipe. The card follows the finger, but only a press on the picture
+                starts a swipe, so selecting words in the pencil box or a near-miss on a version never
+                turns the page and loses what the child typed (audit B5). */}
             <motion.div 
-              className="flex-1 flex w-full h-full items-center justify-center z-20 mx-auto max-w-6xl"
+              className="order-1 basis-full lg:order-none lg:basis-0 flex-1 flex w-full h-full items-center justify-center z-20 mx-auto max-w-6xl"
               drag="x"
+              dragControls={swipe}
+              dragListener={false}
               dragConstraints={{ left: 0, right: 0 }}
               // Elastic 1 past zero-width constraints = the page follows the finger 1:1. The snap back
               // takes the release velocity into a critically damped spring (damping = 2·√stiffness).
@@ -1140,10 +1165,14 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                   animate="center"
                   exit="exit"
                   transition={reduceMotion ? { duration: 0.15 } : { type: "spring", bounce: 0, duration: 0.4 }}
-                  className="flex flex-col lg:flex-row w-full h-auto lg:max-h-[80vh] lg:min-h-[65vh] items-stretch justify-start lg:justify-center bg-surface neo-shadow rounded-3xl overflow-hidden mx-2 sm:mx-4 lg:mx-0 border border-muted"
+                  className={`flex flex-col lg:flex-row w-full h-auto ${choosing ? "lg:flex-wrap" : "lg:max-h-[80vh]"} lg:min-h-[65vh] items-stretch justify-start lg:justify-center bg-surface neo-shadow rounded-3xl overflow-hidden mx-2 sm:mx-4 lg:mx-0 border border-muted`}
                 >
                   {/* Left side: Illustration (Massive on Desktop, contained on mobile) */}
-                  <div className="relative flex items-center justify-center w-full lg:w-[60%] xl:w-[65%] bg-muted/20 p-4 lg:p-10 border-b lg:border-b-0 lg:border-r border-muted shrink-0 lg:shrink">
+                  <div
+                    onPointerDown={(event) => swipe.start(event)}
+                    style={{ touchAction: "pan-y", userSelect: "none" }}
+                    className="relative flex items-center justify-center w-full lg:w-[60%] xl:w-[65%] bg-muted/20 p-4 lg:p-10 border-b lg:border-b-0 lg:border-r border-muted shrink-0 lg:shrink"
+                  >
                     {/* A 4:3 box (generated pictures are 1024x768) holds the picture's place while it loads. */}
                     {brokenPictures[current.image_path] ? (
                       <div role="alert" className="flex w-full aspect-[4/3] max-h-[40vh] lg:max-h-[60vh] flex-col items-center justify-center gap-2 rounded-xl bg-muted/30 p-4 text-center font-kid">
@@ -1156,12 +1185,14 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                       <button
                         type="button"
                         aria-label={`Show the picture for page ${pageIndex + 1} bigger`}
+                        aria-busy={drawing}
                         onClick={(event) => openFullscreen(current.signedUrl, pageIndex + 1, event.currentTarget)}
                         className="relative block w-full aspect-[4/3] max-h-[40vh] lg:max-h-[60vh] rounded-xl cursor-zoom-in pointer-events-auto focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
                       >
                         <img
                           src={current.signedUrl}
-                          alt={current.caption}
+                          alt=""
+                          draggable={false}
                           fetchPriority="high"
                           onLoad={() => setLoaded(l => (l[pageIndex] ? l : { ...l, [pageIndex]: true }))}
                           onError={() => markBroken(current.image_path)}
@@ -1172,6 +1203,14 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                             aria-hidden="true"
                             className="absolute inset-0 rounded-xl bg-muted animate-pulse pointer-events-none"
                           />
+                        )}
+                        {/* The pencil's status line is below the fold on a phone, so the picture says it too (audit B4). */}
+                        {drawing && (
+                          <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-surface/70 pointer-events-none">
+                            <span className="animate-shimmer rounded-full px-4 py-2 font-kid text-sm font-bold text-primary neo-shadow">
+                              Drawing your change…
+                            </span>
+                          </span>
                         )}
                       </button>
                     )}
@@ -1193,7 +1232,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                   {/* Right side: Story Text */}
                   <div className="w-full flex-1 lg:w-[40%] xl:w-[35%] flex flex-col justify-between p-6 lg:p-12 bg-surface relative overflow-y-auto">
                     <div className="flex-1 flex flex-col justify-center pt-2 lg:pt-0">
-                      <p aria-hidden="true" className="font-kid text-lg md:text-2xl lg:text-3xl leading-relaxed text-foreground text-left max-w-[60ch]">
+                      <p className="font-kid text-lg md:text-2xl lg:text-3xl leading-relaxed text-foreground text-left max-w-[60ch]">
                         {current.caption}
                       </p>
                       {ownsBook && current.other_versions && (
@@ -1204,7 +1243,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                       {pencilBook && pencil && (
                         <PagePencil key={current.scene_id} jobId={jobId} pageNumber={pageIndex + 1} page={current} status={pencil}
                           reviewed={Boolean(row?.approved_at || row?.rejected_at)} busy={changingPage}
-                          onBusy={setChangingPage} onChanged={pencilChanged} />
+                          onBusy={setChangingPage} onChanged={pencilChanged} onRetryOld={() => retryPicture(current.image_path)} choiceSlot={choiceSlot} />
                       )}
                     </div>
                     
@@ -1216,7 +1255,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                           type="button"
                           aria-label={`Go to page ${i + 1}`}
                           aria-current={i === pageIndex ? "page" : undefined}
-                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors hover:bg-muted/30 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 cursor-pointer"
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors hover:bg-muted/30 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 cursor-pointer active:scale-[0.98]"
                           onClick={(e) => {
                              e.stopPropagation();
                              setHasInteracted(true);
@@ -1231,6 +1270,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                       ))}
                     </div>
                   </div>
+                  {choosing && <div ref={setChoiceSlot} className="w-full basis-full border-t border-muted px-6 pb-6 lg:px-12 lg:pb-12" />}
                 </motion.div>
               </AnimatePresence>
             </motion.div>
@@ -1253,7 +1293,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
             {/* Right tap zone: same rules as the left one. */}
             {totalPages > 1 && (
               <div
-                className={`absolute inset-y-0 right-0 w-[15%] lg:w-24 xl:w-32 z-30 pointer-events-none lg:relative lg:shrink-0 flex items-center justify-end px-2 sm:px-4 lg:justify-center lg:px-0 group ${pageIndex < totalPages - 1 ? "lg:pointer-events-auto lg:cursor-pointer" : ""}`}
+                className={`relative order-2 w-1/2 pt-3 lg:order-none lg:pt-0 lg:self-stretch lg:w-24 xl:w-32 z-30 pointer-events-none lg:shrink-0 flex items-center justify-end px-2 sm:px-4 lg:justify-center lg:px-0 group ${pageIndex < totalPages - 1 ? "lg:pointer-events-auto lg:cursor-pointer" : ""}`}
                 onClick={() => {
                   setHasInteracted(true);
                   if (pageIndex < totalPages - 1) {
@@ -1267,7 +1307,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                   data-testid="nav-next"
                   aria-label="Next page"
                   aria-disabled={pageIndex === totalPages - 1}
-                  className="pointer-events-auto flex h-11 w-11 lg:h-16 lg:w-16 items-center justify-center rounded-full bg-surface neo-shadow text-primary font-bold hover:scale-105 transition-all cursor-pointer focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:scale-100"
+                  className="pointer-events-auto flex h-11 w-11 lg:h-16 lg:w-16 items-center justify-center rounded-full bg-surface neo-shadow text-primary font-bold hover:scale-105 transition-all cursor-pointer focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:scale-100 active:scale-[0.98] aria-disabled:active:scale-100"
                 >
                   <CaretRight className="w-5 h-5 lg:w-8 lg:h-8" weight="bold" aria-hidden="true" />
                 </button>

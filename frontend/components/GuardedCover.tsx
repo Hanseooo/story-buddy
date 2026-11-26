@@ -1,30 +1,40 @@
 "use client";
 
 import {useEffect, useState} from "react";
-import {signPaths, type ImageJob} from "@/lib/signedUrls";
+import {forgetSignedUrls, signPaths, type ImageJob} from "@/lib/signedUrls";
+import PictureBox from "@/components/PictureBox";
 
-export default function GuardedCover({job, alt}: {job: ImageJob; alt: string}) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [retry, setRetry] = useState(0);
+/** A book's cover, signed only through `signPaths` with its job. `src` is a link the server already signed. */
+export default function GuardedCover({job, alt, src, className}: {job: ImageJob; alt: string; src?: string; className?: string}) {
+  const path = job.pages?.[0]?.image_path;
+  const [url, setUrl] = useState<string | null | undefined>(src);
+  const [attempt, setAttempt] = useState(0);
+  // A refreshed server render can pass a newly signed link; follow it.
+  const [prevSrc, setPrevSrc] = useState(src);
+  if (src !== prevSrc) {
+    setPrevSrc(src);
+    setUrl(src);
+    setAttempt(0);
+  }
   useEffect(() => {
+    if (!path || (src && attempt === 0)) return;
     const controller = new AbortController();
-    const path = job.pages?.[0]?.image_path;
-    if (path) void signPaths([path], [job], controller.signal).then((urls) => {
-      if (controller.signal.aborted) return;
-      setUrl(urls[path] ?? null);
-      setFailed(!urls[path]);
+    signPaths([path], [job], controller.signal).then((urls) => {
+      if (!controller.signal.aborted) setUrl(urls[path] ?? null);
+    }, () => {
+      if (!controller.signal.aborted) setUrl(null);
     });
     return () => { controller.abort(); };
-  }, [job, retry]);
-  if (url) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={url} alt={alt} loading="lazy" className="aspect-[3/4] w-full border-b border-primary/15 bg-muted object-cover" />;
-  }
-  return <div className="flex aspect-[3/4] w-full items-center justify-center bg-muted p-3 text-center" role="status">
-    {failed ? <span>Picture unavailable</span> : <span>Loading picture…</span>}
-    {failed && <button type="button" className="min-h-11 underline" onClick={(event) => {
-      event.preventDefault(); setFailed(false); setRetry(value => value + 1);
-    }}>Try loading again</button>}
-  </div>;
+  }, [job, path, src, attempt]);
+  // A book with no page has no cover to load: say so, not that it failed (audit A5).
+  if (!path) return (
+    <div className={`relative flex items-center justify-center overflow-hidden bg-muted p-1 text-center text-xs text-foreground/70 ${className ?? "aspect-[4/3] w-full"}`}>
+      No picture
+    </div>
+  );
+  return <PictureBox src={url} alt={alt} className={className} onRetry={() => {
+    forgetSignedUrls([path]);
+    setUrl(undefined);
+    setAttempt(value => value + 1);
+  }} />;
 }

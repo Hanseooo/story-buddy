@@ -351,6 +351,8 @@ function BookCard({
   // Tracks which URL finished loading, so a new cover from Realtime pulses and fades in again.
   const [loadedCover, setLoadedCover] = useState<string | null>(null);
   const coverLoaded = Boolean(cover) && loadedCover === cover;
+  // The entrance delay is the default transition, which hover and focus also use, so it ends once the card is in.
+  const [entered, setEntered] = useState(false);
 
   const coverBg = card.bucket === "paused" || card.bucket === "teacher-held" ? "bg-secondary/10"
     : (card.bucket === "terminal-failure" || card.bucket === "not-found") ? "bg-destructive/5"
@@ -365,14 +367,10 @@ function BookCard({
       }}
       initial="hidden"
       animate="show"
-      whileHover={{ y: -16, rotate: 0, scale: 1.05, zIndex: 10 }}
-      whileFocus={{ y: -16, rotate: 0, scale: 1.05, zIndex: 10 }}
-      transition={{ 
-        type: "spring", 
-        stiffness: 400, 
-        damping: 25, 
-        delay: index * 0.1 
-      }}
+      whileHover={{ y: -2, rotate: 0, zIndex: 10, transition: { type: "spring", bounce: 0, duration: 0.15 } }}
+      whileFocus={{ y: -2, rotate: 0, zIndex: 10, transition: { type: "spring", bounce: 0, duration: 0.15 } }}
+      transition={{ type: "spring", bounce: 0, duration: 0.25, delay: entered ? 0 : Math.min(index, 8) * 0.05 }}
+      onAnimationComplete={() => setEntered(true)}
       className="relative"
     >
       <Link
@@ -405,7 +403,7 @@ function BookCard({
                 </div>
               )}
               {(card.bucket === "paused" || card.bucket === "teacher-held") && (
-                <div className="w-16 h-16 rounded-3xl bg-secondary/20 flex items-center justify-center animate-bounce mb-3">
+                <div className="w-16 h-16 rounded-3xl bg-secondary/20 flex items-center justify-center mb-3">
                   <Users weight="fill" className="w-8 h-8 text-secondary" aria-hidden="true" />
                 </div>
               )}
@@ -429,7 +427,7 @@ function BookCard({
           {card.bucket === "in-flight" && (
             <div className="absolute inset-0 flex items-end justify-center pb-4">
               <span className="px-3 py-1.5 rounded-full bg-primary text-on-primary text-xs font-extrabold shadow-sm">
-                Writing...
+                Making...
               </span>
             </div>
           )}

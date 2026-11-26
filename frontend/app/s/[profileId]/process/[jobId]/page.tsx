@@ -10,8 +10,10 @@ import { displayTitle } from "@/lib/displayTitle";
 import FailureScreen from "@/components/FailureScreen";
 import StopStory from "@/components/StopStory";
 import StoppedStory from "@/components/StoppedStory";
+import PictureBox from "@/components/PictureBox";
+import OldNewPictures from "@/components/OldNewPictures";
 import { supabase } from "@/lib/supabaseClient";
-import { signPaths } from "@/lib/signedUrls";
+import { forgetSignedUrls, signPaths } from "@/lib/signedUrls";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { BookOpen, Users, PaintBrush, MagicWand, Check, MagnifyingGlass } from "@phosphor-icons/react";
 
@@ -267,10 +269,10 @@ function HoldRecovery({jobId, profileId, refetch, held = false}: {jobId: string;
     <p role="status">{held && pencilHold ? "Your story is saved. Your teacher will look at your picture change." : held ? "Your story is saved. Your teacher will help it continue." : submitted ? "We’re checking the saved step. You can return to your books." : "We couldn’t finish the last step. Your writing is still here."}</p>
     {error && <p role="alert">We couldn’t check your saved story. Try again.</p>}
     {canRepair === null && !error && <p role="status">Checking your saved story…</p>}
-    {canRepair && !submitted && <button type="button" disabled={sending} onClick={() => void repair()} className="min-h-11 rounded-2xl bg-primary px-6 font-bold text-on-primary disabled:opacity-50">{sending ? "Checking…" : "Try saving this step again"}</button>}
-    {error && <button type="button" disabled={sending} className="min-h-11 underline" onClick={() => {setError(false); setReadVersion(value => value + 1);}}>Try checking again</button>}
-    {canRepair === false && !held && <Link href={`/s/${profileId}/write`} className="min-h-11 underline">Write a new story</Link>}
-    <Link href={`/s/${profileId}`} className="inline-flex min-h-11 items-center rounded-2xl bg-primary px-6 font-bold text-on-primary">Back to my books</Link>
+    {canRepair && !submitted && <button type="button" disabled={sending} onClick={() => void repair()} className="min-h-11 rounded-2xl bg-primary px-6 font-bold text-on-primary disabled:opacity-50 active:scale-[0.98]">{sending ? "Checking…" : "Try saving this step again"}</button>}
+    {error && <button type="button" disabled={sending} className="min-h-11 underline active:scale-[0.98]" onClick={() => {setError(false); setReadVersion(value => value + 1);}}>Try checking again</button>}
+    {canRepair === false && !held && <Link href={`/s/${profileId}/write`} className="min-h-11 underline active:scale-[0.98]">Write a new story</Link>}
+    <Link href={`/s/${profileId}`} className="inline-flex min-h-11 items-center rounded-2xl bg-primary px-6 font-bold text-on-primary active:scale-[0.98]">Back to my books</Link>
     {held && stopState && !pencilHold && !error && <StopStory key={`${stopState.review_id}-${stopState.generation_epoch}`} jobId={jobId} reviewId={stopState.review_id}
       epoch={stopState.generation_epoch} ready={stopState.worker_finished}
       onStopped={() => void refetch()} onRefresh={() => { void refetch(); setReadVersion(value => value + 1); }} />}
@@ -355,7 +357,7 @@ function OtherVersions({ jobId, moderationMode, character, disabled, onChoose }:
           setLoaded({});
           setOpen((value) => !value);
         }}
-        className="min-h-[44px] w-full rounded-xl border border-[var(--color-primary)]/20 bg-background px-4 py-2 font-kid text-sm font-bold text-foreground hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="min-h-[44px] w-full rounded-xl border border-[var(--color-primary)]/20 bg-background px-4 py-2 font-kid text-sm font-bold text-foreground hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
       >
         Other versions
       </button>
@@ -382,7 +384,7 @@ function OtherVersions({ jobId, moderationMode, character, disabled, onChoose }:
               <button
                 type="button"
                 onClick={() => { setState("loading"); setAttempt((value) => value + 1); }}
-                className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+                className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 active:scale-[0.98]"
               >
                 Try loading {character.name}&apos;s other pictures again
               </button>
@@ -400,7 +402,7 @@ function OtherVersions({ jobId, moderationMode, character, disabled, onChoose }:
                     aria-label={`Use earlier picture ${index + 1} of ${character.name}`}
                     disabled={disabled || !loaded[version.version_id]}
                     onClick={() => onChoose(version.version_id)}
-                    className="w-full rounded-[12px] border border-[var(--color-primary)]/20 bg-background p-1 hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full rounded-[12px] border border-[var(--color-primary)]/20 bg-background p-1 hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
                   >
                     <img
                       src={urls[version.image_path]}
@@ -419,7 +421,7 @@ function OtherVersions({ jobId, moderationMode, character, disabled, onChoose }:
             aria-label={`Cancel other versions of ${character.name}`}
             disabled={disabled}
             onClick={close}
-            className="mt-3 min-h-[44px] rounded-xl px-4 py-2 font-kid font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="mt-3 min-h-[44px] rounded-xl px-4 py-2 font-kid font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
           >
             Cancel
           </button>
@@ -467,16 +469,11 @@ function MagicPencil({ character, tapsLeft, disabled, onSubmit }: {
         aria-controls={panelId}
         disabled={tapsLeft === 0 || (disabled && !open)}
         onClick={() => setOpen((value) => !value)}
-        className="min-h-[44px] w-full rounded-xl border border-[var(--color-primary)]/20 bg-background px-4 py-2 font-kid text-sm font-bold text-foreground hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="min-h-[44px] w-full rounded-xl border border-[var(--color-primary)]/20 bg-background px-4 py-2 font-kid text-sm font-bold text-foreground hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
       >
         Magic pencil
       </button>
       {tapsLeft === 0 && <p className="mt-1 text-center font-kid text-sm text-foreground/70">No pencils left for this book</p>}
-      {character.pencil_refused && (
-        <p role="alert" className="mt-2 text-center font-kid text-sm text-[var(--color-destructive)]">
-          We couldn&apos;t change this picture. Try different words.
-        </p>
-      )}
       {open && tapsLeft > 0 && (
         <div
           id={panelId}
@@ -520,7 +517,7 @@ function MagicPencil({ character, tapsLeft, disabled, onSubmit }: {
               aria-label={`Change ${character.name}'s picture`}
               disabled={empty || disabled}
               onClick={submit}
-              className="min-h-[44px] rounded-xl border border-[var(--color-primary)]/40 bg-[var(--color-surface)] px-4 py-2 font-kid font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="min-h-[44px] rounded-xl border border-[var(--color-primary)]/40 bg-[var(--color-surface)] px-4 py-2 font-kid font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
             >
               Change picture
             </button>
@@ -529,7 +526,7 @@ function MagicPencil({ character, tapsLeft, disabled, onSubmit }: {
               aria-label={`Cancel magic pencil for ${character.name}`}
               disabled={disabled}
               onClick={close}
-              className="min-h-[44px] rounded-xl px-4 py-2 font-kid font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="min-h-[44px] rounded-xl px-4 py-2 font-kid font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
             >
               Cancel
             </button>
@@ -540,11 +537,11 @@ function MagicPencil({ character, tapsLeft, disabled, onSubmit }: {
   );
 }
 
-// AC-11: the new picture is shown above; the old one waits beside the choice. The go is spent either
+// AC-11: the old and new pictures are shown side by side with the choice. The go is spent either
 // way, and the book cannot go on until the child chooses (the API rejects confirm meanwhile).
-function PencilChoice({ jobId, moderationMode, character, disabled, onChoose }: {
-  jobId: string; moderationMode?: string; character: RevealCharacter; disabled: boolean;
-  onChoose: (choice: "kept" | "old") => void;
+function PencilChoice({ jobId, moderationMode, character, newUrl, disabled, onChoose, onRetryNew }: {
+  jobId: string; moderationMode?: string; character: RevealCharacter; newUrl: string | null | undefined; disabled: boolean;
+  onChoose: (choice: "kept" | "old") => void; onRetryNew: () => void;
 }) {
   const old = character.pencil_choice!;
   const [url, setUrl] = useState<string | null>(null);
@@ -573,22 +570,27 @@ function PencilChoice({ jobId, moderationMode, character, disabled, onChoose }: 
       <p className="font-kid text-sm leading-relaxed text-foreground">
         Here is your changed picture of {character.name}. Keep it, or go back to the old one.
       </p>
-      {state === "error" ? (
-        <div role="alert" className="mt-2 flex flex-col items-start gap-2 font-kid text-sm">
-          <p>We couldn&apos;t load the old picture right now.</p>
-          <button
-            type="button"
-            onClick={() => { setState("loading"); setAttempt((value) => value + 1); }}
-            className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
-          >
-            Try loading {character.name}&apos;s old picture again
-          </button>
-        </div>
-      ) : url ? (
-        <img src={url} alt={`Old picture of ${character.name}`} className="mt-2 w-24 aspect-square object-contain rounded-[8px] bg-[var(--color-muted)]" />
-      ) : (
-        <div className="mt-2 w-24 aspect-square rounded-[8px] bg-[var(--color-muted)] animate-pulse" />
-      )}
+      {/* The card widens while this choice is open, so Old and New fit side by side (audit B3). */}
+      <div className="mt-2">
+        <OldNewPictures
+          old={state === "error" ? (
+            <div role="alert" className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-[8px] bg-[var(--color-muted)] p-3 text-center font-kid text-sm">
+              <p>We couldn&apos;t load the old picture right now.</p>
+              <button
+                type="button"
+                onClick={() => { setState("loading"); setAttempt((value) => value + 1); }}
+                className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 active:scale-[0.98]"
+              >
+                Try loading {character.name}&apos;s old picture again
+              </button>
+            </div>
+          ) : (
+            <PictureBox src={url ?? undefined} alt={`Old picture of ${character.name}`} className="aspect-[4/3] w-full rounded-[8px]"
+              onRetry={() => { forgetSignedUrls([old.image_path]); setUrl(null); setState("loading"); setAttempt((value) => value + 1); }} />
+          )}
+          fresh={<PictureBox src={newUrl} alt={`New picture of ${character.name}`} onRetry={onRetryNew} className="aspect-[4/3] w-full rounded-[8px]" />}
+        />
+      </div>
       <p role="status" className="font-kid text-sm text-foreground/70">{disabled ? "Changing your picture…" : ""}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button
@@ -596,7 +598,7 @@ function PencilChoice({ jobId, moderationMode, character, disabled, onChoose }: 
           aria-label={`Keep this new picture of ${character.name}`}
           disabled={disabled}
           onClick={() => onChoose("kept")}
-          className="min-h-[44px] rounded-xl bg-[var(--color-primary)] px-4 py-2 font-kid font-bold text-[var(--color-surface)] focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="min-h-[44px] rounded-xl bg-[var(--color-primary)] px-4 py-2 font-kid font-bold text-[var(--color-surface)] focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
         >
           Keep this
         </button>
@@ -605,7 +607,7 @@ function PencilChoice({ jobId, moderationMode, character, disabled, onChoose }: 
           aria-label={`Use the old picture of ${character.name}`}
           disabled={disabled}
           onClick={() => onChoose("old")}
-          className="min-h-[44px] rounded-xl border border-[var(--color-primary)]/40 bg-[var(--color-surface)] px-4 py-2 font-kid font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="min-h-[44px] rounded-xl border border-[var(--color-primary)]/40 bg-[var(--color-surface)] px-4 py-2 font-kid font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
         >
           Use the old one
         </button>
@@ -630,6 +632,9 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   const [selectedTrait, setSelectedTrait] = useState<SelectedTrait>(null);
   const [pendingRedrawName, setPendingRedrawName] = useState<string | null>(null);
   const [changingPicture, setChangingPicture] = useState(false);
+  // Which cards have "Change this picture" open, by char_id. Here, not in the card, because a redraw
+  // leaves the reveal and comes back.
+  const [changeOpen, setChangeOpen] = useState<Record<string, boolean>>({});
   const submissionInFlight = useRef(false);
   const characterHeadingRefs = useRef<Record<string, HTMLHeadingElement | null>>({});
   const characterCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -936,7 +941,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
         <div className="w-full flex justify-start mb-4 z-20">
           <Link
             href={`/s/${profileId}`}
-            className="inline-flex min-h-11 items-center gap-1.5 font-kid text-sm font-bold text-foreground/60 hover:text-primary transition-colors focus-visible:outline-secondary focus-visible:outline-2 rounded-lg py-1 px-2.5"
+            className="inline-flex min-h-11 items-center gap-1.5 font-kid text-sm font-bold text-foreground/60 hover:text-primary transition-colors focus-visible:outline-secondary focus-visible:outline-2 rounded-lg py-1 px-2.5 active:scale-[0.98]"
           >
             ← Bookshelf
           </Link>
@@ -1007,15 +1012,16 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                 hidden: { opacity: 0, y: 40, scale: 0.8 },
                 show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", bounce: 0 } }
               }}
-              className="flex flex-col items-center gap-4 neo-border bg-[var(--color-surface)] rounded-[24px] p-5 shadow-[0_10px_28px_rgba(49,85,217,0.12)] max-w-xs w-full"
+              className={`flex flex-col items-center gap-4 neo-border bg-[var(--color-surface)] rounded-[24px] p-5 shadow-[0_10px_28px_rgba(49,85,217,0.12)] ${c.pencil_choice ? "max-w-2xl" : "max-w-xs"} w-full`}
             >
-              {characterImageState[c.char_id] === "error" ? (
-                <div role="alert" className="flex aspect-square w-full flex-col items-center justify-center gap-3 rounded-[16px] bg-[var(--color-muted)] p-4 text-center font-kid">
+              {/* While choosing, the New box in the choice is the only copy of the new picture (audit Q3). */}
+              {c.pencil_choice ? null : characterImageState[c.char_id] === "error" ? (
+                <div role="alert" className="flex aspect-square w-full max-w-[17.5rem] flex-col items-center justify-center gap-3 rounded-[16px] bg-[var(--color-muted)] p-4 text-center font-kid">
                   <p>We couldn&apos;t load {c.name}&apos;s picture.</p>
                   <button
                     type="button"
-                    className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
-                    onClick={() => void loadCharacterImages([c])}
+                    className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 active:scale-[0.98]"
+                    onClick={() => { forgetSignedUrls([c.image_path]); void loadCharacterImages([c]); }}
                   >
                     Try loading {c.name}&apos;s picture again
                   </button>
@@ -1024,12 +1030,12 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                 <img
                   src={signedCharUrls[c.char_id]}
                   alt={c.name}
-                  className="w-full aspect-square object-contain rounded-[16px] bg-[var(--color-muted)]"
+                  className="w-full max-w-[17.5rem] aspect-square object-contain rounded-[16px] bg-[var(--color-muted)]"
                   onLoad={() => setCharacterImageState((current) => ({ ...current, [c.char_id]: "loaded" }))}
                   onError={() => setCharacterImageState((current) => ({ ...current, [c.char_id]: "error" }))}
                 />
               ) : (
-                <div className="w-full aspect-square rounded-[16px] bg-[var(--color-muted)] animate-pulse" />
+                <div className="w-full max-w-[17.5rem] aspect-square rounded-[16px] bg-[var(--color-muted)] animate-pulse" />
               )}
               <h2
                 ref={(node) => { characterHeadingRefs.current[c.char_id] = node; }}
@@ -1045,7 +1051,9 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                   jobId={jobId}
                   moderationMode={moderationMode}
                   character={c}
+                  newUrl={characterImageState[c.char_id] === "error" ? null : signedCharUrls[c.char_id]}
                   disabled={submissionsDisabled}
+                  onRetryNew={() => { forgetSignedUrls([c.image_path]); void loadCharacterImages([c]); }}
                   onChoose={(choice) => {
                     setSelectedTrait(null);
                     setPendingRedrawName(null);
@@ -1072,6 +1080,35 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                 }}
               />
 
+              {/* Outside the tools below, so a closed "Change this picture" never hides it. */}
+              {c.versions !== undefined && c.pencil_ready && c.pencil_refused && (
+                <p role="alert" className="w-full text-center font-kid text-sm text-[var(--color-destructive)]">
+                  We couldn&apos;t change this picture. Try different words.
+                </p>
+              )}
+
+              {/* Audit B9: Other versions stays one tap away; the pencil and the redraw chips wait behind
+                  one disclosure, whose open state lives on this page so it survives a redraw. */}
+              {c.versions !== undefined && (
+                <button
+                  type="button"
+                  aria-label={`Change this picture of ${c.name}`}
+                  aria-expanded={Boolean(changeOpen[c.char_id])}
+                  aria-controls={`change-tools-${c.char_id}`}
+                  disabled={submissionsDisabled}
+                  onClick={() => {
+                    if (changeOpen[c.char_id] && selectedTrait?.charId === c.char_id) setSelectedTrait(null);
+                    setChangeOpen((open) => ({ ...open, [c.char_id]: !open[c.char_id] }));
+                  }}
+                  className="min-h-[44px] w-full rounded-xl border border-[var(--color-primary)]/20 bg-background px-4 py-2 font-kid text-sm font-bold text-foreground hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+                >
+                  Change this picture
+                </button>
+              )}
+
+              {/* Hidden, not unmounted, when closed, so the pencil keeps what the child typed. */}
+              <div id={`change-tools-${c.char_id}`} hidden={c.versions !== undefined && !changeOpen[c.char_id]}
+                className="flex w-full flex-col items-center gap-4">
               {c.versions !== undefined && c.pencil_ready && (
                 <MagicPencil
                   key={`pencil-${c.image_path}`}
@@ -1109,7 +1146,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                         selected
                           ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 font-bold"
                           : "border-[var(--color-primary)]/20 bg-background hover:bg-[var(--color-primary)]/5"
-                      }`}
+                      } active:scale-[0.98]`}
                     >
                       {chip}
                       {selected && <span className="sr-only"> selected</span>}
@@ -1134,7 +1171,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                         setChangingPicture(false);
                         void handleConfirm("try_again", c.char_id, selectedTrait.attribute);
                       }}
-                      className="min-h-[44px] rounded-xl border border-[var(--color-primary)]/40 bg-[var(--color-surface)] px-4 py-2 font-kid font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="min-h-[44px] rounded-xl border border-[var(--color-primary)]/40 bg-[var(--color-surface)] px-4 py-2 font-kid font-bold text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
                     >
                       Redraw {c.name}
                     </button>
@@ -1142,13 +1179,14 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                       type="button"
                       disabled={submissionsDisabled}
                       onClick={() => setSelectedTrait(null)}
-                      className="min-h-[44px] rounded-xl px-4 py-2 font-kid font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="min-h-[44px] rounded-xl px-4 py-2 font-kid font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
                     >
                       Cancel
                     </button>
                   </div>
                 </div>
               )}
+              </div>
               </>)}
               {confirmError?.charId === c.char_id && (
                 <p role="alert" className="w-full font-kid text-base text-[var(--color-destructive)] bg-[var(--color-destructive)]/10 px-4 py-3 rounded-xl">
@@ -1192,7 +1230,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                   type="button"
                   onClick={() => void retryCharacterChoices()}
                   disabled={isRetryingCharacterChoices}
-                  className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
                 >
                   Load character choices again
                 </button>
@@ -1241,15 +1279,10 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
       <div className="w-full flex justify-start mb-4 z-20">
         <Link
           href={`/s/${profileId}`}
-          className="inline-flex min-h-11 items-center gap-1.5 font-kid text-sm font-bold text-foreground/60 hover:text-primary transition-colors focus-visible:outline-secondary focus-visible:outline-2 rounded-lg py-1 px-2.5"
+          className="inline-flex min-h-11 items-center gap-1.5 font-kid text-sm font-bold text-foreground/60 hover:text-primary transition-colors focus-visible:outline-secondary focus-visible:outline-2 rounded-lg py-1 px-2.5 active:scale-[0.98]"
         >
           ← Bookshelf
         </Link>
-      </div>
-
-      {/* Spotlight Background effect */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none flex justify-center items-center opacity-30 z-0" aria-hidden="true">
-         <div className="w-[600px] h-[600px] bg-[var(--color-secondary)]/20 rounded-full blur-[100px]" />
       </div>
 
       <div className="z-10 w-full min-w-0 text-center mb-8 sm:mb-12">
@@ -1365,7 +1398,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
               </div>
               <Link
                 href={"/s/" + profileId}
-                className="inline-flex min-h-11 items-center gap-2 px-4 py-2 rounded-xl bg-surface border border-primary/20 text-foreground font-bold hover:bg-muted/40 transition shrink-0 whitespace-nowrap focus-visible:outline-secondary focus-visible:outline-2 text-sm"
+                className="inline-flex min-h-11 items-center gap-2 px-4 py-2 rounded-xl bg-surface border border-primary/20 text-foreground font-bold hover:bg-muted/40 transition shrink-0 whitespace-nowrap focus-visible:outline-secondary focus-visible:outline-2 text-sm active:scale-[0.98]"
               >
                 Return to Bookshelf
               </Link>

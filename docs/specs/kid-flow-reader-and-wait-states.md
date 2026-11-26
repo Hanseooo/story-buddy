@@ -282,9 +282,13 @@ there is no JS, no iOS gap, and — decisively — no wall for a child whose dev
 in system settings, which a rotate-prompt can neither detect nor escape. **This closes §8's open
 question by making it moot.**
 
-**Controls.** Giant tap zones, left and right 30% of the viewport (`USER_FLOW.md` §4.7), plus arrow
-keys and a `k / N` page indicator (CC-6). Zones at the ends of the book are not rendered — a
-one-page book has neither. Images use `object-contain` so a portrait illustration is never cropped.
+**Controls.** Previous and next arrows, plus arrow keys and a `k / N` page indicator (CC-6). Below
+`lg` (1024px) the arrows sit in a row under the card and only the arrow buttons take taps, so they
+never cover the pencil form. At `lg` and up each arrow sits in a column beside the card, and the
+column takes the tap. A swipe turns the page only when it starts on the picture; the story text, the
+pencil box and Other versions never start one (UI audit round 2, B5 and B6). This replaces the 30%
+viewport tap zones of `USER_FLOW.md` §4.7. On the first and last page the arrow stays, marked
+`aria-disabled`, so focus never drops; a one-page book has no arrows. Images use `object-contain` so a portrait illustration is never cropped.
 
 The reader header groups Bookshelf and the PDF action on its top row. Below 1024px the
 title has its own full-width row; desktop places it between those actions. Pages / Scroll stays
@@ -299,6 +303,9 @@ reserves query params for filters and pagination, and there is no bookshelf to r
 **Alt text.** The image carries `alt={caption}` and the visible caption is `aria-hidden`. Today's
 page does both without the `aria-hidden`, so every page is read twice to a screen reader. The caption
 is the verbatim story text (ADR-013), so it is the correct accessible name for the illustration.
+Superseded 2026-11-26 for Pages view only: the picture there is now a "Show the picture for page N bigger"
+button, whose children a screen reader never reads, so the visible caption is the read text and the image's
+alt is empty. Scroll view is unchanged: its caption is visible and the image's alt is still the caption.
 
 **Signing.** One `createSignedUrls` batch over every path, 3600s. Any per-path error or null URL
 fails the whole read (S1 constraint 7, ADR-025 — no page-shaped holes). **The failure is retried once

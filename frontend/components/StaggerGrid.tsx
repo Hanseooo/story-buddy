@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ReactNode } from "react";
+import { Children, ReactNode } from "react";
 
 export function StaggerGrid({ children, className }: { children: ReactNode; className?: string }) {
   return (
@@ -13,7 +13,8 @@ export function StaggerGrid({ children, className }: { children: ReactNode; clas
         hidden: { opacity: 0 },
         show: {
           opacity: 1,
-          transition: { staggerChildren: 0.05 },
+          // The last item starts by 0.4s and lands about 0.25s later, however many items the grid holds (a gallery can hold 200).
+          transition: { staggerChildren: Math.min(0.05, 0.4 / Math.max(1, Children.count(children))) },
         },
       }}
     >
@@ -29,9 +30,9 @@ export function StaggerItem({ children }: { children: ReactNode }) {
         hidden: { opacity: 0, y: 20, scale: 0.95 },
         show: { opacity: 1, y: 0, scale: 1 },
       }}
-      whileHover={{ y: -4, scale: 1.02 }}
-      transition={{ type: "spring", stiffness: 300, damping: 20 }}
-      className="block outline-none focus-within:ring-2 focus-within:ring-secondary focus-within:ring-offset-2 rounded-2xl"
+      whileHover={{ y: -2, transition: { type: "spring", bounce: 0, duration: 0.15 } }}
+      transition={{ type: "spring", bounce: 0, duration: 0.25 }}
+      className="block outline-none rounded-2xl"
     >
       {children}
     </motion.li>

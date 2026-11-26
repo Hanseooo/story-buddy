@@ -14,6 +14,150 @@ instead of repeating it.
 
 ---
 
+## UI audit round 2, batch 5: Books responsive and polish · 2026-11-26
+
+Branch `fix/ui-audit-2`, PR number pending. Ticket `.scratch/ui-audit/issues/06-books-responsive-polish.md`.
+
+### Code
+
+- **Books tabs.** The four tabs scroll in one row instead of wrapping, and the chosen tab scrolls
+  into sight. The loading skeleton draws four tabs (C6).
+- **Books list.** The table starts at `md` (768px), with cards below it (C7). A "Didn't finish" row
+  wraps at 320px (C10).
+- **Book page.** A story still being made or waiting for characters shows a Bookshelf back link
+  above its loading view (D4).
+- **Reader and making screen.** The decorative blurred blobs are gone (D5).
+- **Press feedback.** Teacher Books, Needs your help and roster controls, and the kid reader and
+  making-screen controls, press in with the repo's existing `active:scale-[0.98]` press (D6).
+- **Shelf.** The in-flight badge says "Making..." instead of "Writing..." (D7).
+
+### Checks
+
+- Frontend: 1271 tests pass (4 new, each seen red first; 2 shelf expectations changed for D7). Lint
+  and typecheck clean apart from the known `lib/signedUrls.test.ts:106` error. Not driven in a
+  browser.
+
+---
+
+## UI audit round 2, batch 4: magic pencil and picture choices · 2026-11-26
+
+Branch `fix/ui-audit-2`, PR number pending. Ticket `.scratch/ui-audit/issues/05-magic-pencil-ux.md`.
+
+### Code
+
+- **Old and New.** The page pencil and reveal pencil choices show the old and new pictures at 4:3,
+  labelled, through one shared `components/OldNewPictures.tsx`. They sit side by side once the
+  choice is 28rem wide and stack on a phone (B3, A10). In the reader the choice takes a full-width
+  row of the card instead of the text column. On the reveal the card widens while the choice is
+  open, and the New picture offers Try again.
+- **Reader.** The page picture shows "Drawing your change…" while a change draws (B4). Only a press
+  on the picture starts a swipe, and the picture is not natively draggable (B5). Below `lg` the
+  arrows sit under the card, and a disabled arrow does not press in (B6).
+- **Reveal.** Other versions stays visible. Magic pencil and the trait chips with Redraw sit behind
+  one **Change this picture** disclosure that keeps its open state across a redraw and keeps the
+  typed words when it closes (B9).
+
+### Docs
+
+- `magic-pencil.md` AC-06 and its traceability row describe the disclosure.
+  `kid-flow-reader-and-wait-states.md` Controls describes the arrows and the picture-only swipe.
+
+### Checks
+
+- Targeted reader and reveal tests pass; the swipe test drives a real framer-motion drag. Not
+  driven in a browser.
+
+---
+
+## UI audit round 2, batch 3: teacher held-story screen · 2026-11-26
+
+Branch `fix/ui-audit-2`, PR number pending. Ticket `.scratch/ui-audit/issues/04-held-story-redesign.md`.
+
+### Code
+
+- **Held story.** The header and its Back stay pinned while the story scrolls. The Decision region is
+  pinned to the bottom on phones (at most 45dvh) and is a sticky side panel at `lg`. Scroll padding
+  keeps focused rows clear of both (C2).
+- **Actions.** One filled primary per view. Stop this story is outlined in red with dark text on the
+  screen and filled red in its confirm. These controls use the DESIGN §7 focus ring (C1).
+- **Evidence.** The classifier explanations and captured settings version stay in view. Model IDs,
+  instruction and policy versions and the raw classifier records sit in a closed **Technical
+  record** that stays in the page (C3, ADR-080).
+- **Queue.** Loading shows a skeleton in the row's shape. Review criteria show on the queue, even
+  when it is empty, and once inside each held story (C5, ticket 13).
+
+### Docs
+
+- `moderation-stack.md` §1506 describes the Technical record and where Review criteria show.
+
+### Checks
+
+- Targeted Books tests pass. Not driven in a browser.
+
+---
+
+## UI audit round 2, batch 2: shared picture box · 2026-11-26
+
+Branch `fix/ui-audit-2`, PR number pending. Ticket `.scratch/ui-audit/issues/03-shared-picture-box.md`.
+
+### Code
+
+- **Picture box.** New `components/PictureBox.tsx`: a fixed 4:3 box that pulses while the link is
+  signed and the picture loads, fades in, and on a broken or missing link shows "Picture didn't load"
+  with a 44px Try again. Try again drops the cached link (`forgetSignedUrls`) and signs it again.
+- **Teacher books.** Book cards and table thumbs use it, so a thumb that cannot be signed no longer
+  pulses forever (A1, A2). Cards and thumbs are 4:3 (A8), and the card meta ellipsizes long titles
+  (C11). The card button now covers the card with its `::after`, since Try again cannot sit inside
+  it; Try again in a table row does not open the book.
+- **Gallery.** Every cover, baseline or teacher-review, goes through `GuardedCover` on the box at 4:3,
+  with its failed text above Try again (A5, A6). The card link covers the card the same way, so
+  tapping a cover still opens the book. The skeleton has the real card's title and avatar rows (A7).
+- **Needs your help.** A held picture loads in a reserved 4:3 box, so the decision controls do not
+  jump (A9).
+
+### Docs
+
+- `image-loading-ux.md` §5.9: "No new shared component" struck through and superseded by owner
+  decision Q1.
+
+### Checks
+
+- Frontend: 1258 tests pass (10 new, each seen red first). Lint and build clean. Not driven in a
+  browser.
+
+---
+
+## UI audit round 2, batch 1: bug fixes · 2026-11-26
+
+Branch `fix/ui-audit-2`, PR number pending. Batch 1 of `.scratch/ui-audit/issues/02-audit-round-2.md`.
+
+### Code
+
+- **Reader.** Pages view reads the story text again: the caption is no longer `aria-hidden`, and the
+  picture inside the "bigger" button has an empty alt (B1). The change confirms say "Use the new
+  picture" / "Use this picture" and "Go back", so "Keep" never means the old picture (B2).
+- **Teacher shell.** A Settings gear link below `sm`, and a 44px log-out target (D1).
+- **Books review.** A signing failure or a broken page shows "A page didn't load" with Try again
+  instead of loading forever, on approved books too. Try again drops only the broken pages' cached
+  links (`forgetSignedUrls`), re-signs only those, keeps loaded pages loaded, and moves focus to the
+  retried page. Every page loads on open, and Share with class stays off with "Loading pages N of M"
+  until all have loaded (A3, A4). The Review button signs once (C8). The toast waits while hovered
+  or focused, also when it appears under the pointer, and the save-failed toast says Try again (C9).
+- **Motion.** The last card entrance starts by 0.4s and lands by about 0.65s, hover lifts 2px in 0.15s without scale or bounce, and the
+  shelf's paused and held badges no longer bounce (D2, D3).
+
+### Docs
+
+- `kid-flow-reader-and-wait-states.md` §4.3: in Pages view the caption is now the read text; Scroll
+  view is unchanged.
+
+### Checks
+
+- Frontend: 1248 tests pass (10 new, each seen red first). Lint and build clean. Motion not driven in
+  a browser.
+
+---
+
 ## UI audit review fixes and cast picture reload · 2026-11-26
 
 PR [#145](https://github.com/Hanseooo/story-buddy/pull/145). Fixes from the two-axis review of UI audit batches 1-4, plus one cast-screen bug.

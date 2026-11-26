@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const {
@@ -166,11 +166,29 @@ describe("GalleryPage", () => {
 
     const { default: GalleryPage } = await import("./page");
     const jsx = await GalleryPage({ params });
-    const { getByAltText } = render(jsx);
+    const { getByAltText, getByRole } = render(jsx);
 
-    expect(getByAltText("Cover of book by Kai").closest("a")).toHaveAttribute(
-      "href", `/s/${PROFILE_ID}/book/job-xyz`,
-    );
+    // Ticket 03: the cover sits beside the link, whose ::after covers the whole card, because the
+    // cover's Try again cannot sit inside a link. jsdom cannot hit-test that overlay: browser check.
+    const link = getByRole("link");
+    expect(link).toHaveAttribute("href", `/s/${PROFILE_ID}/book/job-xyz`);
+    expect(link.parentElement).toContainElement(getByAltText("Cover of book by Kai"));
+  });
+
+  it("a broken baseline cover says so and Try again shows a newly signed link (ticket 03)", async () => {
+    mockLimit.mockResolvedValue({ data: [makeJob({ id: "job-xyz" })] });
+    mockCreateSignedUrls
+      .mockResolvedValueOnce({ data: [{ path: "covers/job-1.jpg", signedUrl: "https://storage.test/cover.jpg?token=first" }] })
+      .mockResolvedValueOnce({ data: [{ path: "covers/job-1.jpg", signedUrl: "https://storage.test/cover.jpg?token=second" }] });
+
+    const { default: GalleryPage } = await import("./page");
+    const jsx = await GalleryPage({ params });
+    const { getByAltText, findByAltText, getByText, getByRole } = render(jsx);
+
+    fireEvent.error(getByAltText("Cover of book by Kai"));
+    getByText("Picture didn't load");
+    fireEvent.click(getByRole("button", { name: "Try again" }));
+    expect(await findByAltText("Cover of book by Kai")).toHaveAttribute("src", "https://storage.test/cover.jpg?token=second");
   });
 
   it("requests signed URLs from bucket storybook-images", async () => {

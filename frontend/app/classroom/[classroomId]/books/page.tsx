@@ -9,7 +9,8 @@ import BookReviewDialog from "@/components/BookReviewDialog";
 import NeedsHelpQueue from "@/components/NeedsHelpQueue";
 import { StaggerGrid, StaggerItem } from "@/components/StaggerGrid";
 import { Job, ReviewDecision, jobState } from "@/lib/types/jobs";
-import { signPaths } from "@/lib/signedUrls";
+import { forgetSignedUrls, signPaths } from "@/lib/signedUrls";
+import PictureBox from "@/components/PictureBox";
 import { displayTitle } from "@/lib/displayTitle";
 
 type Tab = "pending" | "approved" | "rejected" | "held";
@@ -20,24 +21,48 @@ type Toast = {
   undoDecision: ReviewDecision;
   /** Child's nickname; offers "Add a note" for that book. */
   noteFor?: string;
+  /** The decision did not save; the action sends it again. */
+  retry?: boolean;
 };
 
 const TOAST_MS = 5000;
+
+/** The picture a book's thumbnail shows, or undefined when a finished book has none to sign. */
+const thumbPath = (j: Job) => (j.status === "complete" ? j.pages?.[0]?.image_path : undefined);
 
 export default function BooksPage() {
   const { classroomId } = useParams<{ classroomId: string }>();
 
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [notesClassroom, setNotesClassroom] = useState<{ id: string; enabled: boolean } | null>(null);
-  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
+  // A missing id is still signing; null means signing found no link.
+  const [thumbnails, setThumbnails] = useState<Record<string, string | null>>({});
+  const thumbRetries = useRef(new Map<string, AbortController>());
   const [activeTab, setActiveTab] = useState<Tab>("pending");
+  const tabList = useRef<HTMLDivElement>(null);
+  // The tabs scroll in one row on a phone; the chosen one, e.g. after "Back to Books", stays in sight.
+  useEffect(() => {
+    tabList.current?.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [activeTab]);
   const [heldCount, setHeldCount] = useState(0);
   const [toast, setToast] = useState<Toast | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastHeld = useRef({ hover: false, focus: false });
+  const startToastTimer = useCallback(() => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
+  }, []);
+  // The toast unmounts without a leave or blur (dismissed, or moved in or out of the dialog), so a
+  // hold is dropped then, and a remounted toast whose timer was held starts it again.
+  const toastRef = useCallback((el: HTMLDivElement | null) => {
+    if (!el) toastHeld.current = { hover: false, focus: false };
+    else if (!toastTimer.current) startToastTimer();
+  }, [startToastTimer]);
 
   const [dialogJobId, setDialogJobId] = useState<string | null>(null);
   const [noteJobId, setNoteJobId] = useState<string | null>(null);
   const [dialogPageUrls, setDialogPageUrls] = useState<string[]>([]);
+  const [dialogPagesFailed, setDialogPagesFailed] = useState(false);
   const dialogImages = useRef<AbortController | null>(null);
   useEffect(() => {
     const controller = dialogImages.current;
@@ -74,43 +99,123 @@ export default function BooksPage() {
 
   useEffect(() => {
     if (!jobs) return;
-    const unsigned = jobs.filter((j) => j.status === "complete" && j.pages?.[0]);
+    const unsigned = jobs.filter((j) => thumbPath(j));
     if (!unsigned.length) return;
 
     // One batch request, not one per thumbnail. Each thumbnail shows as it arrives,
     // so baseline ones do not wait for teacher-review links.
     const controller = new AbortController();
-    void signPaths(unsigned.map((j) => j.pages![0].image_path), unsigned, controller.signal, (path, url) => {
+    // A thumbnail left without a link once signing ends shows its failed state, not a pulse forever.
+    const markMissing = (signed: Record<string, string>) => {
       if (controller.signal.aborted) return;
+      setThumbnails((prev) => {
+        const next = { ...prev };
+        for (const j of unsigned) if (!signed[j.pages![0].image_path]) next[j.id] = null;
+        return next;
+      });
+    };
+    // Links already delivered survive a later signing error.
+    const delivered: Record<string, string> = {};
+    signPaths(unsigned.map((j) => j.pages![0].image_path), unsigned, controller.signal, (path, url) => {
+      if (controller.signal.aborted) return;
+      delivered[path] = url;
       setThumbnails((prev) => {
         const next = { ...prev };
         for (const j of unsigned) if (j.pages![0].image_path === path) next[j.id] = url;
         return next;
       });
-    });
-    return () => controller.abort();
+    }).then(markMissing, () => markMissing(delivered));
+    const retries = thumbRetries.current;
+    return () => {
+      controller.abort();
+      // A retry answered after a refresh or unmount must not overwrite the newer thumbnail.
+      for (const retry of retries.values()) retry.abort();
+      retries.clear();
+    };
   }, [jobs]);
+
+  /** Drops a broken thumbnail's cached link and signs it again. */
+  async function retryThumbnail(job: Job) {
+    const path = job.pages![0].image_path;
+    thumbRetries.current.get(job.id)?.abort();
+    const controller = new AbortController();
+    thumbRetries.current.set(job.id, controller);
+    forgetSignedUrls([path]);
+    setThumbnails((prev) => {
+      const next = { ...prev };
+      delete next[job.id];
+      return next;
+    });
+    let url: string | null = null;
+    try {
+      url = (await signPaths([path], [job], controller.signal))[path] ?? null;
+    } catch {
+      // Stays without a link, so the failed state shows again.
+    }
+    if (controller.signal.aborted) return;
+    thumbRetries.current.delete(job.id);
+    setThumbnails((prev) => ({ ...prev, [job.id]: url }));
+  }
 
   // ── Open dialog & sign pages ──────────────────────────────────────────────
 
   async function openDialog(jobId: string, withNote = false) {
-    dialogImages.current?.abort();
-    const controller = new AbortController();
-    dialogImages.current = controller;
     setDialogJobId(jobId);
     setNoteJobId(withNote ? jobId : null);
-    setDialogPageUrls([]);
-    const job = jobs?.find((j) => j.id === jobId);
-    if (!job?.pages?.length) return;
-    const signed = await signPaths(job.pages.map((p) => p.image_path), [job], controller.signal);
-    if (controller.signal.aborted) return;
-    setDialogPageUrls(job.pages.map((p) => signed[p.image_path] ?? ""));
+    if (!(await signDialogPages(jobId))) return;
 
     // Deciding auto-advances to the next pending book, so warm its URLs now —
     // otherwise every Approve costs the teacher a signing round trip they watch.
     const next = pendingJobs.find((j) => j.id !== jobId);
     // Teacher-review links are cached like baseline ones (ADR-086), so both kinds warm.
     if (next?.pages?.length) void signPaths(next.pages.map((p) => p.image_path), [next]);
+  }
+
+  /** Signs the dialog's pages. Returns false when there is nothing to show or the result is stale. */
+  async function signDialogPages(jobId: string) {
+    dialogImages.current?.abort();
+    const controller = new AbortController();
+    dialogImages.current = controller;
+    setDialogPageUrls([]);
+    setDialogPagesFailed(false);
+    const job = jobs?.find((j) => j.id === jobId);
+    if (!job?.pages?.length) return false;
+    try {
+      const signed = await signPaths(job.pages.map((p) => p.image_path), [job], controller.signal);
+      if (controller.signal.aborted) return false;
+      const urls = job.pages.map((p) => signed[p.image_path] ?? "");
+      setDialogPageUrls(urls);
+      if (urls.some((url) => !url)) setDialogPagesFailed(true);
+    } catch {
+      if (controller.signal.aborted) return false;
+      setDialogPagesFailed(true);
+    }
+    return true;
+  }
+
+  /** Signs only the pages that failed, dropping their cached links first so a broken link is not handed back. */
+  async function retryDialogPages(indexes: number[]) {
+    const job = jobs?.find((j) => j.id === dialogJobId);
+    if (!job?.pages?.length) return;
+    const pages = job.pages;
+    dialogImages.current?.abort();
+    const controller = new AbortController();
+    dialogImages.current = controller;
+    const paths = indexes.map((i) => pages[i].image_path);
+    forgetSignedUrls(paths);
+    const before = dialogPageUrls;
+    setDialogPagesFailed(false);
+    setDialogPageUrls(pages.map((_, i) => (indexes.includes(i) ? "" : before[i] ?? "")));
+    let signed: Record<string, string> = {};
+    try {
+      signed = await signPaths(paths, [job], controller.signal);
+    } catch {
+      // A rejected signing leaves these pages without links; they show as failed below.
+    }
+    if (controller.signal.aborted) return;
+    const urls = pages.map((p, i) => (indexes.includes(i) ? signed[p.image_path] ?? "" : before[i] ?? ""));
+    setDialogPageUrls(urls);
+    if (urls.some((url) => !url)) setDialogPagesFailed(true);
   }
 
   // ── Decision ─────────────────────────────────────────────────────────────
@@ -192,6 +297,7 @@ export default function BooksPage() {
         message: "Could not save — try again",
         jobId: dialogJobId,
         undoDecision: decision,
+        retry: true,
       });
     }
   }
@@ -217,9 +323,17 @@ export default function BooksPage() {
   // ── Toast helpers ─────────────────────────────────────────────────────────
 
   function showToast(t: Toast) {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast(t);
-    toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
+    if (!toastHeld.current.hover && !toastHeld.current.focus) startToastTimer();
+  }
+
+  // WCAG 2.2.1: the toast waits while the pointer or focus is on it.
+  function holdToast(kind: "hover" | "focus", held: boolean) {
+    toastHeld.current[kind] = held;
+    if (toastHeld.current.hover || toastHeld.current.focus) {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      toastTimer.current = null;
+    } else startToastTimer();
   }
 
   function clearToast() {
@@ -242,24 +356,29 @@ export default function BooksPage() {
 
   const toastElement = toast && (
     <div
+      ref={toastRef}
       role="status"
-      className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] sm:bottom-6 mx-auto w-fit max-w-sm bg-foreground text-background px-5 py-3 rounded-xl text-sm font-bold shadow-lg z-50 flex items-center gap-3"
+      onMouseEnter={() => holdToast("hover", true)}
+      onMouseLeave={() => holdToast("hover", false)}
+      onFocus={() => holdToast("focus", true)}
+      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) holdToast("focus", false); }}
+      className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] sm:bottom-6 mx-auto w-fit max-w-sm bg-foreground text-background px-5 py-3 rounded-xl text-sm font-bold shadow-lg z-[var(--z-toast)] flex items-center gap-3"
     >
       <span>{toast.message}</span>
       {toast.noteFor !== undefined && (
         <button
           onClick={handleAddNote}
           aria-label={`Add a note for ${toast.noteFor}`}
-          className="text-secondary font-bold hover:underline min-h-[44px] px-1"
+          className="text-secondary font-bold hover:underline min-h-[44px] px-1 active:scale-[0.98]"
         >
           Add a note
         </button>
       )}
       <button
         onClick={handleUndo}
-        className="text-secondary font-bold hover:underline min-h-[44px] px-1"
+        className="text-secondary font-bold hover:underline min-h-[44px] px-1 active:scale-[0.98]"
       >
-        Undo
+        {toast.retry ? "Try again" : "Undo"}
       </button>
     </div>
   );
@@ -284,9 +403,9 @@ export default function BooksPage() {
     return (
       <div className="p-6 sm:p-8 max-w-5xl mx-auto">
         <div className="h-8 w-40 bg-muted rounded-xl animate-pulse mb-6" />
-        <div className="flex gap-1 mb-6">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-10 w-28 bg-muted rounded-xl animate-pulse" />
+        <div className="flex gap-1 mb-6 overflow-hidden">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} role="status" aria-label="Loading tab" className="h-10 w-28 shrink-0 bg-muted rounded-xl animate-pulse" />
           ))}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -315,7 +434,8 @@ export default function BooksPage() {
       <div
         role="tablist"
         aria-label="Book review tabs"
-        className="flex flex-wrap gap-1 mb-6 border-b border-primary/10"
+        ref={tabList}
+        className="flex gap-1 mb-6 border-b border-primary/10 overflow-x-auto"
         onKeyDown={(e) => {
           const keys = ["ArrowLeft", "ArrowRight"];
           if (!keys.includes(e.key)) return;
@@ -336,7 +456,7 @@ export default function BooksPage() {
             aria-selected={activeTab === t.key}
             tabIndex={activeTab === t.key ? 0 : -1}
             onClick={() => setActiveTab(t.key)}
-            className={`min-h-[44px] px-4 py-2 text-sm font-bold rounded-t-xl transition-colors relative focus-visible:outline-2 focus-visible:outline-primary ${
+            className={`min-h-[44px] shrink-0 whitespace-nowrap px-4 py-2 text-sm font-bold rounded-t-xl transition-colors relative focus-visible:-outline-offset-6 focus-visible:shadow-[inset_0_0_0_3px_var(--foreground)]! active:scale-[0.98] ${
               activeTab === t.key
                 ? "text-primary after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary"
                 : "text-foreground/50 hover:text-foreground/80"
@@ -359,19 +479,20 @@ export default function BooksPage() {
       ) : (
         <>
           {/* Mobile: cards */}
-          <StaggerGrid className="sm:hidden grid grid-cols-1 gap-4">
+          <StaggerGrid className="md:hidden grid grid-cols-1 gap-4">
             {visibleJobs.map((j) => (
               <StaggerItem key={j.id}>
                 <BookCard
                   job={j}
-                  thumbnailUrl={thumbnails[j.id] ?? null}
+                  thumbnailUrl={thumbPath(j) ? thumbnails[j.id] : null}
+                  onRetryThumbnail={thumbPath(j) ? () => void retryThumbnail(j) : undefined}
                   onOpen={() => openDialog(j.id)}
                 />
               </StaggerItem>
             ))}
           </StaggerGrid>
           {/* Desktop: table */}
-          <div className="hidden sm:block overflow-x-auto rounded-2xl border border-primary/15 shadow-[0_6px_18px_rgb(49_85_217/10%)]">
+          <div className="hidden md:block overflow-x-auto rounded-2xl border border-primary/15 shadow-[0_6px_18px_rgb(49_85_217/10%)]">
             <table className="w-full text-sm">
               <thead className="bg-surface border-b border-primary/10">
                 <tr>
@@ -395,7 +516,8 @@ export default function BooksPage() {
                   <BookTableRow
                     key={j.id}
                     job={j}
-                    thumbnailUrl={thumbnails[j.id] ?? null}
+                    thumbnailUrl={thumbPath(j) ? thumbnails[j.id] : null}
+                    onRetryThumbnail={thumbPath(j) ? () => void retryThumbnail(j) : undefined}
                     onOpen={() => openDialog(j.id)}
                   />
                 ))}
@@ -423,6 +545,8 @@ export default function BooksPage() {
       <BookReviewDialog
         job={dialogJob}
         pageUrls={dialogPageUrls}
+        pagesFailed={dialogPagesFailed}
+        onRetryPages={(indexes) => void retryDialogPages(indexes)}
         notesEnabled={notesEnabled}
         openNoteFor={noteJobId}
         onDecide={handleDecide}
@@ -470,10 +594,12 @@ function EmptyState({ tab }: { tab: Tab }) {
 function BookTableRow({
   job,
   thumbnailUrl,
+  onRetryThumbnail,
   onOpen,
 }: {
   job: Job;
-  thumbnailUrl: string | null;
+  thumbnailUrl: string | null | undefined;
+  onRetryThumbnail?: () => void;
   onOpen: () => void;
 }) {
   const state = jobState(job);
@@ -489,12 +615,7 @@ function BookTableRow({
     >
       <td className="px-6 py-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-muted overflow-hidden shrink-0">
-            {thumbnailUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={thumbnailUrl} alt="" aria-hidden="true" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-            )}
-          </div>
+          <PictureBox src={thumbnailUrl} alt="" onRetry={onRetryThumbnail} compact className="aspect-[4/3] w-15 rounded-xl shrink-0" />
           <span className="font-bold">{name}</span>
         </div>
       </td>
@@ -507,8 +628,9 @@ function BookTableRow({
       </td>
       <td className="px-6 py-3 text-right">
         <button
-          className="text-primary text-sm font-bold hover:underline min-h-[44px] px-2"
-          onClick={onOpen}
+          className="text-primary text-sm font-bold hover:underline min-h-[44px] px-2 active:scale-[0.98]"
+          // The row opens the book too; one click must sign once.
+          onClick={(e) => { e.stopPropagation(); onOpen(); }}
         >
           Review
         </button>
@@ -561,19 +683,19 @@ export function FailedBookRow({ job }: { job: Job }) {
 
   return (
     <div className="bg-surface border border-primary/10 rounded-2xl p-4">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <div className="min-w-0 break-words">
           <p className="font-bold text-sm text-foreground">{name}</p>
           <p className="text-xs text-foreground/60">{displayTitle(job.title, job.input_text)}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex items-center gap-1 font-mono text-xs text-foreground/60 bg-muted/30 px-2 py-0.5 rounded">
             <span>Ref: {job.id.slice(0, 8)}</span>
             <button
               type="button"
               aria-label="Copy story reference ID"
               onClick={handleCopy}
-              className="ml-1 inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-primary font-bold hover:underline"
+              className="ml-1 inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-primary font-bold hover:underline active:scale-[0.98]"
             >
               Copy
             </button>
