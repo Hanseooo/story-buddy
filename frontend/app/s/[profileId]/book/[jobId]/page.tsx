@@ -8,7 +8,7 @@ import { useJob } from "@/lib/useJob";
 import { displayTitle } from "@/lib/displayTitle";
 import FailureScreen, { resetFailChain } from "@/components/FailureScreen";
 import StoppedStory from "@/components/StoppedStory";
-import { signPaths } from "@/lib/signedUrls";
+import { forgetSignedUrls, signPaths } from "@/lib/signedUrls";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -360,9 +360,9 @@ async function pencilPost(path: string, body: object) {
 // ADR-082 / magic-pencil 10 (US-04): the child's words change this page's current picture once. The
 // edit runs server-side, so a closed tab still completes, and the result waits for "Keep this" or
 // "Use the old one". A request carries its id and source picture, so a retry spends once (SH-08).
-function PagePencil({ jobId, pageNumber, page, status, reviewed, busy, onBusy, onChanged, choiceSlot }: {
+function PagePencil({ jobId, pageNumber, page, status, reviewed, busy, onBusy, onChanged, onRetryOld, choiceSlot }: {
   jobId: string; pageNumber: number; page: SignedPage; status: PencilStatus; reviewed: boolean; busy: boolean;
-  onBusy: (busy: boolean) => void; onChanged: () => Promise<unknown>;
+  onBusy: (busy: boolean) => void; onChanged: () => Promise<unknown>; onRetryOld: () => void;
   /** Where the Old/New choice renders: a full-width row of the card, not this narrow text column. */
   choiceSlot: HTMLElement | null;
 }) {
@@ -565,7 +565,7 @@ function PagePencil({ jobId, pageNumber, page, status, reviewed, busy, onBusy, o
         <div role="group" aria-label={`Your changed picture for page ${pageNumber}`} className="mt-3 w-full rounded-2xl bg-primary/5 p-4 text-left">
           {/* Old and New side by side when there is room for both, stacked on a phone (audit B3). */}
           <OldNewPictures
-            old={<PictureBox src={page.signedUrl} alt={`Old picture for page ${pageNumber}`} className="aspect-[4/3] w-full rounded-lg" />}
+            old={<PictureBox src={page.signedUrl} alt={`Old picture for page ${pageNumber}`} className="aspect-[4/3] w-full rounded-lg" onRetry={onRetryOld} />}
             fresh={afterState === "error" ? (
               <div role="alert" className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-lg bg-muted p-3 text-center font-kid text-sm">
                 <p>We couldn&apos;t load this picture right now.</p>
@@ -866,6 +866,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   }
 
   function retryPicture(path: string) {
+    forgetSignedUrls([path]);
     delete collectedUrls.current[path];
     setBrokenPictures(b => ({ ...b, [path]: false }));
     void signPages(1);
@@ -1242,7 +1243,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                       {pencilBook && pencil && (
                         <PagePencil key={current.scene_id} jobId={jobId} pageNumber={pageIndex + 1} page={current} status={pencil}
                           reviewed={Boolean(row?.approved_at || row?.rejected_at)} busy={changingPage}
-                          onBusy={setChangingPage} onChanged={pencilChanged} choiceSlot={choiceSlot} />
+                          onBusy={setChangingPage} onChanged={pencilChanged} onRetryOld={() => retryPicture(current.image_path)} choiceSlot={choiceSlot} />
                       )}
                     </div>
                     

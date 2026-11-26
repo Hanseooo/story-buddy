@@ -868,6 +868,23 @@ describe("BookPage — magic pencil on a finished page (magic pencil 10)", () =>
     expect(JSON.parse(String(chosen[1]!.body))).toEqual({ use_id: "u1", choice: "old", source: "j1/s0-pencil-u1.png" });
   });
 
+  it("a broken old picture in the choice offers Try again, which signs a fresh link", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
+    let round = 0;
+    pencilNetwork([{ pencils_left: 4, disabled_reason: null, uses: [use("choice", AFTER)] }], (url) => {
+      if (!url.includes("/image-links?")) return undefined;
+      round += 1;
+      return Response.json({ links: new URLSearchParams(url.split("?")[1]).getAll("asset")
+        .filter((a) => a === "scene-s0" || a === "scene-s1").map((a) => ({ asset_id: a, path: LINKED[a], url: `https://cdn.test/${LINKED[a]}?round=${round}` })) });
+    });
+    await renderAndSwitchToPages(makeParams());
+    const old = await screen.findByRole("figure", { name: "Old" });
+    fireEvent.error(within(old).getByRole("img", { name: "Old picture for page 1" }));
+    fireEvent.click(within(old).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(within(old).getByRole("img", { name: "Old picture for page 1" }))
+      .toHaveAttribute("src", "https://cdn.test/j1/s0-1.png?round=2"));
+  });
+
   it("covers the page picture while the change is drawing (ticket 05)", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
     pencilNetwork([{ pencils_left: 5, disabled_reason: null, uses: [use("drawing")] }]);
