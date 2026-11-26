@@ -422,7 +422,7 @@ function RowMenu({
                 onClose();
                 onRemove();
               }}
-              className="w-full text-left px-4 py-3 text-sm rounded-xl hover:bg-destructive/10 transition-colors font-bold text-destructive focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary active:scale-[0.98]"
+              className="w-full text-left px-4 py-3 text-sm rounded-xl border-2 border-destructive hover:bg-destructive/10 transition-colors font-bold text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary active:scale-[0.98]"
             >
               Remove
             </button>

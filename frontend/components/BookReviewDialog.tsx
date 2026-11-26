@@ -206,7 +206,7 @@ export default function BookReviewDialog({
               {state !== "rejected" && state !== "pending" ? null : (
                 <button
                   onClick={() => onDecide("rejected")}
-                  className="min-h-[44px] px-6 py-2 rounded-xl border border-destructive text-destructive font-bold text-sm hover:bg-destructive/10 transition-colors active:scale-[0.98]"
+                  className="min-h-[44px] px-6 py-2 rounded-xl border-2 border-destructive text-foreground font-bold text-sm hover:bg-destructive/10 transition-colors active:scale-[0.98]"
                 >
                   Not ready to share yet
                 </button>
