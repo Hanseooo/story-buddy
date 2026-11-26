@@ -1170,3 +1170,136 @@ def test_create_classroom_retries_on_code_collision(_teacher_only):
 
     assert resp.status_code == 201
     assert call_count["n"] == 2  # two code checks: first collided, second succeeded
+
+
+# --- judge-selector 04: GET /judges (US-04, AC-19 to AC-22) ---
+
+import logging  # noqa: E402
+
+import httpx  # noqa: E402
+from openai import OpenAI as _RealOpenAI  # noqa: E402
+
+QWEN_URL = "http://qwen-judge.test.invalid:8000/v1"
+QWEN_KEY = "sk-qwen-judge-test-key"
+
+
+def _qwen_server(monkeypatch, handler, url=QWEN_URL):
+    """Point the settings at a fake vLLM server; returns the requests it saw and the client kwargs.
+
+    `providers.OpenAI` is patched at the client boundary only: the real SDK still builds the
+    request, and an httpx MockTransport stands in for the network.
+    """
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "qwen_judge_base_url", url)
+    monkeypatch.setattr(settings, "qwen_judge_api_key", QWEN_KEY)
+    seen = {"requests": [], "client_kwargs": []}
+
+    def transport(request):
+        seen["requests"].append(request)
+        return handler(request)
+
+    def fake_openai(**kwargs):
+        seen["client_kwargs"].append(kwargs)
+        return _RealOpenAI(**kwargs, http_client=httpx.Client(transport=httpx.MockTransport(transport)))
+
+    monkeypatch.setattr("providers.OpenAI", fake_openai)
+    return seen
+
+
+def _models(*ids):
+    return lambda request: httpx.Response(
+        200, json={"object": "list", "data": [{"id": i, "object": "model", "owned_by": "vllm"} for i in ids]}
+    )
+
+
+def _offline(reason):
+    return [
+        {"id": "gemma", "label": "Standard (Gemma)", "available": True, "reason": None},
+        {"id": "qwen_base", "label": "Qwen base", "available": False, "reason": reason},
+        {"id": "qwen_finetuned", "label": "Qwen fine-tuned", "available": False, "reason": reason},
+    ]
+
+
+def test_judges_both_qwen_ids_listed_makes_both_available(monkeypatch):
+    seen = _qwen_server(monkeypatch, _models("Qwen/Qwen3.5-9B", "seed2_checkpoint140"))
+
+    response = client.get("/judges")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"id": "gemma", "label": "Standard (Gemma)", "available": True, "reason": None},
+        {"id": "qwen_base", "label": "Qwen base", "available": True, "reason": None},
+        {"id": "qwen_finetuned", "label": "Qwen fine-tuned", "available": True, "reason": None},
+    ]
+    [request] = seen["requests"]
+    assert str(request.url) == "http://qwen-judge.test.invalid:8000/v1/models"
+    assert request.headers["authorization"] == "Bearer sk-qwen-judge-test-key"
+    [kwargs] = seen["client_kwargs"]
+    assert kwargs["timeout"] == 3.0
+    assert kwargs["max_retries"] == 0
+
+
+def test_judges_timeout_makes_both_qwen_unavailable_with_one_reason(monkeypatch):
+    def hang(request):
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    seen = _qwen_server(monkeypatch, hang)
+
+    response = client.get("/judges")
+
+    assert response.status_code == 200
+    assert response.json() == _offline("unreachable")
+    [request] = seen["requests"]
+    assert request.headers["authorization"] == "Bearer sk-qwen-judge-test-key"
+
+
+def test_judges_url_unset_never_calls_the_server(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "qwen_judge_base_url", None)
+    openai_cls = MagicMock()
+    monkeypatch.setattr("providers.OpenAI", openai_cls)
+
+    response = client.get("/judges")
+
+    assert response.status_code == 200
+    assert response.json() == _offline("not_configured")
+    openai_cls.assert_not_called()
+
+
+def test_judges_missing_adapter_id_makes_both_qwen_unavailable(monkeypatch):
+    _qwen_server(monkeypatch, _models("Qwen/Qwen3.5-9B"))
+
+    response = client.get("/judges")
+
+    assert response.json() == _offline("model_missing")
+
+
+def test_judges_no_token_returns_401():
+    app.dependency_overrides.pop(get_current_user, None)
+    response = client.get("/judges")
+    assert response.status_code == 401
+
+
+def _refuse(request):
+    raise httpx.ConnectError(f"cannot connect to {QWEN_URL} with {QWEN_KEY}", request=request)
+
+
+@pytest.mark.parametrize(("server", "expected"), [
+    (_models("Qwen/Qwen3.5-9B", "seed2_checkpoint140"), True),
+    (_refuse, False),
+    # The SDK puts the error body in the exception text; this body echoes the URL and key.
+    (lambda request: httpx.Response(401, json={"error": f"bad key {QWEN_KEY} for {QWEN_URL}"}), False),
+])
+def test_judges_never_returns_or_logs_the_qwen_url_or_key(monkeypatch, caplog, server, expected):
+    # INFO is the worker's level (`run_worker.py`), and httpx logs every request URL at INFO.
+    caplog.set_level(logging.INFO)
+    _qwen_server(monkeypatch, server)
+
+    response = client.get("/judges")
+
+    assert [option["available"] for option in response.json()] == [True, expected, expected]
+    for secret in ("qwen-judge.test.invalid", QWEN_KEY):
+        assert secret not in response.text
+        assert secret not in caplog.text

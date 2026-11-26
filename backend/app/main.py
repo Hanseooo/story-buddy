@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
 from app.config import MAX_PENCIL_CHARS, MAX_TITLE_CHARS, MIN_STORY_WORDS, SELECTABLE_STYLE_PRESET_IDS, settings
+from app.config import QWEN_BASE_MODEL, QWEN_FINETUNED_MODEL, judge_options
 from app.moderation_policy import TEACHER_MODERATION_POLICY_VERSION
 from app.length import clamp_story, word_count
 from app.db import get_supabase_client
@@ -158,6 +159,36 @@ def update_avatar(payload: AvatarRequest, user=Depends(get_current_user)) -> dic
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+def _qwen_unavailable_reason() -> str | None:
+    """SH-05: one answer for both Qwen choices. None means available."""
+    if not settings.qwen_judge_base_url:
+        return "not_configured"
+    try:
+        listed = providers.qwen_judge_models()
+    except Exception as exc:
+        # The exception text can carry the server URL (AC-22), so only its type is logged.
+        _log.warning("qwen judge availability check failed: %s", type(exc).__name__)
+        return "unreachable"
+    if not {QWEN_BASE_MODEL, QWEN_FINETUNED_MODEL} <= listed:
+        return "model_missing"
+    return None
+
+
+@app.get("/judges")
+def list_judges(user=Depends(get_current_user)) -> list[dict]:
+    """US-04: the three SH-01 options for the write screen. Gemma is always available."""
+    qwen_reason = _qwen_unavailable_reason()
+    return [
+        {
+            "id": choice,
+            "label": option["label"],
+            "available": choice == "gemma" or qwen_reason is None,
+            "reason": None if choice == "gemma" else qwen_reason,
+        }
+        for choice, option in judge_options().items()
+    ]
 
 
 @app.post("/storybooks", response_model=CreateStorybookResponse)
