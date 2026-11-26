@@ -1117,8 +1117,9 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                 </button>
               )}
 
-              {(c.versions === undefined || changeOpen[c.char_id]) && (
-              <div id={`change-tools-${c.char_id}`} className="flex w-full flex-col items-center gap-4">
+              {/* Hidden, not unmounted, when closed, so the pencil keeps what the child typed. */}
+              <div id={`change-tools-${c.char_id}`} hidden={c.versions !== undefined && !changeOpen[c.char_id]}
+                className="flex w-full flex-col items-center gap-4">
               {c.versions !== undefined && c.pencil_ready && (
                 <MagicPencil
                   key={`pencil-${c.image_path}`}
@@ -1197,7 +1198,6 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                 </div>
               )}
               </div>
-              )}
               </>)}
               {confirmError?.charId === c.char_id && (
                 <p role="alert" className="w-full font-kid text-base text-[var(--color-destructive)] bg-[var(--color-destructive)]/10 px-4 py-3 rounded-xl">

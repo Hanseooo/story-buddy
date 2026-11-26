@@ -1124,6 +1124,20 @@ describe("ProcessingPage — magic pencil (ticket 06)", () => {
     expect(screen.getByRole("button", { name: "Magic pencil for Kiko" })).toBeDefined();
   });
 
+  it("keeps the typed pencil words when Change this picture closes and opens again (ticket 05)", async () => {
+    serve();
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PENCIL_ROW }));
+    await renderPausedPage();
+    const tools = screen.getByRole("button", { name: "Change this picture of Kiko" });
+    fireEvent.click(tools);
+    fireEvent.click(screen.getByRole("button", { name: "Magic pencil for Kiko" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "What should change about Kiko?" }), { target: { value: "a red hat" } });
+    fireEvent.click(tools);
+    expect(screen.queryByRole("textbox", { name: "What should change about Kiko?" })).toBeNull();
+    fireEvent.click(tools);
+    expect(screen.getByRole("textbox", { name: "What should change about Kiko?" })).toHaveValue("a red hat");
+  });
+
   it("shows the old and new pictures side by side with labels (ticket 05)", async () => {
     global.fetch = vi.fn((url: string) => Promise.resolve(imageLinksResponse(url,
       { "ref-c0": "j1/ref-c0-2.png", "version-ref-c0-1": "j1/ref-c0-1.png" }))) as unknown as typeof fetch;
