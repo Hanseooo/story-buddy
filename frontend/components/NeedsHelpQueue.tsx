@@ -129,6 +129,8 @@ export default function NeedsHelpQueue({ classroomId, active, onCount, onBack }:
             }}>Inspect story</button>
           </li>)}
         </ul>}
+      {/* Ticket 13: the criteria reference is reachable from Books, held stories or not. */}
+      <ReviewCriteria />
       {selected && <HeldStory key={selected} jobId={selected} onClose={close} />}
     </section>
   );
@@ -259,13 +261,18 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
               {detail.detected_themes?.map(theme => <p key={theme.theme_id}>{theme.theme_id.replaceAll("_", " ")}: {theme.reason}</p>)}
             </>}
             {detail.kind !== "optional_themes" && !detail.classifier_evidence?.length && <p>The recorded reason is unavailable</p>}
+            {/* ADR-080 / ticket 13 AC-09: the recorded explanation and captured settings stay in view. */}
+            {detail.classifier_evidence?.map((evidence, index) => <div key={index} className="space-y-1">
+              <h5 className="font-bold">{evidence.layer === "primary" ? "Primary classifier" : "Backstop classifier"}</h5>
+              <p className="whitespace-pre-wrap">{evidence.reason?.trim() || "The recorded reason is unavailable"}</p>
+            </div>)}
+            <p>Captured settings version: {detail.settings_snapshot?.settings_version ?? "Unavailable"}</p>
             <ReviewCriteria />
             {/* Ticket 04: machine evidence starts closed but stays in the page for the teacher (ADR-080). */}
             <details className="py-4 space-y-4">
               <summary className={`${control} cursor-pointer`}>Technical record</summary>
               <p>Policy at submission: {detail.policy_version || "Unavailable"}</p>
               <p>Current policy: {detail.current_policy_version || "Unavailable"}</p>
-              <p>Captured settings version: {detail.settings_snapshot?.settings_version ?? "Unavailable"}</p>
               {detail.kind === "optional_themes" && <>
                 <p>Recorded detector: {detail.theme_check?.model_id || "Unavailable"}</p>
                 <p>Instruction version: {detail.theme_check?.instruction_version || "Unavailable"}</p>
@@ -279,7 +286,6 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
                   <dt>Checked at</dt><dd>{evidence.checked_at ? new Date(evidence.checked_at).toLocaleString() : "Unavailable"}</dd>
                   <dt>Recorded labels</dt><dd>{evidence.categories?.join(", ") || "Unavailable"}</dd>
                 </dl>
-                <p className="whitespace-pre-wrap">{evidence.reason?.trim() || "The recorded reason is unavailable"}</p>
               </div>)}
             </details>
           </section>}

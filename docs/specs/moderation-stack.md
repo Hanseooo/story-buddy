@@ -1506,9 +1506,12 @@ missing; reads do not reconstruct it from current configuration or logs.
 Books' Needs your help inspection offers a native, keyboard-reachable **Review criteria**
 disclosure with loading, retry, close and Escape/focus recovery. Inspection shows the recorded
 origin, criteria, policy/settings, classifier outcome, labels, model/instruction version, time
-and explanation; missing evidence is labelled unavailable. Policy and settings versions, the theme
-detector and classifier records sit under a closed **Technical record** disclosure that stays in the
-page (UI audit ticket 04). Current definitions are clearly
+and explanation; missing evidence is labelled unavailable. The classifier explanations and the
+captured settings version stay in view (ADR-080, ticket 13 AC-09). Policy versions, the theme
+detector and the raw classifier records (model, instruction version, outcome, time, labels) sit
+under a closed **Technical record** disclosure that stays in the page (UI audit ticket 04). The
+Needs your help queue shows **Review criteria** again, even when the queue is empty, and each
+inspection keeps its own copy (UI audit round 2). Current definitions are clearly
 separate from the submission's captured evidence. No decision controls or theme detector are added.
 
 Verification: provider reasoning redaction, node capture/missing reasoning and call-time model

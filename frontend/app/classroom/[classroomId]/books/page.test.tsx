@@ -737,15 +737,22 @@ describe("held story inspection", () => {
     expect(within(record).getByText("mistralai/mistral-small-3.2-24b-instruct")).toBeDefined();
     expect(within(record).getByText("sha256:519f1f08eba0b868589c168057db510306f11c518134aa0c37da7cc4a37436a7")).toBeDefined();
     expect(within(record).getByText("Policy at submission: teacher_review_policy_v1")).toBeDefined();
-    expect(within(record).getByText("Captured settings version: 0")).toBeDefined();
-    expect(within(record).getByText("Synthetic review explanation")).toBeDefined();
-    // The plain reason stays outside the disclosure.
+    // AC-09: the recorded explanation and captured settings stay outside the disclosure.
+    expect(record).not.toContainElement(screen.getByText("Captured settings version: 0"));
+    expect(record).not.toContainElement(screen.getByText("Synthetic review explanation"));
     expect(record).not.toContainElement(screen.getByText("Shared safety", { selector: "p" }));
     fireEvent.click(within(record).getByText("Technical record"));
     expect(record).toHaveAttribute("open");
     vi.unstubAllGlobals();
   });
-  it("offers Review criteria once while a held story is open (ticket 04)", async () => {
+  it("offers Review criteria on an empty queue (ticket 13)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json([])));
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    expect(await screen.findByText("No stories need your help")).toBeDefined();
+    expect(screen.getByText("Review criteria", { selector: "summary" })).toBeDefined();
+    vi.unstubAllGlobals();
+  });
+  it("offers Review criteria once inside an open held story (ticket 04)", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url.endsWith("/moderation-review")) return Response.json(heldDetail);
       return Response.json([{ review_id: heldDetail.review_id, job_id: "synthetic-job", title: heldDetail.title, held_at: "2026-10-28T00:00:00Z", ready: true }]);
@@ -753,7 +760,7 @@ describe("held story inspection", () => {
     render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
     fireEvent.click(await screen.findByRole("button", { name: /Inspect Synthetic title/ }));
     await screen.findByRole("button", { name: "Allow this picture" });
-    expect(screen.getAllByText("Review criteria")).toHaveLength(1);
+    expect(within(screen.getByRole("dialog")).getAllByText("Review criteria")).toHaveLength(1);
     vi.unstubAllGlobals();
   });
   it("groups every decision control in one Decision region, apart from Back (ticket 04)", async () => {
