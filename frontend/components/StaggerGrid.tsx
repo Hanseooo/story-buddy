@@ -32,7 +32,7 @@ export function StaggerItem({ children }: { children: ReactNode }) {
       }}
       whileHover={{ y: -2, transition: { type: "spring", bounce: 0, duration: 0.15 } }}
       transition={{ type: "spring", bounce: 0, duration: 0.25 }}
-      className="block outline-none focus-within:ring-2 focus-within:ring-secondary focus-within:ring-offset-2 rounded-2xl"
+      className="block outline-none rounded-2xl"
     >
       {children}
     </motion.li>
