@@ -13,7 +13,7 @@ import StoppedStory from "@/components/StoppedStory";
 import PictureBox from "@/components/PictureBox";
 import OldNewPictures from "@/components/OldNewPictures";
 import { supabase } from "@/lib/supabaseClient";
-import { signPaths } from "@/lib/signedUrls";
+import { forgetSignedUrls, signPaths } from "@/lib/signedUrls";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { BookOpen, Users, PaintBrush, MagicWand, Check, MagnifyingGlass } from "@phosphor-icons/react";
 
@@ -540,7 +540,7 @@ function MagicPencil({ character, tapsLeft, disabled, onSubmit }: {
 // AC-11: the old and new pictures are shown side by side with the choice. The go is spent either
 // way, and the book cannot go on until the child chooses (the API rejects confirm meanwhile).
 function PencilChoice({ jobId, moderationMode, character, newUrl, disabled, onChoose, onRetryNew }: {
-  jobId: string; moderationMode?: string; character: RevealCharacter; newUrl: string | undefined; disabled: boolean;
+  jobId: string; moderationMode?: string; character: RevealCharacter; newUrl: string | null | undefined; disabled: boolean;
   onChoose: (choice: "kept" | "old") => void; onRetryNew: () => void;
 }) {
   const old = character.pencil_choice!;
@@ -585,7 +585,8 @@ function PencilChoice({ jobId, moderationMode, character, newUrl, disabled, onCh
               </button>
             </div>
           ) : (
-            <PictureBox src={url ?? undefined} alt={`Old picture of ${character.name}`} className="aspect-[4/3] w-full rounded-[8px]" />
+            <PictureBox src={url ?? undefined} alt={`Old picture of ${character.name}`} className="aspect-[4/3] w-full rounded-[8px]"
+              onRetry={() => { forgetSignedUrls([old.image_path]); setUrl(null); setState("loading"); setAttempt((value) => value + 1); }} />
           )}
           fresh={<PictureBox src={newUrl} alt={`New picture of ${character.name}`} onRetry={onRetryNew} className="aspect-[4/3] w-full rounded-[8px]" />}
         />
@@ -1013,13 +1014,14 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
               }}
               className={`flex flex-col items-center gap-4 neo-border bg-[var(--color-surface)] rounded-[24px] p-5 shadow-[0_10px_28px_rgba(49,85,217,0.12)] ${c.pencil_choice ? "max-w-2xl" : "max-w-xs"} w-full`}
             >
-              {characterImageState[c.char_id] === "error" ? (
+              {/* While choosing, the New box in the choice is the only copy of the new picture (audit Q3). */}
+              {c.pencil_choice ? null : characterImageState[c.char_id] === "error" ? (
                 <div role="alert" className="flex aspect-square w-full max-w-[17.5rem] flex-col items-center justify-center gap-3 rounded-[16px] bg-[var(--color-muted)] p-4 text-center font-kid">
                   <p>We couldn&apos;t load {c.name}&apos;s picture.</p>
                   <button
                     type="button"
                     className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 active:scale-[0.98]"
-                    onClick={() => void loadCharacterImages([c])}
+                    onClick={() => { forgetSignedUrls([c.image_path]); void loadCharacterImages([c]); }}
                   >
                     Try loading {c.name}&apos;s picture again
                   </button>
@@ -1049,9 +1051,9 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                   jobId={jobId}
                   moderationMode={moderationMode}
                   character={c}
-                  newUrl={signedCharUrls[c.char_id]}
+                  newUrl={characterImageState[c.char_id] === "error" ? null : signedCharUrls[c.char_id]}
                   disabled={submissionsDisabled}
-                  onRetryNew={() => void loadCharacterImages([c])}
+                  onRetryNew={() => { forgetSignedUrls([c.image_path]); void loadCharacterImages([c]); }}
                   onChoose={(choice) => {
                     setSelectedTrait(null);
                     setPendingRedrawName(null);

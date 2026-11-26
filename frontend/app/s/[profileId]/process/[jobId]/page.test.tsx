@@ -822,6 +822,18 @@ describe("ProcessingPage — reveal (paused bucket)", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it("Try loading again after a broken picture signs a fresh link, not the cached one", async () => {
+    let round = 0;
+    mockCreateSignedUrls.mockImplementation(async (paths: string[]) => ({
+      data: paths.map((path) => ({ path, signedUrl: `http://example.com/c0.png?round=${++round}` })), error: null,
+    }));
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PAUSED_ROW }));
+    await renderPage(makeParams("j1"));
+    fireEvent.error(await screen.findByRole("img", { name: "Kiko" }));
+    fireEvent.click(screen.getByRole("button", { name: "Try loading Kiko's picture again" }));
+    expect(await screen.findByRole("img", { name: "Kiko" })).toHaveAttribute("src", "http://example.com/c0.png?round=2");
+  });
+
   it("explains an empty chip list without inventing a redraw choice", async () => {
     const emptyChips = {
       ...PAUSED_ROW,
@@ -1164,6 +1176,61 @@ describe("ProcessingPage — magic pencil (ticket 06)", () => {
     fireEvent.error(within(fresh).getByRole("img", { name: "New picture of Kiko" }));
     fireEvent.click(within(fresh).getByRole("button", { name: "Try again" }));
     expect(await within(fresh).findByRole("img", { name: "New picture of Kiko" })).toHaveAttribute("src", "https://cdn.test/j1/ref-c0-2.png");
+  });
+
+  // Each sign of an asset returns a new link, as the backend does, so a reused cached link shows.
+  // `late` answers after the others: two signs at once each save the whole cache, and the last save wins.
+  function serveRounds(late?: string) {
+    const paths: Record<string, string> = { "ref-c0": "j1/ref-c0-2.png", "version-ref-c0-1": "j1/ref-c0-1.png" };
+    const rounds: Record<string, number> = {};
+    global.fetch = vi.fn(async (url: string) => {
+      const assets = new URLSearchParams(url.split("?")[1]).getAll("asset");
+      if (late && assets.includes(late)) await new Promise((resolve) => setTimeout(resolve, 20));
+      return Response.json({ links: assets.map((a) => ({ asset_id: a, path: paths[a], url: `https://cdn.test/${paths[a]}?round=${(rounds[a] = (rounds[a] ?? 0) + 1)}` })) });
+    }) as unknown as typeof fetch;
+  }
+  const CHOOSING = withCharacter({
+    image_path: "j1/ref-c0-2.png", versions: [{ version_id: "ref-c0-1", image_path: "j1/ref-c0-1.png" }],
+    pencil_choice: { use_id: "pencil-1", version_id: "ref-c0-1", image_path: "j1/ref-c0-1.png" },
+  }, 1);
+
+  it("Try again on a broken new picture signs a fresh link, not the cached one", async () => {
+    serveRounds("ref-c0");
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: CHOOSING }));
+    await renderPausedPage();
+    const fresh = screen.getByRole("figure", { name: "New" });
+    fireEvent.error(within(fresh).getByRole("img", { name: "New picture of Kiko" }));
+    fireEvent.click(within(fresh).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(within(fresh).getByRole("img", { name: "New picture of Kiko" }))
+      .toHaveAttribute("src", "https://cdn.test/j1/ref-c0-2.png?round=2"));
+  });
+
+  it("Try again on a broken old picture signs a fresh link, not the cached one", async () => {
+    serveRounds("version-ref-c0-1");
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: CHOOSING }));
+    await renderPage(makeParams());
+    const old = screen.getByRole("figure", { name: "Old" });
+    fireEvent.error(await within(old).findByRole("img", { name: "Old picture of Kiko" }));
+    fireEvent.click(within(old).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(within(old).getByRole("img", { name: "Old picture of Kiko" }))
+      .toHaveAttribute("src", "https://cdn.test/j1/ref-c0-1.png?round=2"));
+  });
+
+  it("shows the new picture once while choosing, in the New box", async () => {
+    serveRounds();
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: CHOOSING }));
+    await renderPausedPage();
+    const shown = screen.getAllByRole("img").filter((img) => img.getAttribute("src") === "https://cdn.test/j1/ref-c0-2.png?round=1");
+    expect(shown).toHaveLength(1);
+    expect(within(screen.getByRole("figure", { name: "New" })).getByRole("img")).toBe(shown[0]);
+  });
+
+  it("a new picture that could not be signed while choosing offers Try again in the New box", async () => {
+    global.fetch = vi.fn(async (url: string) => imageLinksResponse(url, { "version-ref-c0-1": "j1/ref-c0-1.png" })) as unknown as typeof fetch;
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: CHOOSING }));
+    await renderPage(makeParams());
+    const fresh = screen.getByRole("figure", { name: "New" });
+    expect(await within(fresh).findByRole("button", { name: "Try again" })).toBeDefined();
   });
 
   it("says the goes are shared by both tools", async () => {
