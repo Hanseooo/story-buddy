@@ -17,6 +17,7 @@ from contextvars import ContextVar, copy_context
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Callable, Generic, Literal, TypeVar
+from urllib.parse import urlsplit
 
 import fal_client
 import httpx
@@ -180,6 +181,38 @@ def _bounded(model: str, call):
         # cannot abandon an SDK thread and then claim that promise. The RQ hard
         # deadline still kills/reaps a permanently stuck horse before marking it.
         pool.shutdown(wait=_generation_fence.get() is not None)
+
+
+# judge-selector US-04: the write screen waits on this, so it answers fast and never retries. 3 s is
+# the top of the ticket's 2-3 s suggestion; vLLM lists models from memory, so a slower answer
+# already says the server is not fit to judge.
+QWEN_AVAILABILITY_TIMEOUT_SECONDS = 3.0
+
+
+class _DropQwenJudgeHost(logging.Filter):
+    """AC-22: httpx logs every request URL at INFO (the worker's level), and the Qwen judge's
+    host must never reach a log line. Drops only records naming that host."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        host = urlsplit(settings.qwen_judge_base_url or "").netloc
+        return not host or host not in record.getMessage()
+
+
+logging.getLogger("httpx").addFilter(_DropQwenJudgeHost())
+
+
+def qwen_judge_models() -> set[str]:
+    """Model ids the Qwen judge server lists at `/models`. Raises on any failure.
+
+    The key goes as a bearer header: a vLLM server started with `--api-key` refuses an
+    unauthenticated list, which would read as offline."""
+    client = OpenAI(
+        base_url=settings.qwen_judge_base_url,
+        api_key=settings.qwen_judge_api_key,
+        timeout=QWEN_AVAILABILITY_TIMEOUT_SECONDS,
+        max_retries=0,
+    )
+    return {model.id for model in client.models.list().data}
 
 
 def structured_text(prompt: str, schema: type[T], model: str | None = None) -> T:
