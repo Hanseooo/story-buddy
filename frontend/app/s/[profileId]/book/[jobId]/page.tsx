@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { use, useEffect, useId, useState, useCallback, useRef } from "react";
+import { use, useEffect, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence, useScroll, useReducedMotion, useDragControls } from "framer-motion";
 import { useJob } from "@/lib/useJob";
 import { displayTitle } from "@/lib/displayTitle";
@@ -13,6 +13,8 @@ import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import PictureBox from "@/components/PictureBox";
+import OldNewPictures from "@/components/OldNewPictures";
+import { createPortal } from "react-dom";
 import { CaretLeft, CaretRight, BookOpen, Rows, ArrowLeft, DownloadSimple } from "@phosphor-icons/react";
 
 // Generated pictures are 1024x768 (backend `providers.GENERATED_IMAGE_SIZE`), so a 4:3 box holds
@@ -358,9 +360,11 @@ async function pencilPost(path: string, body: object) {
 // ADR-082 / magic-pencil 10 (US-04): the child's words change this page's current picture once. The
 // edit runs server-side, so a closed tab still completes, and the result waits for "Keep this" or
 // "Use the old one". A request carries its id and source picture, so a retry spends once (SH-08).
-function PagePencil({ jobId, pageNumber, page, status, reviewed, busy, onBusy, onChanged }: {
+function PagePencil({ jobId, pageNumber, page, status, reviewed, busy, onBusy, onChanged, choiceSlot }: {
   jobId: string; pageNumber: number; page: SignedPage; status: PencilStatus; reviewed: boolean; busy: boolean;
   onBusy: (busy: boolean) => void; onChanged: () => Promise<unknown>;
+  /** Where the Old/New choice renders: a full-width row of the card, not this narrow text column. */
+  choiceSlot: HTMLElement | null;
 }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
@@ -381,6 +385,7 @@ function PagePencil({ jobId, pageNumber, page, status, reviewed, busy, onBusy, o
     : !active && latest?.scene_id === page.scene_id && ["refused", "stopped", "stale"].includes(latest.state) ? latest : undefined;
   const reason = status.disabled_reason ? PENCIL_DISABLED[status.disabled_reason] ?? PENCIL_DISABLED.no_pencils : null;
   const choiceUse = mine?.state === "choice" ? mine.use_id : null;
+  const portal = (node: React.ReactNode) => (choiceSlot ? createPortal(node, choiceSlot) : node);
 
   useEffect(() => { if (open) boxRef.current?.focus(); }, [open]);
 
@@ -556,29 +561,25 @@ function PagePencil({ jobId, pageNumber, page, status, reviewed, busy, onBusy, o
           </button>
         </div>
       )}
-      {mine?.state === "choice" && (
-        <div role="group" aria-label={`Your changed picture for page ${pageNumber}`} className="@container mt-3 w-full rounded-2xl bg-primary/5 p-4 text-left">
+      {mine?.state === "choice" && portal(
+        <div role="group" aria-label={`Your changed picture for page ${pageNumber}`} className="mt-3 w-full rounded-2xl bg-primary/5 p-4 text-left">
           {/* Old and New side by side when there is room for both, stacked on a phone (audit B3). */}
-          <div className="grid grid-cols-1 gap-3 @sm:grid-cols-2">
-            <OldNew label="Old">
-              <PictureBox src={page.signedUrl} alt={`Old picture for page ${pageNumber}`} className="aspect-[4/3] w-full rounded-lg" />
-            </OldNew>
-            <OldNew label="New">
-              {afterState === "error" ? (
-                <div role="alert" className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-lg bg-muted p-3 text-center font-kid text-sm">
-                  <p>We couldn&apos;t load this picture right now.</p>
-                  <button type="button" className={`${kidControl} bg-surface`}
-                    onClick={() => { setAfterUrl(null); setAfterState("loading"); setAfterAttempt((value) => value + 1); }}>
-                    Try loading the changed picture for page {pageNumber} again
-                  </button>
-                </div>
-              ) : (
-                <PictureBox src={afterUrl ?? undefined} alt={`Your changed picture for page ${pageNumber}`}
-                  className="aspect-[4/3] w-full rounded-lg"
-                  onLoad={() => setAfterState("loaded")} onError={() => setAfterState("error")} />
-              )}
-            </OldNew>
-          </div>
+          <OldNewPictures
+            old={<PictureBox src={page.signedUrl} alt={`Old picture for page ${pageNumber}`} className="aspect-[4/3] w-full rounded-lg" />}
+            fresh={afterState === "error" ? (
+              <div role="alert" className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-lg bg-muted p-3 text-center font-kid text-sm">
+                <p>We couldn&apos;t load this picture right now.</p>
+                <button type="button" className={`${kidControl} bg-surface`}
+                  onClick={() => { setAfterUrl(null); setAfterState("loading"); setAfterAttempt((value) => value + 1); }}>
+                  Try loading the changed picture for page {pageNumber} again
+                </button>
+              </div>
+            ) : (
+              <PictureBox src={afterUrl ?? undefined} alt={`Your changed picture for page ${pageNumber}`}
+                className="aspect-[4/3] w-full rounded-lg"
+                onLoad={() => setAfterState("loaded")} onError={() => setAfterState("error")} />
+            )}
+          />
           {afterState === "loading" && <p role="status" className="font-kid text-sm">Loading your changed picture…</p>}
           <div className="mt-2 flex flex-wrap gap-2">
             <button type="button" disabled={busy || afterState !== "loaded"} onClick={keep}
@@ -605,17 +606,6 @@ function PagePencil({ jobId, pageNumber, page, status, reviewed, busy, onBusy, o
         </div>
       </dialog>
     </div>
-  );
-}
-
-// A labelled picture in the keep-or-old choice.
-function OldNew({ label, children }: { label: string; children: React.ReactNode }) {
-  const id = useId();
-  return (
-    <figure aria-labelledby={id} className="flex flex-col gap-1">
-      <figcaption id={id} className="font-kid text-sm font-bold text-foreground">{label}</figcaption>
-      {children}
-    </figure>
   );
 }
 
@@ -738,6 +728,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const [changingPage, setChangingPage] = useState(false); // SH-07: one page change per book at a time
+  const [choiceSlot, setChoiceSlot] = useState<HTMLDivElement | null>(null);
   const downloadRequest = useRef<AbortController | null>(null);
   const imageRequest = useRef<AbortController | null>(null);
   // Page URLs collected for the current imageRequest. Blobs here die with that controller, so a new
@@ -974,6 +965,8 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   const totalPages = signedPages.length;
   const current = signedPages[pageIndex];
   const drawing = Boolean(pencil?.uses.some((u) => u.state === "drawing" && u.scene_id === current.scene_id));
+  // The pencil's Old/New choice for this page takes a full-width row under the picture and the text.
+  const choosing = Boolean(pencilBook && pencil?.uses.some((u) => u.state === "choice" && u.scene_id === current.scene_id));
 
   return (
     // Layout: Mobile-first stacking, desktop splits symmetrically
@@ -1171,7 +1164,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                   animate="center"
                   exit="exit"
                   transition={reduceMotion ? { duration: 0.15 } : { type: "spring", bounce: 0, duration: 0.4 }}
-                  className="flex flex-col lg:flex-row w-full h-auto lg:max-h-[80vh] lg:min-h-[65vh] items-stretch justify-start lg:justify-center bg-surface neo-shadow rounded-3xl overflow-hidden mx-2 sm:mx-4 lg:mx-0 border border-muted"
+                  className={`flex flex-col lg:flex-row w-full h-auto ${choosing ? "lg:flex-wrap" : "lg:max-h-[80vh]"} lg:min-h-[65vh] items-stretch justify-start lg:justify-center bg-surface neo-shadow rounded-3xl overflow-hidden mx-2 sm:mx-4 lg:mx-0 border border-muted`}
                 >
                   {/* Left side: Illustration (Massive on Desktop, contained on mobile) */}
                   <div
@@ -1249,7 +1242,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                       {pencilBook && pencil && (
                         <PagePencil key={current.scene_id} jobId={jobId} pageNumber={pageIndex + 1} page={current} status={pencil}
                           reviewed={Boolean(row?.approved_at || row?.rejected_at)} busy={changingPage}
-                          onBusy={setChangingPage} onChanged={pencilChanged} />
+                          onBusy={setChangingPage} onChanged={pencilChanged} choiceSlot={choiceSlot} />
                       )}
                     </div>
                     
@@ -1276,6 +1269,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                       ))}
                     </div>
                   </div>
+                  {choosing && <div ref={setChoiceSlot} className="w-full basis-full border-t border-muted px-6 pb-6 lg:px-12 lg:pb-12" />}
                 </motion.div>
               </AnimatePresence>
             </motion.div>

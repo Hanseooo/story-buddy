@@ -851,12 +851,14 @@ describe("BookPage — magic pencil on a finished page (magic pencil 10)", () =>
     expect(JSON.parse(String(chosen[1]!.body))).toEqual({ use_id: "u1", choice: "kept", source: AFTER });
   });
 
-  it("shows the old and new pictures side by side with labels, and Use the old one still sends old (ticket 05)", async () => {
+  it("labels the old and new pictures under the page text, and Use the old one still sends old (ticket 05)", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
     const network = pencilNetwork([{ pencils_left: 4, disabled_reason: null, uses: [use("choice", AFTER)] }],
       (url) => url.endsWith("/pages/s0/pencil/choice") ? Response.json({ choice: "old" }) : undefined);
     await renderAndSwitchToPages(makeParams());
     const old = await screen.findByRole("figure", { name: "Old" });
+    // A full-width row of the card, not the narrow text column beside the picture.
+    expect(screen.getByText("The dog ran.").parentElement).not.toContainElement(old);
     expect(within(old).getByRole("img", { name: "Old picture for page 1" })).toHaveAttribute("src", "https://cdn.test/j1/s0-1.png");
     const fresh = screen.getByRole("figure", { name: "New" });
     expect(await within(fresh).findByRole("img", { name: "Your changed picture for page 1" })).toBeDefined();

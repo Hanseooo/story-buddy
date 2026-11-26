@@ -1138,7 +1138,7 @@ describe("ProcessingPage — magic pencil (ticket 06)", () => {
     expect(screen.getByRole("textbox", { name: "What should change about Kiko?" })).toHaveValue("a red hat");
   });
 
-  it("shows the old and new pictures side by side with labels (ticket 05)", async () => {
+  it("labels the old and new pictures in the choice (ticket 05)", async () => {
     global.fetch = vi.fn((url: string) => Promise.resolve(imageLinksResponse(url,
       { "ref-c0": "j1/ref-c0-2.png", "version-ref-c0-1": "j1/ref-c0-1.png" }))) as unknown as typeof fetch;
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: withCharacter({

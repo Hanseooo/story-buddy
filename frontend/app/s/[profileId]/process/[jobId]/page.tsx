@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { use, useCallback, useEffect, useId, useRef, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useJob, type JobRow } from "@/lib/useJob";
@@ -11,6 +11,7 @@ import FailureScreen from "@/components/FailureScreen";
 import StopStory from "@/components/StopStory";
 import StoppedStory from "@/components/StoppedStory";
 import PictureBox from "@/components/PictureBox";
+import OldNewPictures from "@/components/OldNewPictures";
 import { supabase } from "@/lib/supabaseClient";
 import { signPaths } from "@/lib/signedUrls";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
@@ -536,17 +537,6 @@ function MagicPencil({ character, tapsLeft, disabled, onSubmit }: {
   );
 }
 
-// A labelled picture in the keep-or-old choice.
-function OldNew({ label, children }: { label: string; children: React.ReactNode }) {
-  const id = useId();
-  return (
-    <figure aria-labelledby={id} className="flex flex-col gap-1">
-      <figcaption id={id} className="font-kid text-sm font-bold text-foreground">{label}</figcaption>
-      {children}
-    </figure>
-  );
-}
-
 // AC-11: the old and new pictures are shown side by side with the choice. The go is spent either
 // way, and the book cannot go on until the child chooses (the API rejects confirm meanwhile).
 function PencilChoice({ jobId, moderationMode, character, newUrl, disabled, onChoose, onRetryNew }: {
@@ -580,29 +570,25 @@ function PencilChoice({ jobId, moderationMode, character, newUrl, disabled, onCh
       <p className="font-kid text-sm leading-relaxed text-foreground">
         Here is your changed picture of {character.name}. Keep it, or go back to the old one.
       </p>
-      {/* Old and New side by side when there is room for both, stacked in a narrow card (audit B3). */}
-      <div className="@container mt-2">
-        <div className="grid grid-cols-1 gap-3 @sm:grid-cols-2">
-          <OldNew label="Old">
-            {state === "error" ? (
-              <div role="alert" className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-[8px] bg-[var(--color-muted)] p-3 text-center font-kid text-sm">
-                <p>We couldn&apos;t load the old picture right now.</p>
-                <button
-                  type="button"
-                  onClick={() => { setState("loading"); setAttempt((value) => value + 1); }}
-                  className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 active:scale-[0.98]"
-                >
-                  Try loading {character.name}&apos;s old picture again
-                </button>
-              </div>
-            ) : (
-              <PictureBox src={url ?? undefined} alt={`Old picture of ${character.name}`} className="aspect-[4/3] w-full rounded-[8px]" />
-            )}
-          </OldNew>
-          <OldNew label="New">
-            <PictureBox src={newUrl} alt={`New picture of ${character.name}`} onRetry={onRetryNew} className="aspect-[4/3] w-full rounded-[8px]" />
-          </OldNew>
-        </div>
+      {/* The card widens while this choice is open, so Old and New fit side by side (audit B3). */}
+      <div className="mt-2">
+        <OldNewPictures
+          old={state === "error" ? (
+            <div role="alert" className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-[8px] bg-[var(--color-muted)] p-3 text-center font-kid text-sm">
+              <p>We couldn&apos;t load the old picture right now.</p>
+              <button
+                type="button"
+                onClick={() => { setState("loading"); setAttempt((value) => value + 1); }}
+                className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 active:scale-[0.98]"
+              >
+                Try loading {character.name}&apos;s old picture again
+              </button>
+            </div>
+          ) : (
+            <PictureBox src={url ?? undefined} alt={`Old picture of ${character.name}`} className="aspect-[4/3] w-full rounded-[8px]" />
+          )}
+          fresh={<PictureBox src={newUrl} alt={`New picture of ${character.name}`} onRetry={onRetryNew} className="aspect-[4/3] w-full rounded-[8px]" />}
+        />
       </div>
       <p role="status" className="font-kid text-sm text-foreground/70">{disabled ? "Changing your picture…" : ""}</p>
       <div className="mt-3 flex flex-wrap gap-2">
@@ -1025,10 +1011,10 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                 hidden: { opacity: 0, y: 40, scale: 0.8 },
                 show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", bounce: 0 } }
               }}
-              className="flex flex-col items-center gap-4 neo-border bg-[var(--color-surface)] rounded-[24px] p-5 shadow-[0_10px_28px_rgba(49,85,217,0.12)] max-w-xs w-full"
+              className={`flex flex-col items-center gap-4 neo-border bg-[var(--color-surface)] rounded-[24px] p-5 shadow-[0_10px_28px_rgba(49,85,217,0.12)] ${c.pencil_choice ? "max-w-2xl" : "max-w-xs"} w-full`}
             >
               {characterImageState[c.char_id] === "error" ? (
-                <div role="alert" className="flex aspect-square w-full flex-col items-center justify-center gap-3 rounded-[16px] bg-[var(--color-muted)] p-4 text-center font-kid">
+                <div role="alert" className="flex aspect-square w-full max-w-[17.5rem] flex-col items-center justify-center gap-3 rounded-[16px] bg-[var(--color-muted)] p-4 text-center font-kid">
                   <p>We couldn&apos;t load {c.name}&apos;s picture.</p>
                   <button
                     type="button"
@@ -1042,12 +1028,12 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                 <img
                   src={signedCharUrls[c.char_id]}
                   alt={c.name}
-                  className="w-full aspect-square object-contain rounded-[16px] bg-[var(--color-muted)]"
+                  className="w-full max-w-[17.5rem] aspect-square object-contain rounded-[16px] bg-[var(--color-muted)]"
                   onLoad={() => setCharacterImageState((current) => ({ ...current, [c.char_id]: "loaded" }))}
                   onError={() => setCharacterImageState((current) => ({ ...current, [c.char_id]: "error" }))}
                 />
               ) : (
-                <div className="w-full aspect-square rounded-[16px] bg-[var(--color-muted)] animate-pulse" />
+                <div className="w-full max-w-[17.5rem] aspect-square rounded-[16px] bg-[var(--color-muted)] animate-pulse" />
               )}
               <h2
                 ref={(node) => { characterHeadingRefs.current[c.char_id] = node; }}
