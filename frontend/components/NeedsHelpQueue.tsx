@@ -197,8 +197,9 @@ function HeldStory({ jobId, onClose }: { jobId: string; onClose: () => void }) {
 
   // Ticket 04: the header and its Back stay pinned while the story scrolls. The decision is pinned to the
   // bottom on phones and is a sticky side panel at lg. Scroll padding keeps focused controls out from under both.
+  // Below sm the header wraps to two rows (~113px), so the top padding is 128px there and 96px above.
   return <dialog ref={dialog} aria-labelledby="held-story-title" onCancel={event => { event.preventDefault(); close(); }}
-    className="m-0 h-dvh w-screen max-h-none max-w-none overflow-y-auto scroll-pt-24 scroll-pb-[46dvh] lg:scroll-pb-0 border-0 bg-background text-foreground p-0 backdrop:bg-foreground/50">
+    className="m-0 h-dvh w-screen max-h-none max-w-none overflow-y-auto scroll-pt-32 sm:scroll-pt-24 scroll-pb-[46dvh] lg:scroll-pb-0 border-0 bg-background text-foreground p-0 backdrop:bg-foreground/50">
     <header className="sticky top-0 z-[var(--z-raised)] border-b border-primary/15 bg-background">
       <div className="max-w-3xl lg:max-w-6xl mx-auto px-5 py-3 sm:px-8 flex flex-wrap justify-between gap-3 items-center">
         <h2 id="held-story-title" className="text-2xl font-bold">Needs your help</h2>
