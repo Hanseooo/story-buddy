@@ -26,9 +26,15 @@ export default function GuardedCover({job, alt, src, className}: {job: ImageJob;
     });
     return () => { controller.abort(); };
   }, [job, path, src, attempt]);
-  return <PictureBox src={path ? url : null} alt={alt} className={className} onRetry={path ? () => {
+  // A book with no page has no cover to load: say so, not that it failed (audit A5).
+  if (!path) return (
+    <div className={`relative flex items-center justify-center overflow-hidden bg-muted p-1 text-center text-xs text-foreground/70 ${className ?? "aspect-[4/3] w-full"}`}>
+      No picture
+    </div>
+  );
+  return <PictureBox src={url} alt={alt} className={className} onRetry={() => {
     forgetSignedUrls([path]);
     setUrl(undefined);
     setAttempt(value => value + 1);
-  } : undefined} />;
+  }} />;
 }

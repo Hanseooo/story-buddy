@@ -68,9 +68,10 @@ describe("GuardedCover picture box", () => {
     expect(screen.getByRole("img", { name: "Cover of book by Kai" })).toHaveAttribute("src", "https://cdn.test/b/s1.png?token=second");
   });
 
-  it("a book with no cover path says so without a Try again that could do nothing", () => {
+  it("a book with no cover path says No picture, not an error, and offers no Try again", () => {
     render(<GuardedCover job={{ id: "n", pages: [] }} alt="Cover of book by Kai" />);
-    expect(screen.getByText("Picture didn't load")).toBeDefined();
+    expect(screen.getByText("No picture")).toBeDefined();
+    expect(screen.queryByText("Picture didn't load")).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
   });
 });
