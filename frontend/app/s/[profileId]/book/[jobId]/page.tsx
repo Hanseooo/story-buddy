@@ -1116,7 +1116,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                   data-testid="nav-prev"
                   aria-label="Previous page"
                   aria-disabled={pageIndex === 0}
-                  className="pointer-events-auto flex h-11 w-11 lg:h-16 lg:w-16 items-center justify-center rounded-full bg-surface neo-shadow text-primary font-bold hover:scale-105 transition-all cursor-pointer focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:scale-100 active:scale-[0.98]"
+                  className="pointer-events-auto flex h-11 w-11 lg:h-16 lg:w-16 items-center justify-center rounded-full bg-surface neo-shadow text-primary font-bold hover:scale-105 transition-all cursor-pointer focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:scale-100 active:scale-[0.98] aria-disabled:active:scale-100"
                 >
                   <CaretLeft className="w-5 h-5 lg:w-8 lg:h-8" weight="bold" aria-hidden="true" />
                 </button>
@@ -1310,7 +1310,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                   data-testid="nav-next"
                   aria-label="Next page"
                   aria-disabled={pageIndex === totalPages - 1}
-                  className="pointer-events-auto flex h-11 w-11 lg:h-16 lg:w-16 items-center justify-center rounded-full bg-surface neo-shadow text-primary font-bold hover:scale-105 transition-all cursor-pointer focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:scale-100 active:scale-[0.98]"
+                  className="pointer-events-auto flex h-11 w-11 lg:h-16 lg:w-16 items-center justify-center rounded-full bg-surface neo-shadow text-primary font-bold hover:scale-105 transition-all cursor-pointer focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:scale-100 active:scale-[0.98] aria-disabled:active:scale-100"
                 >
                   <CaretRight className="w-5 h-5 lg:w-8 lg:h-8" weight="bold" aria-hidden="true" />
                 </button>
