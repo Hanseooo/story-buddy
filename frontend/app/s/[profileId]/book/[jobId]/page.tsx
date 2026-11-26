@@ -1197,6 +1197,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                         <img
                           src={current.signedUrl}
                           alt=""
+                          draggable={false}
                           fetchPriority="high"
                           onLoad={() => setLoaded(l => (l[pageIndex] ? l : { ...l, [pageIndex]: true }))}
                           onError={() => markBroken(current.image_path)}

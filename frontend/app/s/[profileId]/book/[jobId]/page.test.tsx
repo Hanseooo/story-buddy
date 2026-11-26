@@ -868,8 +868,21 @@ describe("BookPage — magic pencil on a finished page (magic pencil 10)", () =>
     expect(within(button).getByText("Drawing your change…")).toBeVisible();
   });
 
-  // jsdom cannot run a framer-motion drag, so this checks where the swipe area is: framer marks the
-  // element a horizontal swipe starts on with `touch-action: pan-y` and turns off text selection there.
+  // A real framer-motion drag: press, move 200px left, release. jsdom runs it through to onDragEnd.
+  async function swipeLeft(target: Element) {
+    const at = (clientX: number) => ({ clientX, clientY: 10, pointerId: 1, button: 0, isPrimary: true, pointerType: "mouse" });
+    await act(async () => {
+      fireEvent.pointerDown(target, at(300));
+      for (const x of [290, 250, 200, 150, 100]) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        fireEvent.pointerMove(window, at(x));
+      }
+      fireEvent.pointerUp(window, at(100));
+      // onDragEnd runs on the next animation frame.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+  }
+
   it("only the picture starts a swipe; the pencil box and other versions do not (ticket 05)", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success",
       row: { ...FEATURE_ROW, pages: [{ ...PAGES[0], other_versions: true }, PAGES[1]] } }));
@@ -881,11 +894,18 @@ describe("BookPage — magic pencil on a finished page (magic pencil 10)", () =>
     const versions = await screen.findByRole("button", { name: "Use other picture 1 for page 1" });
     fireEvent.click(screen.getByRole("button", { name: "Magic pencil for page 1" }));
     const box = screen.getByLabelText("What should change on page 1?");
-    const swipeArea = '[style*="touch-action: pan-y"]';
-    expect(picture().closest(swipeArea)).not.toBeNull();
-    expect(box.closest(swipeArea)).toBeNull();
-    expect(versions.closest(swipeArea)).toBeNull();
+    fireEvent.change(box, { target: { value: "a hat" } });
+    await swipeLeft(box);
+    await swipeLeft(versions);
+    // Outside the animated card, so it shows the page index the moment a swipe would turn it.
+    expect(screen.getByTestId("nav-prev")).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByLabelText("What should change on page 1?")).toHaveValue("a hat");
     expect(box.closest('[style*="user-select: none"]')).toBeNull();
+    // A mouse press on the picture must start the swipe, not the browser's own image drag.
+    expect(picture()).toHaveAttribute("draggable", "false");
+    await swipeLeft(picture());
+    expect(screen.getByTestId("nav-prev")).toHaveAttribute("aria-disabled", "false");
+    expect(await screen.findByText("It found a stick.")).toBeDefined();
   });
 
   it("arrow keys stay in the pencil box and only a plain arrow on the page turns it", async () => {
