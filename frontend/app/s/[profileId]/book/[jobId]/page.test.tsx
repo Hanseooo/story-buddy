@@ -315,6 +315,14 @@ describe("BookPage — bucket routing (spec invariant 1)", () => {
     expect(screen.getByRole("link", { name: "Back to bookshelf" })).toHaveAttribute("href", "/s/p1");
   });
 
+  it("signing wait has a way back to the bookshelf (ui-audit D4)", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: COMPLETE_ROW }));
+    mockCreateSignedUrls.mockReturnValue(new Promise(() => {}));
+    await renderPage(makeParams("j1"));
+    expect(queryPicture()).toBeNull();
+    expect(screen.getByRole("link", { name: "Back to bookshelf" })).toHaveAttribute("href", "/s/p1");
+  });
+
   it("not-found renders not-found FailureScreen", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "not-found", row: null }));
     await renderPage(makeParams("j1"));

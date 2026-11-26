@@ -720,6 +720,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   const { jobId } = use(params);
   const routeParams = useParams<{ profileId: string }>();
   const profileId = routeParams?.profileId;
+  const shelfHref = profileId ? `/s/${profileId}` : "/";
   const { bucket, row, refetch } = useJob(jobId);
   const [pageIndex, setPageIndex] = useState(0);
   const [signedPages, setSignedPages] = useState<SignedPage[] | null>(null);
@@ -942,7 +943,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
     </main>;
   }
   if (bucket === "in-flight" || bucket === "paused") {
-    return <LoadingSkeleton backHref={`/s/${profileId}`} />;
+    return <LoadingSkeleton backHref={shelfHref} />;
   }
 
   // terminal-success — wait for signing
@@ -967,7 +968,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   }
 
   if (!signedPages) {
-    return <LoadingSkeleton />;
+    return <LoadingSkeleton backHref={shelfHref} />;
   }
 
   const totalPages = signedPages.length;
@@ -1013,7 +1014,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
       {/* Navigation and export share a row; the mobile title always has its own width. */}
       <div className="relative z-30 mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 px-5 pt-5 pb-2 sm:px-8 lg:max-w-7xl lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:px-12">
         <Link
-          href={profileId ? `/s/${profileId}` : "/"}
+          href={shelfHref}
           aria-label="Back to bookshelf"
           className="order-1 inline-flex min-h-11 items-center justify-self-start gap-1.5 rounded-xl px-2 font-kid text-sm font-bold text-foreground/75 transition-colors hover:bg-muted/30 hover:text-primary focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 sm:px-3 active:scale-[0.98]"
         >
