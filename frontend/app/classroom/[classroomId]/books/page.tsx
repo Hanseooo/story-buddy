@@ -405,7 +405,7 @@ export default function BooksPage() {
         <div className="h-8 w-40 bg-muted rounded-xl animate-pulse mb-6" />
         <div className="flex gap-1 mb-6 overflow-hidden">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-10 w-28 shrink-0 bg-muted rounded-xl animate-pulse" />
+            <div key={i} role="status" aria-label="Loading tab" className="h-10 w-28 shrink-0 bg-muted rounded-xl animate-pulse" />
           ))}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

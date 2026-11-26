@@ -1231,8 +1231,8 @@ describe("Books tabs on a narrow screen (ui-audit C6)", () => {
 
   it("the loading skeleton draws one placeholder per tab, four in all", () => {
     stubBooks(new Promise(() => {}));
-    const { container } = render(<BooksPage />);
-    expect(container.querySelectorAll(".h-10.w-28.animate-pulse")).toHaveLength(4);
+    render(<BooksPage />);
+    expect(screen.getAllByRole("status", { name: "Loading tab" })).toHaveLength(4);
   });
 
   it("scrolls the chosen tab into view in the scrolling strip", async () => {
