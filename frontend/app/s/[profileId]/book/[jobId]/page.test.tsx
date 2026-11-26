@@ -892,7 +892,8 @@ describe("BookPage — magic pencil on a finished page (magic pencil 10)", () =>
     await screen.findByText("Changing your picture…");
     const button = screen.getByRole("button", { name: "Show the picture for page 1 bigger" });
     expect(button).toHaveAttribute("aria-busy", "true");
-    expect(within(button).getByText("Drawing your change…")).toBeVisible();
+    // The page card fades in; on a slow runner the overlay is still under a transparent parent.
+    await waitFor(() => expect(within(button).getByText("Drawing your change…")).toBeVisible());
   });
 
   // A real framer-motion drag: press, move 200px left, release. jsdom runs it through to onDragEnd.

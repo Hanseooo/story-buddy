@@ -1199,7 +1199,7 @@ describe("ProcessingPage — magic pencil (ticket 06)", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: CHOOSING }));
     await renderPausedPage();
     const fresh = screen.getByRole("figure", { name: "New" });
-    fireEvent.error(within(fresh).getByRole("img", { name: "New picture of Kiko" }));
+    fireEvent.error(await within(fresh).findByRole("img", { name: "New picture of Kiko" }));
     fireEvent.click(within(fresh).getByRole("button", { name: "Try again" }));
     await waitFor(() => expect(within(fresh).getByRole("img", { name: "New picture of Kiko" }))
       .toHaveAttribute("src", "https://cdn.test/j1/ref-c0-2.png?round=2"));
