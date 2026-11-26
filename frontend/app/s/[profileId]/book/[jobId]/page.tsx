@@ -2,8 +2,8 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { use, useEffect, useState, useCallback, useRef } from "react";
-import { motion, AnimatePresence, useScroll, useReducedMotion } from "framer-motion";
+import { use, useEffect, useId, useState, useCallback, useRef } from "react";
+import { motion, AnimatePresence, useScroll, useReducedMotion, useDragControls } from "framer-motion";
 import { useJob } from "@/lib/useJob";
 import { displayTitle } from "@/lib/displayTitle";
 import FailureScreen, { resetFailChain } from "@/components/FailureScreen";
@@ -12,6 +12,7 @@ import { signPaths } from "@/lib/signedUrls";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import PictureBox from "@/components/PictureBox";
 import { CaretLeft, CaretRight, BookOpen, Rows, ArrowLeft, DownloadSimple } from "@phosphor-icons/react";
 
 // Generated pictures are 1024x768 (backend `providers.GENERATED_IMAGE_SIZE`), so a 4:3 box holds
@@ -544,24 +545,28 @@ function PagePencil({ jobId, pageNumber, page, status, reviewed, busy, onBusy, o
         </div>
       )}
       {mine?.state === "choice" && (
-        <div role="group" aria-label={`Your changed picture for page ${pageNumber}`} className="mt-3 w-full rounded-2xl bg-primary/5 p-4 text-left">
-          {afterState === "error" ? (
-            <div role="alert" className="flex flex-col items-start gap-2 font-kid text-sm">
-              <p>We couldn&apos;t load this picture right now.</p>
-              <button type="button" className={`${kidControl} bg-surface`}
-                onClick={() => { setAfterState("loading"); setAfterAttempt((value) => value + 1); }}>
-                Try loading the changed picture for page {pageNumber} again
-              </button>
-            </div>
-          ) : afterUrl && (
-            <img
-              src={afterUrl}
-              alt={`Your changed picture for page ${pageNumber}`}
-              className="aspect-square w-full max-w-xs rounded-lg bg-muted object-contain"
-              onLoad={() => setAfterState("loaded")}
-              onError={() => setAfterState("error")}
-            />
-          )}
+        <div role="group" aria-label={`Your changed picture for page ${pageNumber}`} className="@container mt-3 w-full rounded-2xl bg-primary/5 p-4 text-left">
+          {/* Old and New side by side when there is room for both, stacked on a phone (audit B3). */}
+          <div className="grid grid-cols-1 gap-3 @sm:grid-cols-2">
+            <OldNew label="Old">
+              <PictureBox src={page.signedUrl} alt={`Old picture for page ${pageNumber}`} className="aspect-[4/3] w-full rounded-lg" />
+            </OldNew>
+            <OldNew label="New">
+              {afterState === "error" ? (
+                <div role="alert" className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-lg bg-muted p-3 text-center font-kid text-sm">
+                  <p>We couldn&apos;t load this picture right now.</p>
+                  <button type="button" className={`${kidControl} bg-surface`}
+                    onClick={() => { setAfterUrl(null); setAfterState("loading"); setAfterAttempt((value) => value + 1); }}>
+                    Try loading the changed picture for page {pageNumber} again
+                  </button>
+                </div>
+              ) : (
+                <PictureBox src={afterUrl ?? undefined} alt={`Your changed picture for page ${pageNumber}`}
+                  className="aspect-[4/3] w-full rounded-lg"
+                  onLoad={() => setAfterState("loaded")} onError={() => setAfterState("error")} />
+              )}
+            </OldNew>
+          </div>
           {afterState === "loading" && <p role="status" className="font-kid text-sm">Loading your changed picture…</p>}
           <div className="mt-2 flex flex-wrap gap-2">
             <button type="button" disabled={busy || afterState !== "loaded"} onClick={keep}
@@ -588,6 +593,17 @@ function PagePencil({ jobId, pageNumber, page, status, reviewed, busy, onBusy, o
         </div>
       </dialog>
     </div>
+  );
+}
+
+// A labelled picture in the keep-or-old choice.
+function OldNew({ label, children }: { label: string; children: React.ReactNode }) {
+  const id = useId();
+  return (
+    <figure aria-labelledby={id} className="flex flex-col gap-1">
+      <figcaption id={id} className="font-kid text-sm font-bold text-foreground">{label}</figcaption>
+      {children}
+    </figure>
   );
 }
 
@@ -705,6 +721,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
   const fullscreenOpener = useRef<HTMLElement | null>(null);
   const [brokenPictures, setBrokenPictures] = useState<Record<string, boolean>>({});   // by image_path
   const reduceMotion = useReducedMotion();
+  const swipe = useDragControls();
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const [changingPage, setChangingPage] = useState(false); // SH-07: one page change per book at a time
@@ -943,6 +960,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
 
   const totalPages = signedPages.length;
   const current = signedPages[pageIndex];
+  const drawing = Boolean(pencil?.uses.some((u) => u.state === "drawing" && u.scene_id === current.scene_id));
 
   return (
     // Layout: Mobile-first stacking, desktop splits symmetrically
@@ -1070,13 +1088,14 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
 
       {viewMode === "pages" ? (
         <>
-          <div className="flex-1 flex w-full items-center justify-between relative px-2 sm:px-4 lg:px-8 py-4 sm:py-6">
-            {/* Left tap zone: absolute on mobile/tablet, relative column on desktop. Below lg only the
-                arrow takes taps, so the zone never covers the page's own controls; swipe covers the rest.
-                The arrow stays on the first page (aria-disabled keeps it focusable) so focus never drops. */}
+          <div className="flex-1 flex flex-wrap lg:flex-nowrap w-full items-center justify-between relative px-2 sm:px-4 lg:px-8 py-4 sm:py-6">
+            {/* Left tap zone: a row under the card on mobile/tablet, a column beside it on desktop. Below
+                lg the arrows sit under the card, so they never land on the pencil form however tall the
+                card grows (audit B6), and only the arrow takes taps. The arrow stays on the first page
+                (aria-disabled keeps it focusable) so focus never drops. */}
             {totalPages > 1 && (
               <div
-                className={`absolute inset-y-0 left-0 w-[15%] lg:w-24 xl:w-32 z-30 pointer-events-none lg:relative lg:shrink-0 flex items-center justify-start px-2 sm:px-4 lg:justify-center lg:px-0 group ${pageIndex > 0 ? "lg:pointer-events-auto lg:cursor-pointer" : ""}`}
+                className={`relative order-2 w-1/2 pt-3 lg:order-none lg:pt-0 lg:self-stretch lg:w-24 xl:w-32 z-30 pointer-events-none lg:shrink-0 flex items-center justify-start px-2 sm:px-4 lg:justify-center lg:px-0 group ${pageIndex > 0 ? "lg:pointer-events-auto lg:cursor-pointer" : ""}`}
                 onClick={() => {
                   setHasInteracted(true);
                   if (pageIndex > 0) {
@@ -1097,10 +1116,14 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
               </div>
             )}
 
-            {/* Page content with swipe */}
+            {/* Page content with swipe. The card follows the finger, but only a press on the picture
+                starts a swipe, so selecting words in the pencil box or a near-miss on a version never
+                turns the page and loses what the child typed (audit B5). */}
             <motion.div 
-              className="flex-1 flex w-full h-full items-center justify-center z-20 mx-auto max-w-6xl"
+              className="order-1 basis-full lg:order-none lg:basis-0 flex-1 flex w-full h-full items-center justify-center z-20 mx-auto max-w-6xl"
               drag="x"
+              dragControls={swipe}
+              dragListener={false}
               dragConstraints={{ left: 0, right: 0 }}
               // Elastic 1 past zero-width constraints = the page follows the finger 1:1. The snap back
               // takes the release velocity into a critically damped spring (damping = 2·√stiffness).
@@ -1143,7 +1166,11 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                   className="flex flex-col lg:flex-row w-full h-auto lg:max-h-[80vh] lg:min-h-[65vh] items-stretch justify-start lg:justify-center bg-surface neo-shadow rounded-3xl overflow-hidden mx-2 sm:mx-4 lg:mx-0 border border-muted"
                 >
                   {/* Left side: Illustration (Massive on Desktop, contained on mobile) */}
-                  <div className="relative flex items-center justify-center w-full lg:w-[60%] xl:w-[65%] bg-muted/20 p-4 lg:p-10 border-b lg:border-b-0 lg:border-r border-muted shrink-0 lg:shrink">
+                  <div
+                    onPointerDown={(event) => swipe.start(event)}
+                    style={{ touchAction: "pan-y", userSelect: "none" }}
+                    className="relative flex items-center justify-center w-full lg:w-[60%] xl:w-[65%] bg-muted/20 p-4 lg:p-10 border-b lg:border-b-0 lg:border-r border-muted shrink-0 lg:shrink"
+                  >
                     {/* A 4:3 box (generated pictures are 1024x768) holds the picture's place while it loads. */}
                     {brokenPictures[current.image_path] ? (
                       <div role="alert" className="flex w-full aspect-[4/3] max-h-[40vh] lg:max-h-[60vh] flex-col items-center justify-center gap-2 rounded-xl bg-muted/30 p-4 text-center font-kid">
@@ -1156,6 +1183,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                       <button
                         type="button"
                         aria-label={`Show the picture for page ${pageIndex + 1} bigger`}
+                        aria-busy={drawing}
                         onClick={(event) => openFullscreen(current.signedUrl, pageIndex + 1, event.currentTarget)}
                         className="relative block w-full aspect-[4/3] max-h-[40vh] lg:max-h-[60vh] rounded-xl cursor-zoom-in pointer-events-auto focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
                       >
@@ -1172,6 +1200,14 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                             aria-hidden="true"
                             className="absolute inset-0 rounded-xl bg-muted animate-pulse pointer-events-none"
                           />
+                        )}
+                        {/* The pencil's status line is below the fold on a phone, so the picture says it too (audit B4). */}
+                        {drawing && (
+                          <span className="absolute inset-0 flex items-center justify-center rounded-xl bg-surface/70 pointer-events-none">
+                            <span className="animate-shimmer rounded-full px-4 py-2 font-kid text-sm font-bold text-primary neo-shadow">
+                              Drawing your change…
+                            </span>
+                          </span>
                         )}
                       </button>
                     )}
@@ -1253,7 +1289,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
             {/* Right tap zone: same rules as the left one. */}
             {totalPages > 1 && (
               <div
-                className={`absolute inset-y-0 right-0 w-[15%] lg:w-24 xl:w-32 z-30 pointer-events-none lg:relative lg:shrink-0 flex items-center justify-end px-2 sm:px-4 lg:justify-center lg:px-0 group ${pageIndex < totalPages - 1 ? "lg:pointer-events-auto lg:cursor-pointer" : ""}`}
+                className={`relative order-2 w-1/2 pt-3 lg:order-none lg:pt-0 lg:self-stretch lg:w-24 xl:w-32 z-30 pointer-events-none lg:shrink-0 flex items-center justify-end px-2 sm:px-4 lg:justify-center lg:px-0 group ${pageIndex < totalPages - 1 ? "lg:pointer-events-auto lg:cursor-pointer" : ""}`}
                 onClick={() => {
                   setHasInteracted(true);
                   if (pageIndex < totalPages - 1) {
