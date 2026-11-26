@@ -253,3 +253,7 @@ RECURSION_LIMIT = MAX_SCENES * 7 + SUPER_STEP_PRELUDE
 # One optional-text detector step, its review pause and decision continuation add
 # three steps to the earlier text-hold allowance. Baseline bounds are unchanged.
 TEACHER_REVIEW_RECURSION_LIMIT = MAX_SCENES * (7 + 8) + SUPER_STEP_PRELUDE + (2 + 3 + 1) * 4 + 4
+
+# judge-selector SH-01, ADR-087: identity-judge choice ids in display order. "gemma" is the default.
+JUDGE_CHOICES = ("gemma", "qwen_base", "qwen_finetuned")
+DEFAULT_JUDGE_CHOICE = "gemma"

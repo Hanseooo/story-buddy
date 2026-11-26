@@ -1,6 +1,6 @@
 # ADR-087 — The identity judge ships as selectable, and Gemma stays the default
 
-**Status:** Proposed (2026-11-27) · awaiting the owner's acceptance · amends in part ADR-019 (the
+**Status:** Accepted (2026-11-27, owner) · amends in part ADR-019 (the
 serving host and the "ships in the live pipeline" premise) · amends in part the deployment gate in
 `docs/specs/judge-finetune.md` §7.5 · spec: `docs/specs/judge-selector.md` · Objective 4 and
 `PREREGISTRATION_OBJ4.md` are unchanged · revisit before real children use the app
