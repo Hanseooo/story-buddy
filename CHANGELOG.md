@@ -14,6 +14,31 @@ instead of repeating it.
 
 ---
 
+## UI audit round 2, batch 5: Books responsive and polish · 2026-11-26
+
+Branch `fix/ui-audit-2`, PR number pending. Ticket `.scratch/ui-audit/issues/06-books-responsive-polish.md`.
+
+### Code
+
+- **Books tabs.** The four tabs scroll in one row instead of wrapping, and the chosen tab scrolls
+  into sight. The loading skeleton draws four tabs (C6).
+- **Books list.** The table starts at `md` (768px), with cards below it (C7). A "Didn't finish" row
+  wraps at 320px (C10).
+- **Book page.** A story still being made or waiting for characters shows a Bookshelf back link
+  above its loading view (D4).
+- **Reader and making screen.** The decorative blurred blobs are gone (D5).
+- **Press feedback.** Teacher Books, Needs your help and roster controls, and the kid reader and
+  making-screen controls, press in with `active:scale-[0.98]` (DESIGN §7 Active) (D6).
+- **Shelf.** The in-flight badge says "Making..." instead of "Writing..." (D7).
+
+### Checks
+
+- Frontend: 1271 tests pass (4 new, each seen red first; 2 shelf expectations changed for D7). Lint
+  and typecheck clean apart from the known `lib/signedUrls.test.ts:106` error. Not driven in a
+  browser.
+
+---
+
 ## UI audit round 2, batch 2: shared picture box · 2026-11-26
 
 Branch `fix/ui-audit-2`, PR number pending. Ticket `.scratch/ui-audit/issues/03-shared-picture-box.md`.
