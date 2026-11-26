@@ -1503,10 +1503,12 @@ Reasoning privacy failure stops processing as a service error and cannot trigger
 fallback. Baseline calls do not request reasoning capture. Missing historical reasoning remains
 missing; reads do not reconstruct it from current configuration or logs.
 
-Books' Needs your help queue and inspection offer a native, keyboard-reachable **Review criteria**
+Books' Needs your help inspection offers a native, keyboard-reachable **Review criteria**
 disclosure with loading, retry, close and Escape/focus recovery. Inspection shows the recorded
 origin, criteria, policy/settings, classifier outcome, labels, model/instruction version, time
-and explanation; missing evidence is labelled unavailable. Current definitions are clearly
+and explanation; missing evidence is labelled unavailable. Policy and settings versions, the theme
+detector and classifier records sit under a closed **Technical record** disclosure that stays in the
+page (UI audit ticket 04). Current definitions are clearly
 separate from the submission's captured evidence. No decision controls or theme detector are added.
 
 Verification: provider reasoning redaction, node capture/missing reasoning and call-time model

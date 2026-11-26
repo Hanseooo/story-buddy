@@ -19,6 +19,11 @@ export default function StopStory({ jobId, reviewId, epoch, ready, teacher, onSt
   const [stopped, setStopped] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const control = "min-h-11 rounded-xl px-4 py-2 font-bold text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50";
+  // Ticket 04 (DESIGN §7): a stop is destructive. Outlined on the screen, so it does not compete with the
+  // screen's one primary action; filled in the confirm, where it is the dialog's action. Ink text on ivory:
+  // destructive red on ivory is ~4.3:1, under AA for 16px bold. Ivory on red passes.
+  const stopOutline = "min-h-11 rounded-xl px-4 py-2 font-bold border-2 border-destructive text-foreground hover:bg-destructive/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent";
+  const stopFilled = "min-h-11 rounded-xl px-4 py-2 font-bold bg-destructive text-on-destructive hover:bg-destructive/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
   useEffect(() => () => { request.current?.abort(); onPending?.(false); }, [onPending]);
   useEffect(() => { if (message || stopped) summary.current?.focus(); }, [message, stopped]);
   function cancel() {
@@ -59,9 +64,9 @@ export default function StopStory({ jobId, reviewId, epoch, ready, teacher, onSt
       {message && <h4 ref={summary} tabIndex={-1} role="alert">{message}</h4>}
       {pending && <p role="status">Stopping this story…</p>}
       {submitted ? <>
-        <button className={control} disabled={pending} onClick={() => void stop()}>Retry stop</button>
+        <button className={stopOutline} disabled={pending} onClick={() => void stop()}>Retry stop</button>
         <button className={control} disabled={pending} onClick={onRefresh}>Check story status</button>
-      </> : <button ref={opener} className={control} disabled={!ready || pending} onClick={() => {
+      </> : <button ref={opener} className={stopOutline} disabled={!ready || pending} onClick={() => {
         dialog.current?.showModal(); keep.current?.focus();
       }}>Stop this story</button>}
       {!ready && <p role="status">Finishing the current step. Check story status before stopping.</p>}
@@ -71,7 +76,7 @@ export default function StopStory({ jobId, reviewId, epoch, ready, teacher, onSt
       <h3 id={`stop-${jobId}`} className="text-xl font-bold">Stop making this book? Your writing will stay saved.</h3>
       <div className="mt-5 flex flex-wrap gap-3">
         <button ref={keep} className={control} onClick={cancel}>Keep waiting</button>
-        <button className={control} onClick={() => void stop()}>Stop this story</button>
+        <button className={stopFilled} onClick={() => void stop()}>Stop this story</button>
       </div>
     </dialog>
   </section>;
