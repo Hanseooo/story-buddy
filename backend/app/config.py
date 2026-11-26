@@ -269,6 +269,9 @@ QWEN_FINETUNED_MODEL = "seed2_checkpoint140"
 # Provisional, owner decision 2026-11-27: to be set from the ticket 01 live probe latency.
 # Bounds one Qwen identity call before the SH-04 Gemma fallback (judge-selector ticket 05).
 QWEN_JUDGE_TIMEOUT_SECONDS = 90
+# §4: a blackholed Qwen host would otherwise hold each call for the full 90 s before the Gemma
+# fallback, and a fallback-heavy book could pass JOB_TIMEOUT_SECONDS. Connect fails fast instead.
+QWEN_JUDGE_CONNECT_TIMEOUT_SECONDS = 5
 JUDGE_LABELS = dict(zip(JUDGE_CHOICES, ("Standard (Gemma)", "Qwen base", "Qwen fine-tuned"), strict=True))
 
 

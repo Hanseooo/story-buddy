@@ -1514,12 +1514,17 @@ def test_a_qwen_choice_posts_to_the_qwen_server_once_with_no_provider_body(qwen_
         parse.return_value = _fake_completion(_Verdict(differences_observed="none", same_character=True))
         providers.judge("compare", ["data:ref", "data:scene"], _Verdict, choice=choice)
 
-    assert mock_openai.call_args.kwargs == {
+    client_kwargs = dict(mock_openai.call_args.kwargs)
+    timeout = client_kwargs.pop("timeout")
+    assert client_kwargs == {
         "base_url": "http://qwen-judge.test:8000/v1",
         "api_key": "qwen-test-key-never-logged",
-        "timeout": 90,
         "max_retries": 0,
     }
+    # §4: a blackholed host must fail its connect in 5 s, not 90, so a fallback-heavy book
+    # stays inside JOB_TIMEOUT_SECONDS. Read/write/pool keep the 90 s answer budget.
+    assert isinstance(timeout, httpx.Timeout)
+    assert (timeout.connect, timeout.read, timeout.write, timeout.pool) == (5, 90, 90, 90)
     kwargs = parse.call_args.kwargs
     assert kwargs["model"] == model
     assert kwargs["response_format"] is _Verdict

@@ -197,7 +197,8 @@ def _identity_verdict(name: str, images: list[str], judge_choice: str) -> tuple[
             log.warning(
                 "consistency_check: %s identity judge failed (%s); Gemma answers %s",
                 judge_choice, type(exc).__name__, name,
-            )    # Outside the `except`, so a Gemma failure's traceback does not chain the Qwen error into it.
+            )
+    # Outside the `except`, so a Gemma failure's traceback does not chain the Qwen error into it.
     return judge(prompt, images, SceneVerdict), settings.vlm_judge_model
 
 

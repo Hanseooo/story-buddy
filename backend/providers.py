@@ -271,7 +271,7 @@ def _qwen_judge(choice: str, content, schema: type[T]) -> T:
     is OpenRouter's). `_bounded` gets the same timeout, so the whole call ends at that bound,
     neither cut short by `CALL_TIMEOUT_SECONDS` nor extended by it. No `provider` body: vLLM
     rejects it (ADR-019)."""
-    from app.config import QWEN_JUDGE_TIMEOUT_SECONDS, judge_options
+    from app.config import QWEN_JUDGE_CONNECT_TIMEOUT_SECONDS, QWEN_JUDGE_TIMEOUT_SECONDS, judge_options
 
     model = judge_options()[choice]["model"]
     if not settings.qwen_judge_base_url:
@@ -280,7 +280,7 @@ def _qwen_judge(choice: str, content, schema: type[T]) -> T:
     client = OpenAI(
         base_url=settings.qwen_judge_base_url,
         api_key=settings.qwen_judge_api_key,
-        timeout=QWEN_JUDGE_TIMEOUT_SECONDS,
+        timeout=httpx.Timeout(QWEN_JUDGE_TIMEOUT_SECONDS, connect=QWEN_JUDGE_CONNECT_TIMEOUT_SECONDS),
         max_retries=0,
     )
     kwargs = {

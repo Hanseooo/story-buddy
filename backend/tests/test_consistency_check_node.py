@@ -245,7 +245,7 @@ def test_composition_failure_does_not_erase_identity_results():
             "Exactly one character: Ana.",
         )
 
-    assert identity == [(identity_verdict, settings.vlm_judge_model)]
+    assert identity == [(identity_verdict, "google/gemma-3-27b-it")]
     assert composition is None
 
 
