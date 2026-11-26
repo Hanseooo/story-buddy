@@ -1152,6 +1152,20 @@ describe("ProcessingPage — magic pencil (ticket 06)", () => {
     expect(within(fresh).getByRole("img", { name: "New picture of Kiko" })).toHaveAttribute("src", "https://cdn.test/j1/ref-c0-2.png");
   });
 
+  it("offers Try again when the new picture in the choice fails to load (ticket 05)", async () => {
+    global.fetch = vi.fn((url: string) => Promise.resolve(imageLinksResponse(url,
+      { "ref-c0": "j1/ref-c0-2.png", "version-ref-c0-1": "j1/ref-c0-1.png" }))) as unknown as typeof fetch;
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: withCharacter({
+      image_path: "j1/ref-c0-2.png", versions: [{ version_id: "ref-c0-1", image_path: "j1/ref-c0-1.png" }],
+      pencil_choice: { use_id: "pencil-1", version_id: "ref-c0-1", image_path: "j1/ref-c0-1.png" },
+    }, 1) }));
+    await renderPausedPage();
+    const fresh = screen.getByRole("figure", { name: "New" });
+    fireEvent.error(within(fresh).getByRole("img", { name: "New picture of Kiko" }));
+    fireEvent.click(within(fresh).getByRole("button", { name: "Try again" }));
+    expect(await within(fresh).findByRole("img", { name: "New picture of Kiko" })).toHaveAttribute("src", "https://cdn.test/j1/ref-c0-2.png");
+  });
+
   it("says the goes are shared by both tools", async () => {
     serve();
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PENCIL_ROW }));

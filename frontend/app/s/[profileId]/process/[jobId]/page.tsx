@@ -549,9 +549,9 @@ function OldNew({ label, children }: { label: string; children: React.ReactNode 
 
 // AC-11: the old and new pictures are shown side by side with the choice. The go is spent either
 // way, and the book cannot go on until the child chooses (the API rejects confirm meanwhile).
-function PencilChoice({ jobId, moderationMode, character, newUrl, disabled, onChoose }: {
+function PencilChoice({ jobId, moderationMode, character, newUrl, disabled, onChoose, onRetryNew }: {
   jobId: string; moderationMode?: string; character: RevealCharacter; newUrl: string | undefined; disabled: boolean;
-  onChoose: (choice: "kept" | "old") => void;
+  onChoose: (choice: "kept" | "old") => void; onRetryNew: () => void;
 }) {
   const old = character.pencil_choice!;
   const [url, setUrl] = useState<string | null>(null);
@@ -600,7 +600,7 @@ function PencilChoice({ jobId, moderationMode, character, newUrl, disabled, onCh
             )}
           </OldNew>
           <OldNew label="New">
-            <PictureBox src={newUrl} alt={`New picture of ${character.name}`} className="aspect-[4/3] w-full rounded-[8px]" />
+            <PictureBox src={newUrl} alt={`New picture of ${character.name}`} onRetry={onRetryNew} className="aspect-[4/3] w-full rounded-[8px]" />
           </OldNew>
         </div>
       </div>
@@ -1065,6 +1065,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                   character={c}
                   newUrl={signedCharUrls[c.char_id]}
                   disabled={submissionsDisabled}
+                  onRetryNew={() => void loadCharacterImages([c])}
                   onChoose={(choice) => {
                     setSelectedTrait(null);
                     setPendingRedrawName(null);
