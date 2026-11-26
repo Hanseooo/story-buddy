@@ -93,6 +93,24 @@ describe("RunPage states", () => {
     expect(screen.getByText("Content blocked")).toBeInTheDocument();
   });
 
+  it("a Qwen fine-tuned run shows its judge and how many checks fell back", async () => {
+    mockFetch.mockResolvedValue(new Response(JSON.stringify({
+      ...RUN,
+      job: { ...RUN.job, judge_choice: "qwen_finetuned", judge_label: "Qwen fine-tuned (seed 2)",
+        judge_fallback: { fell_back: 1, checks: 3 } },
+    })));
+    await renderPage();
+    expect(screen.getByText("Qwen fine-tuned (seed 2)")).toBeInTheDocument();
+    expect(screen.getByText("Fell back to Standard: 1 of 3 identity checks")).toBeInTheDocument();
+  });
+
+  it("a run from before the judge choice shows Standard (Gemma) and no fallback line", async () => {
+    mockFetch.mockResolvedValue(new Response(JSON.stringify(RUN)));
+    await renderPage();
+    expect(screen.getByText("Standard (Gemma)")).toBeInTheDocument();
+    expect(screen.queryByText(/Fell back to Standard/)).toBeNull();
+  });
+
   it("a checkpointed run shows the graph before the story", async () => {
     mockFetch.mockResolvedValue(new Response(JSON.stringify(RUN)));
     await renderPage();

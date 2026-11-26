@@ -87,6 +87,11 @@ export type RunJob = {
   scenes_passed: number | null;
   scenes_unchecked: number | null;
   approved: boolean;
+  judge_choice: "gemma" | "qwen_base" | "qwen_finetuned";
+  // Shown as is; the backend owns the wording (research.py:_RECORD_LABELS).
+  judge_label: string;
+  // null on a Gemma job: Gemma cannot fall back. Counts cover every attempt, shipped or not.
+  judge_fallback: { fell_back: number; checks: number } | null;
 };
 
 export type RunDetail = {

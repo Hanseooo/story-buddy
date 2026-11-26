@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from langgraph.checkpoint.postgres import PostgresSaver
 
 from app.auth import require_researcher
-from app.config import settings
+from app.config import DEFAULT_JUDGE_CHOICE, JUDGE_LABELS, judge_options, settings
 from app.db import get_supabase_client
 from contracts.story_memory import StoryMemory
 from pipeline.graph import build_graph
@@ -29,7 +29,10 @@ _ROW_FIELDS = (
     "usd_estimate", "image_count", "regen_count", "ref_retry_count", "scenes_total", "scenes_passed",
     "scenes_unchecked",
 )
-JOB_COLUMNS = ", ".join((*_ROW_FIELDS, "approved_at"))
+JOB_COLUMNS = ", ".join((*_ROW_FIELDS, "approved_at", "judge_choice"))
+
+# judge-selector AC-23: the record names the adapter; the write screen's shorter label stays in config.
+_RECORD_LABELS = JUDGE_LABELS | {"qwen_finetuned": "Qwen fine-tuned (seed 2)"}
 
 # `complete` is absent on purpose: a finished run did not end on a node.
 _ENDED_KIND = {"failed": "failed", "awaiting_confirm": "waiting", "awaiting_teacher": "teacher", "queued": "running", "running": "running"}
@@ -102,10 +105,27 @@ def _state_parts(memory: StoryMemory, sign: Callable[[str | None], str | None]) 
     }
 
 
+def _judge_record(choice: str, memory: StoryMemory | None) -> dict:
+    """judge-selector AC-23/24. M = identity checks on every attempt, shipped or not; N = those Gemma
+    answered on a Qwen job (SH-04). A check from before ticket 05 (`judge_model` None) counts as Gemma
+    and is never a fallback. A Gemma job cannot fall back, so it has no fallback line (None)."""
+    record = {"judge_choice": choice, "judge_label": _RECORD_LABELS[choice], "judge_fallback": None}
+    if choice == DEFAULT_JUDGE_CHOICE:
+        return record
+    gemma = judge_options()[DEFAULT_JUDGE_CHOICE]["model"]
+    checks = [c for scene in (memory.scenes if memory else []) for a in scene.attempts
+              for c in (a.identity_checks or {}).values()]
+    record["judge_fallback"] = {"fell_back": sum(c.judge_model == gemma for c in checks), "checks": len(checks)}
+    return record
+
+
 def project_run(job: dict, snapshots: list, sign: Callable[[str | None], str | None]) -> dict:
     """Pure. `snapshots` is `get_state_history` output, newest first."""
+    # A row read before migration 0034 has no `judge_choice`; 0034 backfills `gemma` (AC-10, AC-24).
+    choice = job.get("judge_choice") or DEFAULT_JUDGE_CHOICE
     out = {
-        "job": {k: job.get(k) for k in _ROW_FIELDS} | {"approved": job.get("approved_at") is not None},
+        "job": {k: job.get(k) for k in _ROW_FIELDS} | {"approved": job.get("approved_at") is not None}
+               | _judge_record(choice, None),
         "checkpointed": bool(snapshots),
         "story": None, "steps": [], "ended_on": None, "moderation": None,
         "characters": [], "scenes": [], "cost": None, "state": None,
@@ -120,7 +140,9 @@ def project_run(job: dict, snapshots: list, sign: Callable[[str | None], str | N
     # The `__start__` checkpoint has empty values; a thread that never got further has no state.
     latest = next((s for s in snapshots if s.values), None)
     if latest is not None:
-        out |= _state_parts(StoryMemory.model_validate(latest.values), sign)
+        memory = StoryMemory.model_validate(latest.values)
+        out |= _state_parts(memory, sign)
+        out["job"] |= _judge_record(choice, memory)
     return out
 
 
