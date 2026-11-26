@@ -118,7 +118,7 @@ export default function BookReviewDialog({
             <StateBadge state={state} className="row-start-2 col-start-1 justify-self-start ml-12 sm:row-start-1 sm:col-start-2 sm:ml-0" />
             <button
               onClick={onClose}
-              className="row-start-1 col-start-2 sm:col-start-3 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl hover:bg-muted transition-colors text-foreground/60 font-bold text-xl"
+              className="row-start-1 col-start-2 sm:col-start-3 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl hover:bg-muted transition-colors text-foreground/60 font-bold text-xl active:scale-[0.98]"
               aria-label="Close"
             >
               ✕
@@ -145,7 +145,7 @@ export default function BookReviewDialog({
                     <button
                       onClick={() => retry([i])}
                       aria-label={`Try loading page ${i + 1} again`}
-                      className="min-h-[44px] px-4 py-2 rounded-xl border border-primary/20 bg-surface font-bold text-foreground hover:bg-muted transition-colors"
+                      className="min-h-[44px] px-4 py-2 rounded-xl border border-primary/20 bg-surface font-bold text-foreground hover:bg-muted transition-colors active:scale-[0.98]"
                     >
                       Try again
                     </button>
@@ -191,7 +191,7 @@ export default function BookReviewDialog({
                 <p>{state === "approved" ? "A page didn't load." : "A page didn't load, so you can't share yet."}</p>
                 <button
                   onClick={() => retry(failedPages)}
-                  className="min-h-[44px] px-4 py-2 rounded-xl border border-primary/20 text-foreground hover:bg-muted transition-colors"
+                  className="min-h-[44px] px-4 py-2 rounded-xl border border-primary/20 text-foreground hover:bg-muted transition-colors active:scale-[0.98]"
                 >
                   Try again
                 </button>
@@ -206,7 +206,7 @@ export default function BookReviewDialog({
               {state !== "rejected" && state !== "pending" ? null : (
                 <button
                   onClick={() => onDecide("rejected")}
-                  className="min-h-[44px] px-6 py-2 rounded-xl border border-destructive text-destructive font-bold text-sm hover:bg-destructive/10 transition-colors"
+                  className="min-h-[44px] px-6 py-2 rounded-xl border border-destructive text-destructive font-bold text-sm hover:bg-destructive/10 transition-colors active:scale-[0.98]"
                 >
                   Not ready to share yet
                 </button>
@@ -216,14 +216,14 @@ export default function BookReviewDialog({
                   onClick={() => onDecide("approved")}
                   disabled={anyPageFailed || !allPagesLoaded}
                   aria-describedby={!anyPageFailed && !allPagesLoaded ? "book-sharing-note book-share-waiting" : "book-sharing-note"}
-                  className="min-h-[44px] px-8 py-2 rounded-xl bg-primary text-on-primary font-bold text-sm hover:bg-primary-deep transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary"
+                  className="min-h-[44px] px-8 py-2 rounded-xl bg-primary text-on-primary font-bold text-sm hover:bg-primary-deep transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary active:scale-[0.98]"
                 >
                   Share with class
                 </button>
               ) : (
                 <button
                   onClick={() => onDecide("pending")}
-                  className="min-h-[44px] px-6 py-2 rounded-xl border border-primary/20 font-bold text-sm hover:bg-muted transition-colors"
+                  className="min-h-[44px] px-6 py-2 rounded-xl border border-primary/20 font-bold text-sm hover:bg-muted transition-colors active:scale-[0.98]"
                 >
                   Move back to queue
                 </button>
@@ -322,7 +322,7 @@ function TeacherNoteRow({ jobId, name, detailsRef, openOnMount }: {
     }
   }
 
-  const actionClass = "min-h-[44px] px-4 py-2 rounded-xl border border-primary/20 font-bold text-sm hover:bg-muted disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-primary";
+  const actionClass = "min-h-[44px] px-4 py-2 rounded-xl border border-primary/20 font-bold text-sm hover:bg-muted disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-primary active:scale-[0.98]";
   return (
     <details ref={detailsRef} className="rounded-xl border border-primary/15 bg-surface px-4">
       <summary className="min-h-[44px] py-3 cursor-pointer font-bold text-sm focus-visible:outline-2 focus-visible:outline-primary">

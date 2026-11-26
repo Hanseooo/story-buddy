@@ -26,7 +26,7 @@ export default function BookCard({ job, thumbnailUrl, onRetryThumbnail, onOpen }
   // element itself, which here would be clipped by the card, so the card draws the same ring
   // (3px yellow outline, 3px offset, navy band) while its button has focus.
   return (
-    <div className="relative bg-surface border border-primary/15 rounded-2xl overflow-hidden shadow-[0_6px_18px_rgb(49_85_217/10%)] hover:border-primary/40 transition-colors has-[>button:focus-visible]:outline-3 has-[>button:focus-visible]:outline-offset-3 has-[>button:focus-visible]:outline-secondary has-[>button:focus-visible]:shadow-[0_0_0_3px_var(--foreground)]">
+    <div className="relative bg-surface border border-primary/15 rounded-2xl overflow-hidden shadow-[0_6px_18px_rgb(49_85_217/10%)] hover:border-primary/40 transition-colors has-[>button:focus-visible]:outline-3 has-[>button:focus-visible]:outline-offset-3 has-[>button:focus-visible]:outline-secondary has-[>button:focus-visible]:shadow-[0_0_0_3px_var(--foreground)] has-[>button:active]:scale-[0.98]">
       {/* Thumbnail */}
       <PictureBox src={thumbnailUrl} alt="" onRetry={onRetryThumbnail} />
 

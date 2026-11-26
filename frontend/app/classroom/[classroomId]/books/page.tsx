@@ -39,6 +39,11 @@ export default function BooksPage() {
   const [thumbnails, setThumbnails] = useState<Record<string, string | null>>({});
   const thumbRetries = useRef(new Map<string, AbortController>());
   const [activeTab, setActiveTab] = useState<Tab>("pending");
+  const tabList = useRef<HTMLDivElement>(null);
+  // The tabs scroll in one row on a phone; the chosen one, e.g. after "Back to Books", stays in sight.
+  useEffect(() => {
+    tabList.current?.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [activeTab]);
   const [heldCount, setHeldCount] = useState(0);
   const [toast, setToast] = useState<Toast | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -364,14 +369,14 @@ export default function BooksPage() {
         <button
           onClick={handleAddNote}
           aria-label={`Add a note for ${toast.noteFor}`}
-          className="text-secondary font-bold hover:underline min-h-[44px] px-1"
+          className="text-secondary font-bold hover:underline min-h-[44px] px-1 active:scale-[0.98]"
         >
           Add a note
         </button>
       )}
       <button
         onClick={handleUndo}
-        className="text-secondary font-bold hover:underline min-h-[44px] px-1"
+        className="text-secondary font-bold hover:underline min-h-[44px] px-1 active:scale-[0.98]"
       >
         {toast.retry ? "Try again" : "Undo"}
       </button>
@@ -398,9 +403,9 @@ export default function BooksPage() {
     return (
       <div className="p-6 sm:p-8 max-w-5xl mx-auto">
         <div className="h-8 w-40 bg-muted rounded-xl animate-pulse mb-6" />
-        <div className="flex gap-1 mb-6">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-10 w-28 bg-muted rounded-xl animate-pulse" />
+        <div className="flex gap-1 mb-6 overflow-hidden">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-10 w-28 shrink-0 bg-muted rounded-xl animate-pulse" />
           ))}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -429,7 +434,8 @@ export default function BooksPage() {
       <div
         role="tablist"
         aria-label="Book review tabs"
-        className="flex flex-wrap gap-1 mb-6 border-b border-primary/10"
+        ref={tabList}
+        className="flex gap-1 mb-6 border-b border-primary/10 overflow-x-auto"
         onKeyDown={(e) => {
           const keys = ["ArrowLeft", "ArrowRight"];
           if (!keys.includes(e.key)) return;
@@ -450,7 +456,7 @@ export default function BooksPage() {
             aria-selected={activeTab === t.key}
             tabIndex={activeTab === t.key ? 0 : -1}
             onClick={() => setActiveTab(t.key)}
-            className={`min-h-[44px] px-4 py-2 text-sm font-bold rounded-t-xl transition-colors relative focus-visible:outline-2 focus-visible:outline-primary ${
+            className={`min-h-[44px] shrink-0 whitespace-nowrap px-4 py-2 text-sm font-bold rounded-t-xl transition-colors relative focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary active:scale-[0.98] ${
               activeTab === t.key
                 ? "text-primary after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary"
                 : "text-foreground/50 hover:text-foreground/80"
@@ -473,7 +479,7 @@ export default function BooksPage() {
       ) : (
         <>
           {/* Mobile: cards */}
-          <StaggerGrid className="sm:hidden grid grid-cols-1 gap-4">
+          <StaggerGrid className="md:hidden grid grid-cols-1 gap-4">
             {visibleJobs.map((j) => (
               <StaggerItem key={j.id}>
                 <BookCard
@@ -486,7 +492,7 @@ export default function BooksPage() {
             ))}
           </StaggerGrid>
           {/* Desktop: table */}
-          <div className="hidden sm:block overflow-x-auto rounded-2xl border border-primary/15 shadow-[0_6px_18px_rgb(49_85_217/10%)]">
+          <div className="hidden md:block overflow-x-auto rounded-2xl border border-primary/15 shadow-[0_6px_18px_rgb(49_85_217/10%)]">
             <table className="w-full text-sm">
               <thead className="bg-surface border-b border-primary/10">
                 <tr>
@@ -622,7 +628,7 @@ function BookTableRow({
       </td>
       <td className="px-6 py-3 text-right">
         <button
-          className="text-primary text-sm font-bold hover:underline min-h-[44px] px-2"
+          className="text-primary text-sm font-bold hover:underline min-h-[44px] px-2 active:scale-[0.98]"
           // The row opens the book too; one click must sign once.
           onClick={(e) => { e.stopPropagation(); onOpen(); }}
         >
@@ -677,19 +683,19 @@ export function FailedBookRow({ job }: { job: Job }) {
 
   return (
     <div className="bg-surface border border-primary/10 rounded-2xl p-4">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <div className="min-w-0 break-words">
           <p className="font-bold text-sm text-foreground">{name}</p>
           <p className="text-xs text-foreground/60">{displayTitle(job.title, job.input_text)}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex items-center gap-1 font-mono text-xs text-foreground/60 bg-muted/30 px-2 py-0.5 rounded">
             <span>Ref: {job.id.slice(0, 8)}</span>
             <button
               type="button"
               aria-label="Copy story reference ID"
               onClick={handleCopy}
-              className="ml-1 inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-primary font-bold hover:underline"
+              className="ml-1 inline-flex items-center justify-center min-h-[44px] min-w-[44px] text-primary font-bold hover:underline active:scale-[0.98]"
             >
               Copy
             </button>

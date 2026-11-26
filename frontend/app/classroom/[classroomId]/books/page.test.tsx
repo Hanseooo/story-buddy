@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { imageLinksResponse } from "@/lib/imageLinksFake";
 import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { jobState, type Job } from "@/lib/types/jobs";
@@ -1206,5 +1206,36 @@ describe("BookReviewDialog accessible name", () => {
   it("names the dialog by the student and the book title", () => {
     render(<BookReviewDialog job={makeJob({ title: "The Red Comb" })} pageUrls={[]} onClose={vi.fn()} onDecide={vi.fn()} onRetryPages={vi.fn()} />);
     expect(screen.getByRole("dialog", { name: "Alex The Red Comb" })).toBeDefined();
+  });
+});
+
+describe("Books tabs on a narrow screen (ui-audit C6)", () => {
+  function stubBooks(jobs: Promise<{ data: Job[] }>) {
+    Object.assign(supabase, { from: vi.fn((table: string) => ({
+      select: () => ({
+        eq: () => table === "jobs"
+          ? { order: () => jobs }
+          : { single: async () => ({ data: { review_notes_enabled: false } }) },
+      }),
+    })) });
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json([])));
+    onTestFinished(() => { vi.unstubAllGlobals(); });
+  }
+
+  it("the loading skeleton draws one placeholder per tab, four in all", () => {
+    stubBooks(new Promise(() => {}));
+    const { container } = render(<BooksPage />);
+    expect(container.querySelectorAll(".h-10.w-28.animate-pulse")).toHaveLength(4);
+  });
+
+  it("scrolls the chosen tab into view in the scrolling strip", async () => {
+    stubBooks(Promise.resolve({ data: [makeJob({ pages: [] })] }));
+    const scrolled: Element[] = [];
+    // jsdom has no scrolling, so the browser call is the boundary.
+    Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this); };
+    onTestFinished(() => { delete (Element.prototype as Partial<Element>).scrollIntoView; });
+    render(<BooksPage />);
+    fireEvent.click(await screen.findByRole("tab", { name: /^Needs your help/ }));
+    expect(scrolled.at(-1)).toBe(screen.getByRole("tab", { name: /^Needs your help/ }));
   });
 });

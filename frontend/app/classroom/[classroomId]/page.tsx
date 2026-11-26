@@ -149,7 +149,7 @@ export default function RosterPage() {
               setLoadError(false);
               setLoadAttempt((n) => n + 1);
             }}
-            className="min-h-11 px-6 bg-primary text-on-primary rounded-xl font-bold text-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary"
+            className="min-h-11 px-6 bg-primary text-on-primary rounded-xl font-bold text-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary active:scale-[0.98]"
           >
             Retry
           </button>
@@ -185,7 +185,7 @@ export default function RosterPage() {
                 );
                 showToast("Join link copied");
               }}
-              className="text-sm font-bold text-primary hover:text-primary-deep hover:underline transition-colors"
+              className="text-sm font-bold text-primary hover:text-primary-deep hover:underline transition-colors active:scale-[0.98]"
             >
               Copy join link
             </button>
@@ -283,7 +283,7 @@ export default function RosterPage() {
                 <span className="font-bold text-foreground/80 text-base">{s.display_nickname}</span>
                 <button
                   onClick={(e) => handleAddBack(s, e.currentTarget)}
-                  className="text-primary text-xs font-bold hover:underline min-h-[36px] px-4 bg-primary/5 hover:bg-primary/10 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary"
+                  className="text-primary text-xs font-bold hover:underline min-h-[36px] px-4 bg-primary/5 hover:bg-primary/10 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary active:scale-[0.98]"
                 >
                   Add back
                 </button>
@@ -412,7 +412,7 @@ function RowMenu({
                 onClose();
                 onReset(toggleRef.current);
               }}
-              className="w-full text-left px-4 py-3 text-sm rounded-xl hover:bg-muted transition-colors font-bold focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary"
+              className="w-full text-left px-4 py-3 text-sm rounded-xl hover:bg-muted transition-colors font-bold focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary active:scale-[0.98]"
             >
               Reset word
             </button>
@@ -422,7 +422,7 @@ function RowMenu({
                 onClose();
                 onRemove();
               }}
-              className="w-full text-left px-4 py-3 text-sm rounded-xl hover:bg-destructive/10 transition-colors font-bold text-destructive focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary"
+              className="w-full text-left px-4 py-3 text-sm rounded-xl hover:bg-destructive/10 transition-colors font-bold text-destructive focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-secondary active:scale-[0.98]"
             >
               Remove
             </button>
