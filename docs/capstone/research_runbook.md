@@ -343,6 +343,78 @@ three runs the runner varies only `seed`, `output_dir`, `run_name` and `report_t
   update 122.
 - A judge's answer at evaluation is capped at 256 tokens ("Held-out resume context" above).
 
+### Selectable Qwen judge on Vast (judge-selector 01, draft 2026-11-27)
+
+Draft. The owner fills every TODO after renting and probing. Spec: `docs/specs/judge-selector.md`
+US-06 (AC-26 to AC-28) and §7.6, the go/no-go. Renting, paying and logging in to Vast are owner
+steps. If no `SceneVerdict` parses, or the latency is unacceptable, stop and revisit the spec before
+tickets 05 to 08.
+
+**What is served.** `backend/finetune/serve_qwen_judge.sh` is the held-out `server.json` (inside
+`data/judge/evaluations/obj4-v1/heldout-1/serving/selected-serving-v1.zip`) with three changes:
+only `seed2_checkpoint140` is loaded, it binds `0.0.0.0`, and it requires `--api-key` from
+`VLLM_API_KEY`. vLLM is 0.26.0, pinned in that zip's `inference-requirements-linux.lock`. It needs
+no flag for `response_format` json_schema, since structured output is on by default with backend
+`auto` (vLLM 0.26.0 docs, `features/structured_outputs`). Whether it works with a LoRA on this
+server is what the probe checks. The 256-token answer cap stays. A longer answer is cut off and the
+probe reports it as NOT PARSED.
+
+**Start.**
+1. Rent an offer with at least the held-out host's GPU memory (RTX A6000, 48 GB class, §7 of
+   `hardware_and_hosting.md`). Expose container port 18081 (Vast maps it to a public port, shown in
+   the instance's IP and port list; inferred, not checked on this offer).
+2. Install vLLM from the lock: copy `data/judge/qualification/inference-requirements-linux.lock` out
+   of the zip and run `uv pip install --require-hashes -r inference-requirements-linux.lock`
+   (inferred command).
+3. Upload the adapter. Source on the owner's machine:
+   `data/judge/qualification/vast-54113001/registered-training/verified-extracted/storybuddy/data/judge/runs/obj4-v1/seed-2/output/checkpoint-140/`.
+   Upload only `adapter_config.json` (sha256 `d206b465…`) and `adapter_model.safetensors`
+   (173,188,512 bytes, sha256 `40b780a7…`) to
+   `/workspace/storybuddy/data/judge/heldout-serving/seed-2/checkpoint-140/`. Both hashes match
+   `checkpoint-origins.json` in the serving zip (checked 2026-11-27). Check them again on the
+   instance with `sha256sum`.
+4. Copy `backend/finetune/serve_qwen_judge.sh` to the instance, then
+   `export VLLM_API_KEY=<long random string>` and `bash serve_qwen_judge.sh`. The first start
+   downloads the base model at the pinned revision.
+
+**Health check.** From any machine:
+`curl -s -H "Authorization: Bearer $QWEN_JUDGE_API_KEY" http://<public-ip>:<public-port>/v1/models`.
+It must list `Qwen/Qwen3.5-9B` and `seed2_checkpoint140` (SH-05). Without the header it should
+answer 401 (inferred from `--api-key`'s help text, not checked on this route).
+
+**Probe (go/no-go).** From `backend/` on the owner's machine, with the backend `.env` in place so
+`settings` loads:
+`QWEN_JUDGE_BASE_URL=http://<public-ip>:<public-port>/v1 QWEN_JUDGE_API_KEY=<key> uv run python -m scripts.qwen_judge_probe`.
+It sends synthetic pair `033b8372e89e4c06` (`syn-025:c0`, Tito Ben, labelled Same) once to each
+model and prints latency and parsed / not parsed. Exit 0 is GO, 1 a missing model or an unparsed
+answer, 2 no server. Save its output under `.scratch/judge-selector/`.
+
+- Probe output: TODO (owner, paste here)
+- Earlier reference: the two adapter requests in `vast-53867285-inference1/inference-contract.json`
+  took 21.915 and 46.647 seconds ("Full-run readiness and cost assessment" below).
+
+**Northflank env vars** (worker service, after ticket 05 ships):
+- `QWEN_JUDGE_BASE_URL` = `http://<public-ip>:<public-port>/v1`
+- `QWEN_JUDGE_API_KEY` = the same value as `VLLM_API_KEY` on the instance
+
+The endpoint is plain HTTP, so the key travels unencrypted. TODO (owner): accept that for a demo
+with no child users, or put TLS in front before setting the key on Northflank.
+
+**Chosen Qwen timeout.** TODO (owner): the value in seconds and the reason, from the probe latency
+against the 60 s default and the book length (OD-03).
+
+**Offer terms.** TODO (owner): hourly price of the offer actually rented, disk size and its price,
+and bandwidth terms (upload and download per TB). The earlier rental's $0.447/hour, 100 GB disk
+included, is history, not this offer.
+
+**Stop.** Stop the instance from the Vast console (or `vastai stop instance <id>`, inferred). GPU
+billing ends, but disk is still billed while stopped. A stopped instance may not get its GPU back on
+restart.
+
+**Destroy.** After the defense, destroy the instance (console, or `vastai destroy instance <id>`,
+inferred). This deletes its disk and ends all billing. Unset `QWEN_JUDGE_BASE_URL` on Northflank
+first, so both Qwen options show as unavailable rather than failing per call.
+
 ### Results figures recounted for the research page refresh (2026-11-21)
 
 Test accuracy and its baseline are arithmetic on the counts in "Exact values of the partial comparison" and
