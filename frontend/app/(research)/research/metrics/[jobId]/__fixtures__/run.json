@@ -14,7 +14,10 @@
     "scenes_total": 2,
     "scenes_passed": 2,
     "scenes_unchecked": 0,
-    "approved": true
+    "approved": true,
+    "judge_choice": "gemma",
+    "judge_label": "Standard (Gemma)",
+    "judge_fallback": null
   },
   "checkpointed": true,
   "story": {

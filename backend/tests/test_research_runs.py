@@ -13,8 +13,8 @@ from app.auth import require_researcher
 from app.main import app, get_current_user
 from app.research import project_run
 from contracts.story_memory import (
-    CURRENT_SCHEMA_VERSION, Attempt, Character, FailureReason, Input, ModerationResult, RefVerdict, Scene,
-    StoryMemory,
+    CURRENT_SCHEMA_VERSION, Attempt, Character, FailureReason, IdentityCheck, Input, ModerationResult, RefVerdict,
+    Scene, StoryMemory,
 )
 
 JOB_ID = "3f9a1c2e-0000-4000-8000-000000000001"
@@ -49,8 +49,8 @@ def _memory(**overrides) -> StoryMemory:
     return StoryMemory(**fields)
 
 
-def _job(status="complete", approved_at="2026-10-02T00:00:00+00:00"):
-    return {"id": JOB_ID, "title": "The Red Kite", "status": status, "style_preset_id": "cel",
+def _job(status="complete", approved_at="2026-10-02T00:00:00+00:00", **extra):
+    return extra | {"id": JOB_ID, "title": "The Red Kite", "status": status, "style_preset_id": "cel",
             "created_at": "2026-10-01T10:00:00+00:00", "failure_reason": None, "approved_at": approved_at,
             "langfuse_trace_url": None, "usd_estimate": 0.31, "image_count": 3, "regen_count": 1,
             "ref_retry_count": 0, "scenes_total": 2, "scenes_passed": 2, "scenes_unchecked": 0}
@@ -174,6 +174,48 @@ def test_history_shape_matches_installed_langgraph():
     assert [s["node"] for s in out["steps"]] == ["input_gate", "analyze"]
     assert out["ended_on"] is None
     assert out["scenes"][0]["shipped_attempt"] == 1
+
+
+def _checks(*models):
+    return {f"c{i}": IdentityCheck(same_character=True, judge_model=m) for i, m in enumerate(models, 1)}
+
+
+def test_qwen_job_counts_fallbacks_across_every_attempt():
+    # Unshipped s1 a0: Gemma answered (the one fallback). s1 a1: Qwen. s2 a0: a pre-05 check (None)
+    # counts as Gemma, so it is a check (M) but not a fallback (N). s3: no referenced subjects. N=1, M=3.
+    scenes = [
+        Scene(scene_id="s1", text_excerpt="a", final_image_ref="pages/s1-a1.webp",
+              attempts=[Attempt(image_ref="pages/s1-a0.webp", identity_checks=_checks("google/gemma-3-27b-it")),
+                        Attempt(image_ref="pages/s1-a1.webp", identity_checks=_checks("seed2_checkpoint140"))]),
+        Scene(scene_id="s2", text_excerpt="b", final_image_ref="pages/s2-a0.webp",
+              attempts=[Attempt(image_ref="pages/s2-a0.webp", identity_checks=_checks(None))]),
+        Scene(scene_id="s3", text_excerpt="c", final_image_ref="pages/s3-a0.webp",
+              attempts=[Attempt(image_ref="pages/s3-a0.webp", identity_checks={})]),
+    ]
+    with patch.object(research.settings, "vlm_judge_model", "google/gemma-3-27b-it"):
+        out = project_run(_job(judge_choice="qwen_finetuned"), _history((), _memory(scenes=scenes)), _sign)
+
+    assert out["job"]["judge_choice"] == "qwen_finetuned"
+    assert out["job"]["judge_label"] == "Qwen fine-tuned (seed 2)"
+    assert out["job"]["judge_fallback"] == {"fell_back": 1, "checks": 3}
+
+
+def test_qwen_job_with_no_identity_checks_counts_zero():
+    out = project_run(_job(judge_choice="qwen_base"), _history((), _memory()), _sign)
+
+    assert out["job"]["judge_label"] == "Qwen base"
+    assert out["job"]["judge_fallback"] == {"fell_back": 0, "checks": 0}
+
+
+def test_pre_migration_job_reads_as_gemma_with_no_fallback_line():
+    scenes = [Scene(scene_id="s1", text_excerpt="a", final_image_ref="pages/s1-a0.webp",
+                    attempts=[Attempt(image_ref="pages/s1-a0.webp", identity_checks=_checks(None, None))])]
+
+    out = project_run(_job(), _history((), _memory(scenes=scenes)), _sign)
+
+    assert out["job"]["judge_choice"] == "gemma"
+    assert out["job"]["judge_label"] == "Standard (Gemma)"
+    assert out["job"]["judge_fallback"] is None
 
 
 def test_sign_returns_none_when_storage_fails():
