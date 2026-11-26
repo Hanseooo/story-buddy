@@ -33,6 +33,16 @@ function visibleStylePresets() {
     : STYLE_PRESETS.filter(({ id }) => id !== "pixel");
 }
 
+// judge-selector SH-01. Labels are fallbacks until `GET /judges` answers; the response's own
+// labels replace them. Ids are the only values `POST /storybooks` accepts (422 otherwise).
+const JUDGE_OPTIONS = [
+  { id: "gemma", label: "Standard (Gemma)" },
+  { id: "qwen_base", label: "Qwen base" },
+  { id: "qwen_finetuned", label: "Qwen fine-tuned" },
+] as const;
+type JudgeChoice = (typeof JUDGE_OPTIONS)[number]["id"];
+type QwenStatus = "loading" | "offline" | "available";
+
 function countWords(text: string): number {
   const trimmed = text.trim();
   return trimmed === "" ? 0 : trimmed.split(/\s+/).length;
@@ -47,6 +57,9 @@ export default function WriteStoryPage() {
   const [postError, setPostError] = useState(false);
   const [chainCount, setChainCount] = useState(0);
   const [stylePresetId, setStylePresetId] = useState<StylePresetId>("gouache");
+  const [judgeChoice, setJudgeChoice] = useState<JudgeChoice>("gemma");
+  const [qwenStatus, setQwenStatus] = useState<QwenStatus>("loading");
+  const [judgeLabels, setJudgeLabels] = useState<Partial<Record<JudgeChoice, string>>>({});
   const titleInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const redactionPanelRef = useRef<HTMLDivElement>(null);
@@ -83,6 +96,43 @@ export default function WriteStoryPage() {
     return () => controller.abort();
   }, [profileId, recoveryRevision]);
 
+  // US-01 AC-02..04: Qwen stays disabled until the server says it is up. Any failure reads as
+  // offline, and submit never waits on this request.
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/judges`, {
+          headers: { Authorization: `Bearer ${session?.access_token}` }, cache: "no-store", signal: controller.signal,
+        });
+        if (!response.ok) throw new Error();
+        const judges: unknown = await response.json();
+        if (!Array.isArray(judges)) throw new Error();
+        const labels: Partial<Record<JudgeChoice, string>> = {};
+        let qwenUp = true;
+        for (const { id } of JUDGE_OPTIONS) {
+          const entry: unknown = judges.find((judge: unknown) =>
+            typeof judge === "object" && judge !== null && "id" in judge && judge.id === id);
+          if (typeof entry === "object" && entry !== null && "label" in entry && typeof entry.label === "string") {
+            labels[id] = entry.label;
+          }
+          const available = typeof entry === "object" && entry !== null && "available" in entry && entry.available === true;
+          if (id !== "gemma" && !available) qwenUp = false;
+        }
+        if (controller.signal.aborted) return;
+        setJudgeLabels(labels);
+        setQwenStatus(qwenUp ? "available" : "offline");
+      } catch { if (!controller.signal.aborted) setQwenStatus("offline"); }
+    })();
+    return () => controller.abort();
+  }, []);
+  // AC-05: a Qwen choice, picked or restored from a draft, shows and sends Gemma unless Qwen is up.
+  const effectiveJudge: JudgeChoice = qwenStatus === "available" ? judgeChoice : "gemma";
+  const judgeHint = qwenStatus === "loading"
+    ? "Checking…"
+    : qwenStatus === "offline" ? "Qwen checker is offline. Standard is used." : "";
+
   function consumeWriting() {
     if (!recovery?.writing) return;
     try {
@@ -108,7 +158,7 @@ export default function WriteStoryPage() {
   }
 
   useEffect(() => {
-    let prefill: { text: string; title: string; stylePresetId?: StylePresetId } | null = null;
+    let prefill: { text: string; title: string; stylePresetId?: StylePresetId; judgeChoice?: JudgeChoice } | null = null;
     try {
       const raw = sessionStorage.getItem(PREFILL_KEY);
       if (raw !== null) {
@@ -129,10 +179,14 @@ export default function WriteStoryPage() {
           const stylePresetId = visibleStylePresets().some(({ id }) => id === storedStyle)
             ? (storedStyle as StylePresetId)
             : undefined;
+          const storedJudge =
+            "judge_choice" in parsed && typeof parsed.judge_choice === "string" ? parsed.judge_choice : null;
+          const judgeChoice = JUDGE_OPTIONS.find(({ id }) => id === storedJudge)?.id;
           prefill = {
             text: parsed.text,
             title: parsed.title,
             ...(stylePresetId !== undefined ? { stylePresetId } : {}),
+            ...(judgeChoice !== undefined ? { judgeChoice } : {}),
           };
         }
       }
@@ -143,6 +197,7 @@ export default function WriteStoryPage() {
       setText(prefill.text);
       setTitle(prefill.title);
       if (prefill.stylePresetId !== undefined) setStylePresetId(prefill.stylePresetId);
+      if (prefill.judgeChoice !== undefined) setJudgeChoice(prefill.judgeChoice);
       try {
         setChainCount(Number(sessionStorage.getItem(CHAIN_KEY) ?? 0));
       } catch { /* unavailable */ }
@@ -190,6 +245,7 @@ export default function WriteStoryPage() {
         text,
         title: title.trim(),
         style_preset_id: stylePresetId,
+        judge_choice: effectiveJudge,
         ...(titleAck !== undefined ? { title_ack: titleAck } : {}),
       }),
     });
@@ -384,6 +440,34 @@ export default function WriteStoryPage() {
           ))}
         </div>
       </motion.fieldset>
+
+      {/* Picture checker: judge-selector US-01. Native select (CLAUDE.md §7). */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.08, ease: "easeOut" }}
+        className="mt-3 shrink-0 max-w-2xl"
+      >
+        <label htmlFor="picture-checker" className="block text-xs font-display font-extrabold tracking-wider uppercase text-foreground/60 mb-2">
+          Picture checker
+        </label>
+        <select
+          id="picture-checker"
+          value={effectiveJudge}
+          onChange={(e) => setJudgeChoice(e.target.value as JudgeChoice)}
+          aria-describedby={judgeHint ? "picture-checker-hint" : undefined}
+          className="w-full sm:w-auto min-h-11 rounded-xl bg-surface border border-primary/20 px-3 text-sm font-bold text-foreground cursor-pointer"
+        >
+          {JUDGE_OPTIONS.map(({ id, label }) => (
+            <option key={id} value={id} disabled={id !== "gemma" && qwenStatus !== "available"}>
+              {judgeLabels[id] ?? label}
+            </option>
+          ))}
+        </select>
+        <p id="picture-checker-hint" aria-live="polite" className="mt-1 text-xs font-bold text-foreground/60">
+          {judgeHint}
+        </p>
+      </motion.div>
 
       {/* Floating Action Bar */}
       <motion.div 
