@@ -48,7 +48,7 @@ describe("architecture page data", () => {
   it("puts the web-tier gate where main.py has it", () => {
     const web = data.COMPONENTS.find((c) => c.name.startsWith("Web-tier"))!;
     expect(web.files).toContain("backend/app/main.py");
-    const body = lines("backend/app/main.py").slice(170, 200).join("\n");
+    const body = lines("backend/app/main.py").slice(210, 240).join("\n");
     expect(body).toContain("redact_pii");
     expect(body).toContain("check_text");
   });
