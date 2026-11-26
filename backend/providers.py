@@ -146,8 +146,9 @@ def _same_character_confidence(completion) -> float | None:
     return None
 
 
-def _bounded(model: str, call):
-    """Run `call` on a worker thread and give up on it after `CALL_TIMEOUT_SECONDS`.
+def _bounded(model: str, call, timeout: float | None = None):
+    """Run `call` on a worker thread and give up on it after `timeout`, by default
+    `CALL_TIMEOUT_SECONDS` (read at call time, so a patched value is the one applied).
 
     Wraps the whole SDK call, so the bound covers `MAX_RETRIES`' attempts together rather than
     resetting per attempt.
@@ -162,19 +163,20 @@ def _bounded(model: str, call):
     something httpx will not. Move to an async client if stalls ever become frequent enough for the
     leak to matter; at one stall per book it does not.
     """
+    timeout = CALL_TIMEOUT_SECONDS if timeout is None else timeout
     check_generation_fence()
     pool = ThreadPoolExecutor(max_workers=1)
     try:
         # NOT `with ThreadPoolExecutor(...)`: its `__exit__` calls `shutdown(wait=True)`, which
         # joins the very thread this is abandoning and re-hangs the worker on the way out.
-        result = pool.submit(copy_context().run, call).result(timeout=CALL_TIMEOUT_SECONDS)
+        result = pool.submit(copy_context().run, call).result(timeout=timeout)
         check_generation_fence()
         return result
     except TimeoutError as exc:
         # `Future.result` raises a bare, messageless TimeoutError, and `run_job`'s handler writes
         # `str(exc)` into the row's `error` — the only account of the failure anyone gets later.
         raise TimeoutError(
-            f"{model} did not answer within {CALL_TIMEOUT_SECONDS:.0f}s (call abandoned)"
+            f"{model} did not answer within {timeout:.0f}s (call abandoned)"
         ) from exc
     finally:
         # A feature worker's finish marker promises no provider work remains. It
@@ -231,14 +233,23 @@ def structured_text(prompt: str, schema: type[T], model: str | None = None) -> T
     )
 
 
-def judge(prompt: str, image_urls: list[str], schema: type[T], model: str | None = None) -> T:
+def judge(
+    prompt: str, image_urls: list[str], schema: type[T], model: str | None = None,
+    choice: str | None = None,
+) -> T:
     """Multimodal structured verdict over reference + scene images (ADR-004, ADR-018).
 
     Field order in `schema` is load-bearing: `differences_observed` must precede
     `same_character` so the judge reasons before it scores.
+
+    `choice` is a judge-selector id (`app.config.JUDGE_CHOICES`). `None` and `"gemma"` take
+    today's route unchanged; a Qwen id posts to the Qwen server instead (SH-03) and ignores
+    `model`. This only routes: the Gemma fallback is the caller's (SH-04).
     """
     content = [{"type": "text", "text": prompt}]
     content += [{"type": "image_url", "image_url": {"url": url}} for url in image_urls]
+    if choice not in (None, "gemma"):
+        return _qwen_judge(choice, content, schema)
     resolved = model or settings.vlm_judge_model
     return _chat(
         settings.judge_base_url,
@@ -249,6 +260,40 @@ def judge(prompt: str, image_urls: list[str], schema: type[T], model: str | None
         # Only this function sends images, so only this function pins providers.
         providers=VISION_PROVIDERS.get(resolved),
     )
+
+
+def _qwen_judge(choice: str, content, schema: type[T]) -> T:
+    """One attempt on the self-hosted vLLM Qwen judge (judge-selector SH-03, OD-03).
+
+    Each of `_chat`'s three retries is dropped on purpose, so a dead or slow server costs one
+    `QWEN_JUDGE_TIMEOUT_SECONDS` before the caller's Gemma fallback: `max_retries=0` (no SDK
+    retry), no schema re-ask, and no `_parse_retrying_error_bodies` (that 200-with-`error` shape
+    is OpenRouter's). `_bounded` gets the same timeout, so the whole call ends at that bound,
+    neither cut short by `CALL_TIMEOUT_SECONDS` nor extended by it. No `provider` body: vLLM
+    rejects it (ADR-019)."""
+    from app.config import QWEN_JUDGE_TIMEOUT_SECONDS, judge_options
+
+    model = judge_options()[choice]["model"]
+    if not settings.qwen_judge_base_url:
+        # The SDK reads a None base URL as api.openai.com. Raise so the caller falls back.
+        raise RuntimeError("qwen_judge_base_url is not set; the Qwen judge is not configured")
+    client = OpenAI(
+        base_url=settings.qwen_judge_base_url,
+        api_key=settings.qwen_judge_api_key,
+        timeout=QWEN_JUDGE_TIMEOUT_SECONDS,
+        max_retries=0,
+    )
+    kwargs = {
+        "model": model,
+        "messages": [{"role": "user", "content": content}],
+        "response_format": schema,
+        "extra_body": {},
+        "temperature": 0,
+    }
+    completion = _bounded(
+        model, lambda: client.chat.completions.parse(**kwargs), QWEN_JUDGE_TIMEOUT_SECONDS
+    )
+    return _validated(completion, schema, model)
 
 
 def judge_with_metadata(
@@ -402,6 +447,10 @@ def _one_answer(client: OpenAI, model: str, content, schema: type[T], extra_body
     """One request, validated. Raises `ValueError` (or a `ValidationError`, which is one) whenever
     the provider returns something the declared grammar should have made unproducible."""
     completion = _fetch_completion(client, model, content, schema, extra_body, temperature=0)
+    return _validated(completion, schema, model)
+
+
+def _validated(completion, schema: type[T], model: str) -> T:
     message = completion.choices[0].message
     if message.parsed is None:
         raise ValueError(f"{model} returned no parsable structured output")
