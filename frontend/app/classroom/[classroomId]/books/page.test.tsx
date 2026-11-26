@@ -725,6 +725,53 @@ describe("held story inspection", () => {
     expect(summary).toHaveFocus();
     vi.unstubAllGlobals();
   });
+  it("keeps the machine evidence in a Technical record that starts closed and opens in place (ticket 04, ADR-080)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/moderation-review")) return Response.json(heldDetail);
+      return Response.json([{ review_id: heldDetail.review_id, job_id: "synthetic-job", title: heldDetail.title, held_at: "2026-10-28T00:00:00Z", ready: true }]);
+    }));
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Inspect Synthetic title/ }));
+    const record = (await screen.findByText("Technical record")).closest("details")!;
+    expect(record).not.toHaveAttribute("open");
+    expect(within(record).getByText("mistralai/mistral-small-3.2-24b-instruct")).toBeDefined();
+    expect(within(record).getByText("sha256:519f1f08eba0b868589c168057db510306f11c518134aa0c37da7cc4a37436a7")).toBeDefined();
+    expect(within(record).getByText("Policy at submission: teacher_review_policy_v1")).toBeDefined();
+    expect(within(record).getByText("Captured settings version: 0")).toBeDefined();
+    expect(within(record).getByText("Synthetic review explanation")).toBeDefined();
+    // The plain reason stays outside the disclosure.
+    expect(record).not.toContainElement(screen.getByText("Shared safety", { selector: "p" }));
+    fireEvent.click(within(record).getByText("Technical record"));
+    expect(record).toHaveAttribute("open");
+    vi.unstubAllGlobals();
+  });
+  it("offers Review criteria once while a held story is open (ticket 04)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/moderation-review")) return Response.json(heldDetail);
+      return Response.json([{ review_id: heldDetail.review_id, job_id: "synthetic-job", title: heldDetail.title, held_at: "2026-10-28T00:00:00Z", ready: true }]);
+    }));
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Inspect Synthetic title/ }));
+    await screen.findByRole("button", { name: "Allow this picture" });
+    expect(screen.getAllByText("Review criteria")).toHaveLength(1);
+    vi.unstubAllGlobals();
+  });
+  it("groups every decision control in one Decision region, apart from Back (ticket 04)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/moderation-review")) return Response.json({ ...heldDetail, replacement_available: true, replacement_disabled_reason: null });
+      return Response.json([{ review_id: heldDetail.review_id, job_id: "synthetic-job", title: heldDetail.title, held_at: "2026-10-28T00:00:00Z", ready: true }]);
+    }));
+    render(<NeedsHelpQueue classroomId="synthetic-class" active onCount={() => {}} onBack={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Inspect Synthetic title/ }));
+    const decision = await screen.findByRole("region", { name: "Decision" });
+    expect(within(decision).getByRole("button", { name: "Allow this picture" })).toBeDefined();
+    expect(within(decision).getByRole("button", { name: "Request replacement picture" })).toBeDefined();
+    expect(within(decision).getByRole("button", { name: "Stop this story" })).toBeDefined();
+    expect(within(decision).getAllByRole("checkbox")).toHaveLength(10);
+    expect(within(decision).queryByRole("button", { name: "Back to Needs your help" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Back to Needs your help" })).toBeEnabled();
+    vi.unstubAllGlobals();
+  });
   it.each([false, true])("reveals only on request and keeps writing readable on image failure (%s)", async (fails) => {
     let queueChanged = false;
     const fetchMock = vi.fn<(url: string, options?: RequestInit) => Promise<Response>>(async (url) => {
