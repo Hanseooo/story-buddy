@@ -99,6 +99,13 @@ it("select string includes title", async () => {
   expect(mockSelectColumns.mock.calls[0][0]).toContain("rejected_at");
 });
 
+it("select string includes judge_choice, so a retried draft keeps the picture checker", async () => {
+  mockSingle.mockResolvedValue({ data: null, error: { code: "PGRST116" } });
+  renderHook(() => useJob("j1"));
+  await waitFor(() => expect(mockSelectColumns).toHaveBeenCalled());
+  expect(mockSelectColumns.mock.calls[0][0]).toContain("judge_choice");
+});
+
 const RUNNING: JobRow = {
   id: "j1", status: "running", current_stage: "analyze",
   failure_reason: null, profile_id: "p1", input_text: "x", title: null, style_preset_id: null, pages: [], reveal: null,

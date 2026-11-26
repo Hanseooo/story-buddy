@@ -39,6 +39,9 @@ type Props = {
   inputText?: string;
   title?: string | null;
   stylePresetId?: string | null;
+  // Re-sent on a direct retry and carried into the write draft, where the write page validates it
+  // and resets it when Qwen is down.
+  judgeChoice?: string | null;
   countable?: boolean;
   onReload?: () => void;
 };
@@ -329,6 +332,7 @@ export default function FailureScreen({
   inputText = "",
   title = null,
   stylePresetId = null,
+  judgeChoice = null,
   countable = true,
   onReload,
 }: Props) {
@@ -361,7 +365,11 @@ export default function FailureScreen({
         },
         // The redo is a brand-new job, so the style has to be re-sent or a legacy row with null style
         // would fall back to the new "gouache" default and the child's book would be silently re-styled.
-        body: JSON.stringify({ text: inputText, title, style_preset_id: stylePresetId ?? "cel" }),
+        // Same for the picture checker (judge-selector SH-06); unset means the server's gemma default.
+        body: JSON.stringify({
+          text: inputText, title, style_preset_id: stylePresetId ?? "cel",
+          ...(judgeChoice ? { judge_choice: judgeChoice } : {}),
+        }),
       });
       if (!res.ok) {
         setRetryFailed(true);
@@ -388,6 +396,7 @@ export default function FailureScreen({
           text: inputText,
           title: suggestedTitle,
           ...(stylePresetId ? { style_preset_id: stylePresetId } : {}),
+          ...(judgeChoice ? { judge_choice: judgeChoice } : {}),
         })
       );
     } catch {
