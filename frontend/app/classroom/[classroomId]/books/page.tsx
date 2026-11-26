@@ -456,7 +456,7 @@ export default function BooksPage() {
             aria-selected={activeTab === t.key}
             tabIndex={activeTab === t.key ? 0 : -1}
             onClick={() => setActiveTab(t.key)}
-            className={`min-h-[44px] shrink-0 whitespace-nowrap px-4 py-2 text-sm font-bold rounded-t-xl transition-colors relative focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary active:scale-[0.98] ${
+            className={`min-h-[44px] shrink-0 whitespace-nowrap px-4 py-2 text-sm font-bold rounded-t-xl transition-colors relative focus-visible:-outline-offset-6 focus-visible:shadow-[inset_0_0_0_3px_var(--foreground)]! active:scale-[0.98] ${
               activeTab === t.key
                 ? "text-primary after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary"
                 : "text-foreground/50 hover:text-foreground/80"

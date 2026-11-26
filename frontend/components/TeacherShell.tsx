@@ -34,14 +34,14 @@ export default async function TeacherShell({ children }: Props) {
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             <Link
               href="/settings"
-              className="hidden sm:block text-sm font-bold text-foreground/70 hover:text-foreground px-3 py-2 rounded-xl hover:bg-muted transition-colors"
+              className="hidden sm:block text-sm font-bold text-foreground/70 hover:text-foreground px-3 py-2 rounded-xl hover:bg-muted transition-colors active:scale-[0.98]"
             >
               {profile.display_name ?? "Settings"}
             </Link>
             <Link
               href="/settings"
               aria-label="Settings"
-              className="flex sm:hidden items-center justify-center min-w-11 min-h-11 rounded-xl hover:bg-muted transition-colors text-foreground/70 hover:text-foreground"
+              className="flex sm:hidden items-center justify-center min-w-11 min-h-11 rounded-xl hover:bg-muted transition-colors text-foreground/70 hover:text-foreground active:scale-[0.98]"
             >
               <Gear weight="bold" className="w-5 h-5" />
             </Link>
@@ -49,7 +49,7 @@ export default async function TeacherShell({ children }: Props) {
               <button
                 type="submit"
                 aria-label="Log out"
-                className="flex items-center justify-center min-w-11 min-h-11 sm:min-w-0 sm:min-h-11 sm:px-4 sm:py-2 rounded-xl sm:border border-primary/20 text-sm font-bold hover:bg-muted transition-colors text-foreground/70 hover:text-foreground"
+                className="flex items-center justify-center min-w-11 min-h-11 sm:min-w-0 sm:min-h-11 sm:px-4 sm:py-2 rounded-xl sm:border border-primary/20 text-sm font-bold hover:bg-muted transition-colors text-foreground/70 hover:text-foreground active:scale-[0.98]"
               >
                 <span className="hidden sm:inline">Log out</span>
                 <SignOut weight="bold" className="w-5 h-5 sm:hidden" />

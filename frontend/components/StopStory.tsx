@@ -18,12 +18,12 @@ export default function StopStory({ jobId, reviewId, epoch, ready, teacher, onSt
   const [message, setMessage] = useState<string | null>(null);
   const [stopped, setStopped] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const control = "min-h-11 rounded-xl px-4 py-2 font-bold text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50";
+  const control = "min-h-11 rounded-xl px-4 py-2 font-bold text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-[0.98] disabled:opacity-50";
   // Ticket 04 (DESIGN §7): a stop is destructive. Outlined on the screen, so it does not compete with the
   // screen's one primary action; filled in the confirm, where it is the dialog's action. Ink text on ivory:
   // destructive red on ivory is ~4.3:1, under AA for 16px bold. Ivory on red passes.
-  const stopOutline = "min-h-11 rounded-xl px-4 py-2 font-bold border-2 border-destructive text-foreground hover:bg-destructive/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent";
-  const stopFilled = "min-h-11 rounded-xl px-4 py-2 font-bold bg-destructive text-on-destructive hover:bg-destructive/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+  const stopOutline = "min-h-11 rounded-xl px-4 py-2 font-bold border-2 border-destructive text-foreground hover:bg-destructive/10 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent";
+  const stopFilled = "min-h-11 rounded-xl px-4 py-2 font-bold bg-destructive text-on-destructive hover:bg-destructive/90 active:scale-[0.98]";
   useEffect(() => () => { request.current?.abort(); onPending?.(false); }, [onPending]);
   useEffect(() => { if (message || stopped) summary.current?.focus(); }, [message, stopped]);
   function cancel() {

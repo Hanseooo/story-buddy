@@ -36,8 +36,8 @@ const decisionKinds = ["scene_image", "character_reference", "story_text", "titl
 const control = "min-h-[44px] px-4 py-2 rounded-xl font-bold text-primary hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-[0.98] disabled:opacity-50";
 // Ticket 04 (DESIGN §7): one filled primary per view; a stop is outlined in destructive red.
 // Ink text, not red text: destructive on ivory is ~4.3:1, under AA for 16px bold.
-const primary = "min-h-[44px] px-4 py-2 rounded-xl font-bold bg-primary text-on-primary hover:bg-primary-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary";
-const destructive = "min-h-[44px] px-4 py-2 rounded-xl font-bold border-2 border-destructive text-foreground hover:bg-destructive/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent";
+const primary = "min-h-[44px] px-4 py-2 rounded-xl font-bold bg-primary text-on-primary hover:bg-primary-deep active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary";
+const destructive = "min-h-[44px] px-4 py-2 rounded-xl font-bold border-2 border-destructive text-foreground hover:bg-destructive/10 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent";
 
 async function reviewFetch(path: string, signal: AbortSignal, options?: RequestInit) {
   const { data: { session } } = await supabase.auth.getSession();
