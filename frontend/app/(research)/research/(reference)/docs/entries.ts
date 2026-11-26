@@ -153,7 +153,7 @@ export const DOC_CHAPTERS: DocChapter[] = [
       {
         path: "docs/capstone/research_runbook.md",
         answers: "How were the judge's dataset, training and held-out evaluation run, and what were the numbers?",
-        lastChanged: "2026-11-21",
+        lastChanged: "2026-11-27",
       },
       {
         path: "docs/specs/judge-finetune.md",
@@ -200,7 +200,7 @@ export const DOC_CHAPTERS: DocChapter[] = [
       {
         path: "docs/product/ADRs.md",
         answers: "Which architecture decisions were made, and which are still in force?",
-        lastChanged: "2026-11-25",
+        lastChanged: "2026-11-27",
       },
       {
         path: "docs/product/adr/ADR-083-research-pages-hub-chapter-routes-and-png-diagram-export.md",
