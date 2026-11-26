@@ -24,11 +24,14 @@ from pathlib import Path
 
 from openai import APIConnectionError, APITimeoutError, AuthenticationError, OpenAI
 
-from app.config import QWEN_BASE_MODEL, QWEN_FINETUNED_MODEL
+from app.config import settings
 from pipeline.consistency_check import JUDGE_PROMPT, SceneVerdict, _data_uri
 from providers import _one_answer
 
-QWEN_MODELS = (QWEN_BASE_MODEL, QWEN_FINETUNED_MODEL)  # spec SH-01
+
+def qwen_models() -> tuple[str, str]:
+    """Spec SH-01's Qwen model ids, read at call time so an env override applies."""
+    return (settings.qwen_base_model, settings.qwen_finetuned_model)
 
 # A synthetic validation pair from the committed research page (pair 033b8372e89e4c06,
 # character syn-025:c0, "Tito Ben", labelled Same). Never a child's picture.
@@ -48,7 +51,7 @@ class ModelResult:
 
 def exit_code(listed: set[str], results: list[ModelResult]) -> int:
     """GO only when the server lists every Qwen model (SH-05) and each answer parsed (§7.6)."""
-    if not set(QWEN_MODELS) <= listed:
+    if not set(qwen_models()) <= listed:
         return 1
     return 0 if results and all(r.parsed for r in results) else 1
 
@@ -93,10 +96,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         listed = {m.id for m in client.models.list()}
         print(f"/v1/models: {', '.join(sorted(listed)) or '(none)'}")
-        for model in QWEN_MODELS:
+        for model in qwen_models():
             if model not in listed:
                 print(f"MISSING from /v1/models: {model}")
-        results = [_probe(client, model, content) for model in QWEN_MODELS if model in listed]
+        results = [_probe(client, model, content) for model in qwen_models() if model in listed]
     except AuthenticationError:
         print("connection failure: the server rejected the key (401)")
         return 2

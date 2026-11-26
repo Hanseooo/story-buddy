@@ -24,7 +24,7 @@ import httpx
 from openai import OpenAI
 from pydantic import BaseModel
 
-from app.config import settings
+from app.config import DEFAULT_JUDGE_CHOICE, QWEN_AVAILABILITY_TIMEOUT_SECONDS, settings
 from app.db import get_supabase_client
 
 _log = logging.getLogger(__name__)
@@ -185,12 +185,6 @@ def _bounded(model: str, call, timeout: float | None = None):
         pool.shutdown(wait=_generation_fence.get() is not None)
 
 
-# judge-selector US-04: the write screen waits on this, so it answers fast and never retries. 3 s is
-# the top of the ticket's 2-3 s suggestion; vLLM lists models from memory, so a slower answer
-# already says the server is not fit to judge.
-QWEN_AVAILABILITY_TIMEOUT_SECONDS = 3.0
-
-
 class _DropQwenJudgeHost(logging.Filter):
     """AC-22: httpx logs every request URL at INFO (the worker's level), and the Qwen judge's
     host must never reach a log line. Drops only records naming that host. httpx logs the host
@@ -248,7 +242,7 @@ def judge(
     """
     content = [{"type": "text", "text": prompt}]
     content += [{"type": "image_url", "image_url": {"url": url}} for url in image_urls]
-    if choice not in (None, "gemma"):
+    if choice not in (None, DEFAULT_JUDGE_CHOICE):
         return _qwen_judge(choice, content, schema)
     resolved = model or settings.vlm_judge_model
     return _chat(

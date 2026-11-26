@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { resetFailChain } from "@/components/FailureScreen";
 import { supabase } from "@/lib/supabaseClient";
 import { clearStoppedWriting, stoppedWritingKey, type SavedWriting } from "@/lib/stoppedWriting";
+import type { JudgeChoice } from "@/lib/types/jobs";
 import Link from "next/link";
 import { motion } from "framer-motion";
 
@@ -39,8 +40,7 @@ const JUDGE_OPTIONS = [
   { id: "gemma", label: "Standard (Gemma)" },
   { id: "qwen_base", label: "Qwen base" },
   { id: "qwen_finetuned", label: "Qwen fine-tuned" },
-] as const;
-type JudgeChoice = (typeof JUDGE_OPTIONS)[number]["id"];
+] as const satisfies readonly { id: JudgeChoice; label: string }[];
 type QwenStatus = "loading" | "offline" | "available";
 
 function countWords(text: string): number {
@@ -464,7 +464,7 @@ export default function WriteStoryPage() {
             </option>
           ))}
         </select>
-        <p id="picture-checker-hint" aria-live="polite" className="mt-1 text-xs font-bold text-foreground/60">
+        <p id="picture-checker-hint" aria-live="polite" className="mt-1 min-h-4 text-xs font-bold text-foreground/60">
           {judgeHint}
         </p>
       </motion.div>

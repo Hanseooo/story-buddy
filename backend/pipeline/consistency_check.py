@@ -10,7 +10,7 @@ import logging
 
 from pydantic import BaseModel, Field
 
-from app.config import judge_options, settings
+from app.config import DEFAULT_JUDGE_CHOICE, judge_options, settings
 from app.db import get_supabase_client
 from contracts.story_memory import Attempt, FailureReason, IdentityCheck, StoryMemory, VlmVerdict
 from providers import judge
@@ -188,7 +188,7 @@ def _identity_verdict(name: str, images: list[str], judge_choice: str) -> tuple[
     `TimeoutError`, HTTP error, unparseable answer, no server configured), Gemma answers this
     subject. Under `gemma` this is exactly today's single call. A Gemma failure propagates."""
     prompt = JUDGE_PROMPT.format(name=name)
-    if judge_choice != "gemma":
+    if judge_choice != DEFAULT_JUDGE_CHOICE:
         try:
             return judge(prompt, images, SceneVerdict, choice=judge_choice), judge_options()[judge_choice]["model"]
         except Exception as exc:
@@ -206,7 +206,7 @@ def judge_attempt(
     image_path: str,
     subjects: list[tuple[str, str]],
     constraint_prompt: str,
-    judge_choice: str = "gemma",
+    judge_choice: str = DEFAULT_JUDGE_CHOICE,
 ) -> tuple[list[tuple[SceneVerdict, str]] | None, SceneConstraintVerdict | None]:
     """The node's ONE effect boundary (MASTER_SPEC §6). Storage downloads live INSIDE it.
 

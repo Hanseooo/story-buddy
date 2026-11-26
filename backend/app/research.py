@@ -106,16 +106,20 @@ def _state_parts(memory: StoryMemory, sign: Callable[[str | None], str | None]) 
 
 
 def _judge_record(choice: str, memory: StoryMemory | None) -> dict:
-    """judge-selector AC-23/24. M = identity checks on every attempt, shipped or not; N = those Gemma
-    answered on a Qwen job (SH-04). A check from before ticket 05 (`judge_model` None) counts as Gemma
-    and is never a fallback. A Gemma job cannot fall back, so it has no fallback line (None)."""
+    """judge-selector AC-23/24. M = identity checks on every attempt, shipped or not; N = those not
+    answered by the chosen Qwen model on a Qwen job (SH-04), so a later Gemma model change in the env
+    does not hide a fallback. A check from before ticket 05 (`judge_model` None) is never a fallback.
+    A Gemma job cannot fall back, so it has no fallback line (None)."""
     record = {"judge_choice": choice, "judge_label": _RECORD_LABELS[choice], "judge_fallback": None}
     if choice == DEFAULT_JUDGE_CHOICE:
         return record
-    gemma = judge_options()[DEFAULT_JUDGE_CHOICE]["model"]
+    qwen = judge_options()[choice]["model"]
+    # M counts recorded IdentityChecks only: an attempt where both Qwen and Gemma failed records
+    # identity=None (AC-17), so it adds nothing here.
     checks = [c for scene in (memory.scenes if memory else []) for a in scene.attempts
               for c in (a.identity_checks or {}).values()]
-    record["judge_fallback"] = {"fell_back": sum(c.judge_model == gemma for c in checks), "checks": len(checks)}
+    fell_back = sum(c.judge_model is not None and c.judge_model != qwen for c in checks)
+    record["judge_fallback"] = {"fell_back": fell_back, "checks": len(checks)}
     return record
 
 

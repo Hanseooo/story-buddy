@@ -1531,6 +1531,17 @@ def test_a_qwen_choice_posts_to_the_qwen_server_once_with_no_provider_body(qwen_
     assert "provider" not in kwargs["extra_body"]
 
 
+def test_qwen_model_ids_are_env_overridable_settings_read_at_call_time(qwen_server, monkeypatch):
+    """AGENTS.md: model ids are Settings fields. An override after import reaches the request."""
+    monkeypatch.setattr(providers.settings, "qwen_finetuned_model", "seed3_checkpoint200")
+    with patch("providers.OpenAI") as mock_openai:
+        parse = mock_openai.return_value.chat.completions.parse
+        parse.return_value = _fake_completion(_Verdict(differences_observed="none", same_character=True))
+        providers.judge("compare", ["data:ref"], _Verdict, choice="qwen_finetuned")
+
+    assert parse.call_args.kwargs["model"] == "seed3_checkpoint200"
+
+
 def test_the_gemma_choice_sends_todays_openrouter_request(monkeypatch):
     """AC-14: byte-identical to a call that names no choice, pinned to literals."""
     monkeypatch.setattr(providers.settings, "vlm_judge_model", "google/gemma-3-27b-it")

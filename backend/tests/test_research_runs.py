@@ -200,6 +200,20 @@ def test_qwen_job_counts_fallbacks_across_every_attempt():
     assert out["job"]["judge_fallback"] == {"fell_back": 1, "checks": 3}
 
 
+def test_fallback_count_survives_a_later_gemma_model_change():
+    # The run was judged when Gemma was gemma-3-27b; the env has since moved to another Gemma.
+    # N must still read the one Gemma answer as a fallback: it is not the chosen Qwen model.
+    scenes = [
+        Scene(scene_id="s1", text_excerpt="a", final_image_ref="pages/s1-a1.webp",
+              attempts=[Attempt(image_ref="pages/s1-a0.webp", identity_checks=_checks("google/gemma-3-27b-it")),
+                        Attempt(image_ref="pages/s1-a1.webp", identity_checks=_checks("Qwen/Qwen3.5-9B"))]),
+    ]
+    with patch.object(research.settings, "vlm_judge_model", "google/gemma-4-31b-it"):
+        out = project_run(_job(judge_choice="qwen_base"), _history((), _memory(scenes=scenes)), _sign)
+
+    assert out["job"]["judge_fallback"] == {"fell_back": 1, "checks": 2}
+
+
 def test_qwen_job_with_no_identity_checks_counts_zero():
     out = project_run(_job(judge_choice="qwen_base"), _history((), _memory()), _sign)
 

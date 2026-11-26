@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import type { JudgeChoice } from "@/lib/types/jobs";
 
 export type JobBucket =
   | "not-found"
@@ -24,7 +25,7 @@ export type JobRow = {
   title: string | null;
   style_preset_id: string | null;
   // judge-selector SH-06: the picture checker the book was submitted with (migration 0034).
-  judge_choice?: string;
+  judge_choice?: JudgeChoice;
   approved_at: string | null;
   rejected_at: string | null;
   // `other_versions`: magic-pencil 09, a page with two kept attempts on a feature job (AC-13).

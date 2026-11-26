@@ -399,14 +399,21 @@ identity calls, after ticket 05 ships):
 - `QWEN_JUDGE_API_KEY` = the same value as `VLLM_API_KEY` on the instance
 
 **Deploy order.** Apply `supabase/migrations/0034_jobs_judge_choice.sql` to the hosted database
-before deploying this backend. Without the `jobs.judge_choice` column, `POST /storybooks`,
-`insert_review_job` and the worker's job select all fail.
+before deploying this backend AND this frontend. Both select or write `jobs.judge_choice`, so
+without the column these fail:
+- `POST /storybooks` (the job insert)
+- `insert_review_job` (`backend/app/moderation_hold.py`)
+- the worker's job select
+- the `jobs` select in `frontend/lib/useJob.ts`, which breaks the process and reader pages for
+  every book, not only Qwen ones
+- `GET /research/runs/{id}` (`JOB_COLUMNS` in `backend/app/research.py`)
 
 The endpoint is plain HTTP, so the key travels unencrypted. TODO (owner): accept that for a demo
 with no child users, or put TLS in front before setting the key on Northflank.
 
-**Chosen Qwen timeout.** TODO (owner): the value in seconds and the reason, from the probe latency
-against the 60 s default and the book length (OD-03).
+**Chosen Qwen timeout.** `QWEN_JUDGE_TIMEOUT_SECONDS = 90` in `backend/app/config.py`, provisional
+(owner, 2026-11-27). TODO (owner): confirm or change it from the probe latency and the book length,
+and record the reason (OD-03).
 
 **Offer terms.** TODO (owner): hourly price of the offer actually rented, disk size and its price,
 and bandwidth terms (upload and download per TB). The earlier rental's $0.447/hour, 100 GB disk

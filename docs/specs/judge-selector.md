@@ -271,8 +271,11 @@ Applies: SH-03, SH-05
 ## 6. Configuration
 
 New settings in `config.py`: `qwen_judge_base_url: str | None = None`,
-`qwen_judge_api_key: str | None = None`, plus the two model ids as constants. These are set only on
-Northflank while the instance runs. They are unset locally and in CI unless a test sets them.
+`qwen_judge_api_key: str | None = None`. These are set only on Northflank while the instance runs.
+They are unset locally and in CI unless a test sets them. The two model ids are env-overridable
+Settings fields, read at call time: `qwen_base_model: str = "Qwen/Qwen3.5-9B"` and
+`qwen_finetuned_model: str = "seed2_checkpoint140"`. (Changed 2026-11-27 from module constants, to
+match AGENTS.md.)
 
 ## 7. Verification
 

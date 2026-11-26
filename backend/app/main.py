@@ -10,7 +10,7 @@ from pydantic import BaseModel, field_validator
 
 from app.config import (
     DEFAULT_JUDGE_CHOICE, JUDGE_CHOICES, MAX_PENCIL_CHARS, MAX_TITLE_CHARS, MIN_STORY_WORDS,
-    QWEN_BASE_MODEL, QWEN_FINETUNED_MODEL, SELECTABLE_STYLE_PRESET_IDS, judge_options, settings,
+    SELECTABLE_STYLE_PRESET_IDS, judge_options, settings,
 )
 from app.moderation_policy import TEACHER_MODERATION_POLICY_VERSION
 from app.length import clamp_story, word_count
@@ -182,7 +182,7 @@ def _qwen_unavailable_reason() -> str | None:
         # The exception text can carry the server URL (AC-22), so only its type is logged.
         _log.warning("qwen judge availability check failed: %s", type(exc).__name__)
         return "unreachable"
-    if not {QWEN_BASE_MODEL, QWEN_FINETUNED_MODEL} <= listed:
+    if not {settings.qwen_base_model, settings.qwen_finetuned_model} <= listed:
         return "model_missing"
     return None
 
@@ -195,8 +195,8 @@ def list_judges(user=Depends(get_current_user)) -> list[dict]:
         {
             "id": choice,
             "label": option["label"],
-            "available": choice == "gemma" or qwen_reason is None,
-            "reason": None if choice == "gemma" else qwen_reason,
+            "available": choice == DEFAULT_JUDGE_CHOICE or qwen_reason is None,
+            "reason": None if choice == DEFAULT_JUDGE_CHOICE else qwen_reason,
         }
         for choice, option in judge_options().items()
     ]

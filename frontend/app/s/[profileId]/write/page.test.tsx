@@ -376,6 +376,35 @@ describe("WriteStoryPage — Picture checker (judge-selector US-01)", () => {
     expect(await screen.findByText("Qwen checker is offline. Standard is used.")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Picture checker" })).toHaveValue("gemma");
   });
+
+  it("restores a draft's Qwen fine-tuned choice and sends it once Qwen is up (AC-05)", async () => {
+    sessionStorage.setItem(
+      "sb.prefill",
+      JSON.stringify({ text: "My story about a cat.", title: "Cat Book", judge_choice: "qwen_finetuned" }),
+    );
+    mockApi(async () => ({ ok: true, json: async () => judgesPayload({ available: true, reason: null }) }));
+    render(<WriteStoryPage />);
+    const checker = screen.getByRole("combobox", { name: "Picture checker" });
+    await waitFor(() => expect(checker).toHaveValue("qwen_finetuned"));
+    fireEvent.click(screen.getByText("Make my book"));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalled());
+    expect(postedBody().judge_choice).toBe("qwen_finetuned");
+  });
+
+  it("while GET /judges is pending, says Checking…, disables Qwen and sends Standard (AC-02)", async () => {
+    mockApi(() => new Promise(() => {}));
+    render(<WriteStoryPage />);
+    expect(screen.getByText("Checking…")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Qwen base" })).toBeDisabled();
+    expect(screen.getByRole("option", { name: "Qwen fine-tuned" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Story title"), { target: { value: "My Book" } });
+    fireEvent.change(screen.getByLabelText("story text"), { target: { value: "A dog runs in a field." } });
+    fireEvent.click(screen.getByText("Make my book"));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalled());
+    expect(postedBody().judge_choice).toBe("gemma");
+  });
 });
 
 describe("WriteStoryPage title field", () => {

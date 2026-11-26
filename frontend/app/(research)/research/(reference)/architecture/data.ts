@@ -100,7 +100,7 @@ export const HOSTING = [
 ] as const;
 
 // research_runbook.md names the card. The line moved from 549 to this line when the runbook grew.
-export const RUNBOOK_GPU_LINE = 789;
+export const RUNBOOK_GPU_LINE = 796;
 export const DEV_HARDWARE = [
   { item: "Processor", value: OWNER_TO_SUPPLY },
   { item: "Memory", value: OWNER_TO_SUPPLY },

@@ -1,4 +1,5 @@
 // Mirrors GET /research/runs/{job_id}: backend/app/research.py:project_run. Change both together.
+import type { JudgeChoice } from "@/lib/types/jobs";
 
 export type ModerationResult = { passed: boolean; categories: string[] };
 
@@ -87,7 +88,7 @@ export type RunJob = {
   scenes_passed: number | null;
   scenes_unchecked: number | null;
   approved: boolean;
-  judge_choice: "gemma" | "qwen_base" | "qwen_finetuned";
+  judge_choice: JudgeChoice;
   // Shown as is; the backend owns the wording (research.py:_RECORD_LABELS).
   judge_label: string;
   // null on a Gemma job: Gemma cannot fall back. Counts cover every attempt, shipped or not.

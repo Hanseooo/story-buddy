@@ -6,7 +6,7 @@ import { Wrench, Gear, MagnifyingGlass, PencilSimple, BookOpen, Copy, Check } fr
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
-import { FailureReason } from "@/lib/types/jobs";
+import { FailureReason, type JudgeChoice } from "@/lib/types/jobs";
 import { resolveFailureCopy, RETRY_CONSEQUENCE } from "@/lib/failureCopy";
 import { displayTitle } from "@/lib/displayTitle";
 
@@ -41,7 +41,7 @@ type Props = {
   stylePresetId?: string | null;
   // Re-sent on a direct retry and carried into the write draft, where the write page validates it
   // and resets it when Qwen is down.
-  judgeChoice?: string | null;
+  judgeChoice?: JudgeChoice | null;
   countable?: boolean;
   onReload?: () => void;
 };
