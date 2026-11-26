@@ -303,6 +303,18 @@ describe("BookPage — bucket routing (spec invariant 1)", () => {
     expect(queryPicture()).toBeNull();
   });
 
+  it.each([
+    ["in-flight", "running"],
+    ["paused", "awaiting_confirm"],
+  ] as const)("%s wait state has a way back to the bookshelf (ui-audit D4)", async (bucket, status) => {
+    mockUseJob.mockReturnValue(jobState({
+      bucket,
+      row: { id: "j1", status, current_stage: null, failure_reason: null, input_text: "x", style_preset_id: null, pages: [], reveal: null },
+    }));
+    await renderPage(makeParams("j1"));
+    expect(screen.getByRole("link", { name: "Back to bookshelf" })).toHaveAttribute("href", "/s/p1");
+  });
+
   it("not-found renders not-found FailureScreen", async () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "not-found", row: null }));
     await renderPage(makeParams("j1"));

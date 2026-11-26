@@ -427,7 +427,7 @@ function BookCard({
           {card.bucket === "in-flight" && (
             <div className="absolute inset-0 flex items-end justify-center pb-4">
               <span className="px-3 py-1.5 rounded-full bg-primary text-on-primary text-xs font-extrabold shadow-sm">
-                Writing...
+                Making...
               </span>
             </div>
           )}

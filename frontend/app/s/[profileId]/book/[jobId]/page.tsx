@@ -56,10 +56,22 @@ function ScrollImage({ src, alt, label, broken, onClick, onError, onRetry }: {
   );
 }
 
-function LoadingSkeleton() {
+function LoadingSkeleton({ backHref }: { backHref?: string }) {
   return (
-    <div className="relative flex min-h-[calc(100dvh-5rem)] flex-1 w-full overflow-hidden bg-background text-foreground">
-      <div className="flex flex-col md:flex-row w-full h-full items-center justify-center gap-8 md:gap-16 p-6 md:p-12">
+    <div className="relative flex min-h-[calc(100dvh-5rem)] flex-1 w-full flex-col overflow-hidden bg-background text-foreground">
+      {backHref && (
+        <div className="px-5 pt-5 sm:px-8 lg:px-12">
+          <Link
+            href={backHref}
+            aria-label="Back to bookshelf"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-2 font-kid text-sm font-bold text-foreground/75 transition-colors hover:bg-muted/30 hover:text-primary focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 active:scale-[0.98] sm:px-3"
+          >
+            <ArrowLeft size={20} weight="bold" aria-hidden="true" />
+            <span>Bookshelf</span>
+          </Link>
+        </div>
+      )}
+      <div className="flex flex-1 flex-col md:flex-row w-full h-full items-center justify-center gap-8 md:gap-16 p-6 md:p-12">
         <div className="relative flex items-center justify-center w-full md:w-1/2">
           <div className="w-full max-w-md aspect-[4/3] rounded-2xl animate-shimmer neo-border" />
         </div>
@@ -236,7 +248,7 @@ function PageVersions({ jobId, pageNumber, page, reviewed, busy, onBusy, onChang
           setChangeError("");
           setOpen((value) => !value);
         }}
-        className="min-h-11 rounded-xl border border-primary/20 bg-background px-4 py-2 font-kid text-sm font-bold text-foreground hover:bg-primary/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50"
+        className="min-h-11 rounded-xl border border-primary/20 bg-background px-4 py-2 font-kid text-sm font-bold text-foreground hover:bg-primary/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.98]"
       >
         Other versions
       </button>
@@ -264,7 +276,7 @@ function PageVersions({ jobId, pageNumber, page, reviewed, busy, onBusy, onChang
               <button
                 type="button"
                 onClick={() => { setState("loading"); setAttempt((value) => value + 1); }}
-                className="min-h-11 rounded-xl bg-surface px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+                className="min-h-11 rounded-xl bg-surface px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 active:scale-[0.98]"
               >
                 Try loading the pictures for page {pageNumber} again
               </button>
@@ -282,7 +294,7 @@ function PageVersions({ jobId, pageNumber, page, reviewed, busy, onBusy, onChang
                     aria-label={`Use other picture ${index + 1} for page ${pageNumber}`}
                     disabled={busy || !loaded[version.version_id]}
                     onClick={(event) => choose(version, event.currentTarget)}
-                    className="w-full rounded-xl border border-primary/20 bg-background p-1 hover:bg-primary/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="w-full rounded-xl border border-primary/20 bg-background p-1 hover:bg-primary/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.98]"
                   >
                     <img
                       src={urls[version.image_path]}
@@ -301,7 +313,7 @@ function PageVersions({ jobId, pageNumber, page, reviewed, busy, onBusy, onChang
             aria-label={`Close other versions of page ${pageNumber}`}
             disabled={busy}
             onClick={close}
-            className="mt-3 min-h-11 rounded-xl px-4 py-2 font-kid font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-3 min-h-11 rounded-xl px-4 py-2 font-kid font-bold text-foreground focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.98]"
           >
             Cancel
           </button>
@@ -312,11 +324,11 @@ function PageVersions({ jobId, pageNumber, page, reviewed, busy, onBusy, onChang
         <h2 id={`${listId}-confirm`} className="text-xl font-bold">Your teacher will look at your book again before classmates can see it.</h2>
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" ref={confirmButtonRef} onClick={() => pending && void change(pending.version)}
-            className="min-h-11 rounded-xl bg-primary px-4 font-bold text-on-primary focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3">
+            className="min-h-11 rounded-xl bg-primary px-4 font-bold text-on-primary focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 active:scale-[0.98]">
             Use this picture
           </button>
           <button type="button" onClick={cancelConfirm}
-            className="min-h-11 rounded-xl px-4 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3">
+            className="min-h-11 rounded-xl px-4 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 active:scale-[0.98]">
             Go back
           </button>
         </div>
@@ -333,7 +345,7 @@ const PENCIL_DISABLED: Record<string, string> = {
   no_pencils: "No pencils left for this book",
   image_budget: "This book can't have any more new pictures",
 };
-const kidControl = "min-h-11 rounded-xl px-4 py-2 font-kid text-sm font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50";
+const kidControl = "min-h-11 rounded-xl px-4 py-2 font-kid text-sm font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50";
 
 async function pencilPost(path: string, body: object) {
   const { data: { session } } = await supabase.auth.getSession();
@@ -695,10 +707,10 @@ function TeacherNote({ jobId }: { jobId: string }) {
       <div className="pb-4">
         <p className="max-w-prose whitespace-pre-wrap break-words text-lg leading-relaxed">{note.body}</p>
         <div aria-live="polite">
-          {saveError && <p className="mt-3 text-sm">We couldn&apos;t save your place. <button type="button" onClick={() => setRetry(value => value + 1)} className="min-h-11 underline focus-visible:outline-secondary">Try again</button></p>}
+          {saveError && <p className="mt-3 text-sm">We couldn&apos;t save your place. <button type="button" onClick={() => setRetry(value => value + 1)} className="min-h-11 underline focus-visible:outline-secondary active:scale-[0.98]">Try again</button></p>}
         </div>
         <button type="button" onClick={() => { setOpen(false); summary.current?.focus(); }}
-          className="mt-3 min-h-11 rounded-xl px-4 font-bold text-primary hover:bg-muted/30 focus-visible:outline-secondary focus-visible:outline-3">Close</button>
+          className="mt-3 min-h-11 rounded-xl px-4 font-bold text-primary hover:bg-muted/30 focus-visible:outline-secondary focus-visible:outline-3 active:scale-[0.98]">Close</button>
       </div>
     </details>
   );
@@ -926,11 +938,11 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
     return <main className="flex flex-1 flex-col items-center justify-center gap-6 p-6 text-center">
       <h1 className="font-display text-3xl font-extrabold">Waiting for your teacher</h1>
       <p>Your story is saved. Your teacher will help it continue.</p>
-      <Link href={`/s/${profileId}`} className="min-h-11 rounded-2xl bg-primary px-6 py-3 font-bold text-on-primary">Back to my books</Link>
+      <Link href={`/s/${profileId}`} className="min-h-11 rounded-2xl bg-primary px-6 py-3 font-bold text-on-primary active:scale-[0.98]">Back to my books</Link>
     </main>;
   }
   if (bucket === "in-flight" || bucket === "paused") {
-    return <LoadingSkeleton />;
+    return <LoadingSkeleton backHref={`/s/${profileId}`} />;
   }
 
   // terminal-success — wait for signing
@@ -968,11 +980,6 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
       
       {row?.profile_id === profileId && <TeacherNote key={jobId} jobId={jobId} />}
 
-      {/* Ambient magical background blobs */}
-      <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-primary opacity-[0.03] md:opacity-[0.06] blur-[80px] md:blur-[140px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-5%] w-[60vw] h-[60vw] rounded-full bg-secondary opacity-[0.06] md:opacity-[0.08] blur-[80px] md:blur-[140px] pointer-events-none" />
-      <div className="absolute top-[40%] left-[60%] w-[40vw] h-[40vw] rounded-full bg-coral opacity-[0.04] blur-[80px] md:blur-[120px] pointer-events-none" />
-
       {/* Big picture: a native modal dialog brings Escape, the focus trap and an inert page. */}
       <dialog
         ref={fullscreenRef}
@@ -1008,7 +1015,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
         <Link
           href={profileId ? `/s/${profileId}` : "/"}
           aria-label="Back to bookshelf"
-          className="order-1 inline-flex min-h-11 items-center justify-self-start gap-1.5 rounded-xl px-2 font-kid text-sm font-bold text-foreground/75 transition-colors hover:bg-muted/30 hover:text-primary focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 sm:px-3"
+          className="order-1 inline-flex min-h-11 items-center justify-self-start gap-1.5 rounded-xl px-2 font-kid text-sm font-bold text-foreground/75 transition-colors hover:bg-muted/30 hover:text-primary focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 sm:px-3 active:scale-[0.98]"
         >
           <ArrowLeft size={20} weight="bold" aria-hidden="true" />
           <span>Bookshelf</span>
@@ -1029,7 +1036,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
             disabled={!canDownload || exporting}
             aria-busy={exporting}
             aria-describedby={!canDownload ? "pdf-approval-hint" : undefined}
-            className="order-2 col-start-2 row-start-1 inline-flex min-h-11 items-center justify-center justify-self-end gap-1.5 rounded-xl border border-primary/20 bg-surface px-3 py-2 font-kid text-sm font-bold whitespace-nowrap text-primary transition-colors hover:bg-muted/30 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50 lg:order-3 lg:col-start-3"
+            className="order-2 col-start-2 row-start-1 inline-flex min-h-11 items-center justify-center justify-self-end gap-1.5 rounded-xl border border-primary/20 bg-surface px-3 py-2 font-kid text-sm font-bold whitespace-nowrap text-primary transition-colors hover:bg-muted/30 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:cursor-not-allowed disabled:opacity-50 lg:order-3 lg:col-start-3 active:scale-[0.98]"
           >
             <DownloadSimple size={18} weight="bold" aria-hidden="true" />
             {exporting ? "Preparing PDF…" : "Download PDF"}
@@ -1064,7 +1071,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
               viewMode === "pages"
                 ? "bg-primary text-on-primary"
                 : "text-foreground/75 hover:text-primary hover:bg-muted/30"
-            }`}
+            } active:scale-[0.98]`}
           >
             <BookOpen size={18} weight={viewMode === "pages" ? "bold" : "regular"} aria-hidden="true" />
             <span>Pages</span>
@@ -1078,7 +1085,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
               viewMode === "scroll"
                 ? "bg-primary text-on-primary"
                 : "text-foreground/75 hover:text-primary hover:bg-muted/30"
-            }`}
+            } active:scale-[0.98]`}
           >
             <Rows size={18} weight={viewMode === "scroll" ? "bold" : "regular"} aria-hidden="true" />
             <span>Scroll</span>
@@ -1109,7 +1116,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                   data-testid="nav-prev"
                   aria-label="Previous page"
                   aria-disabled={pageIndex === 0}
-                  className="pointer-events-auto flex h-11 w-11 lg:h-16 lg:w-16 items-center justify-center rounded-full bg-surface neo-shadow text-primary font-bold hover:scale-105 transition-all cursor-pointer focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:scale-100"
+                  className="pointer-events-auto flex h-11 w-11 lg:h-16 lg:w-16 items-center justify-center rounded-full bg-surface neo-shadow text-primary font-bold hover:scale-105 transition-all cursor-pointer focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:scale-100 active:scale-[0.98]"
                 >
                   <CaretLeft className="w-5 h-5 lg:w-8 lg:h-8" weight="bold" aria-hidden="true" />
                 </button>
@@ -1252,7 +1259,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                           type="button"
                           aria-label={`Go to page ${i + 1}`}
                           aria-current={i === pageIndex ? "page" : undefined}
-                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors hover:bg-muted/30 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 cursor-pointer"
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors hover:bg-muted/30 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 cursor-pointer active:scale-[0.98]"
                           onClick={(e) => {
                              e.stopPropagation();
                              setHasInteracted(true);
@@ -1303,7 +1310,7 @@ export default function BookPage({ params }: { params: Promise<{ jobId: string }
                   data-testid="nav-next"
                   aria-label="Next page"
                   aria-disabled={pageIndex === totalPages - 1}
-                  className="pointer-events-auto flex h-11 w-11 lg:h-16 lg:w-16 items-center justify-center rounded-full bg-surface neo-shadow text-primary font-bold hover:scale-105 transition-all cursor-pointer focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:scale-100"
+                  className="pointer-events-auto flex h-11 w-11 lg:h-16 lg:w-16 items-center justify-center rounded-full bg-surface neo-shadow text-primary font-bold hover:scale-105 transition-all cursor-pointer focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 aria-disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:hover:scale-100 active:scale-[0.98]"
                 >
                   <CaretRight className="w-5 h-5 lg:w-8 lg:h-8" weight="bold" aria-hidden="true" />
                 </button>
