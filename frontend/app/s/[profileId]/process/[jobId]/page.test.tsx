@@ -1078,6 +1078,66 @@ describe("ProcessingPage — magic pencil (ticket 06)", () => {
   }
   const confirmCalls = () => vi.mocked(global.fetch).mock.calls.filter(([url]) => String(url).endsWith("/confirm"));
 
+  it("keeps Other versions in view and puts the pencil and redraw behind Change this picture (ticket 05)", async () => {
+    serve();
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: withCharacter({
+      versions: [{ version_id: "ref-c0-0", image_path: "j1/ref-c0-0.png" }] }) }));
+    await renderPausedPage();
+    expect(screen.getByRole("button", { name: "Other versions of Kiko" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Magic pencil for Kiko" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "orange sock" })).toBeNull();
+
+    const tools = screen.getByRole("button", { name: "Change this picture of Kiko" });
+    expect(tools).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(tools);
+    expect(tools).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Magic pencil for Kiko" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "orange sock" }));
+    expect(screen.getByRole("button", { name: "Redraw Kiko" })).toBeEnabled();
+
+    tools.focus();
+    fireEvent.click(tools);
+    expect(tools).toHaveAttribute("aria-expanded", "false");
+    expect(tools).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Magic pencil for Kiko" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Redraw Kiko" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Other versions of Kiko" })).toBeEnabled();
+  });
+
+  it("keeps Change this picture open while the picture is redrawn (ticket 05)", async () => {
+    serve();
+    const paramsPromise = makeParams("j1");
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PENCIL_ROW }));
+    const view = await renderPausedPage(paramsPromise);
+    fireEvent.click(screen.getByRole("button", { name: "Change this picture of Kiko" }));
+    fireEvent.click(screen.getByRole("button", { name: "orange sock" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Redraw Kiko" }));
+    });
+
+    mockUseJob.mockReturnValue(jobState({ bucket: "in-flight", row: { ...PENCIL_ROW, status: "running", reveal: null } }));
+    await act(async () => view.rerender(<ProcessingPage params={paramsPromise} />));
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: withCharacter({ image_path: "j1/ref-c0-2.png" }, 1) }));
+    await act(async () => view.rerender(<ProcessingPage params={paramsPromise} />));
+
+    expect(screen.getByRole("button", { name: "Change this picture of Kiko" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Magic pencil for Kiko" })).toBeDefined();
+  });
+
+  it("shows the old and new pictures side by side with labels (ticket 05)", async () => {
+    global.fetch = vi.fn((url: string) => Promise.resolve(imageLinksResponse(url,
+      { "ref-c0": "j1/ref-c0-2.png", "version-ref-c0-1": "j1/ref-c0-1.png" }))) as unknown as typeof fetch;
+    mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: withCharacter({
+      image_path: "j1/ref-c0-2.png", versions: [{ version_id: "ref-c0-1", image_path: "j1/ref-c0-1.png" }],
+      pencil_choice: { use_id: "pencil-1", version_id: "ref-c0-1", image_path: "j1/ref-c0-1.png" },
+    }, 1) }));
+    await renderPausedPage();
+    const old = screen.getByRole("figure", { name: "Old" });
+    expect(within(old).getByRole("img", { name: "Old picture of Kiko" })).toHaveAttribute("src", "https://cdn.test/j1/ref-c0-1.png");
+    const fresh = screen.getByRole("figure", { name: "New" });
+    expect(within(fresh).getByRole("img", { name: "New picture of Kiko" })).toHaveAttribute("src", "https://cdn.test/j1/ref-c0-2.png");
+  });
+
   it("says the goes are shared by both tools", async () => {
     serve();
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PENCIL_ROW }));
@@ -1092,6 +1152,7 @@ describe("ProcessingPage — magic pencil (ticket 06)", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PENCIL_ROW }));
     await renderPausedPage();
 
+    fireEvent.click(screen.getByRole("button", { name: "Change this picture of Kiko" }));   // ticket 05: the pencil waits behind it
     fireEvent.click(screen.getByRole("button", { name: "Magic pencil for Kiko" }));
     const box = screen.getByRole("textbox", { name: "What should change about Kiko?" });
     expect(document.activeElement).toBe(box);
@@ -1122,6 +1183,7 @@ describe("ProcessingPage — magic pencil (ticket 06)", () => {
     serve();
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: PENCIL_ROW }));
     await renderPausedPage();
+    fireEvent.click(screen.getByRole("button", { name: "Change this picture of Kiko" }));   // ticket 05: the pencil waits behind it
     const opener = screen.getByRole("button", { name: "Magic pencil for Kiko" });
     fireEvent.click(opener);
     const box = screen.getByRole("textbox", { name: "What should change about Kiko?" });
@@ -1136,6 +1198,7 @@ describe("ProcessingPage — magic pencil (ticket 06)", () => {
     serve();
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: withCharacter({}, 0) }));
     await renderPausedPage();
+    fireEvent.click(screen.getByRole("button", { name: "Change this picture of Kiko" }));   // ticket 05: the pencil waits behind it
     expect(screen.getByRole("button", { name: "Magic pencil for Kiko" })).toBeDisabled();
     expect(screen.getByText("No pencils left for this book")).toBeDefined();
     expect(screen.getByText(
@@ -1147,6 +1210,8 @@ describe("ProcessingPage — magic pencil (ticket 06)", () => {
     mockUseJob.mockReturnValue(jobState({ bucket: "paused", row: withCharacter({ pencil_ready: false }) }));
     await renderPausedPage();
     expect(screen.getByText("2 goes left for this book")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Change this picture of Kiko" }));   // ticket 05: the pencil waits behind it
+    expect(screen.getByRole("button", { name: "orange sock" })).toBeDefined();
     expect(screen.queryByRole("button", { name: "Magic pencil for Kiko" })).toBeNull();
   });
 

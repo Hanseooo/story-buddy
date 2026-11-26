@@ -15,10 +15,14 @@ type Props = {
   className?: string;
   /** A small thumb: the failed state is one icon button instead of a line of text. */
   compact?: boolean;
+  /** Tells the caller the picture is on screen, for a choice that must not be made unseen. */
+  onLoad?: () => void;
+  /** Tells the caller the picture broke, for a caller that shows its own error. */
+  onError?: () => void;
 };
 
 /** A signed picture in a fixed box: pulse while it loads, fade in, and a failed state with Try again. */
-export default function PictureBox({ src, alt, onRetry, className = "aspect-[4/3] w-full", compact = false }: Props) {
+export default function PictureBox({ src, alt, onRetry, className = "aspect-[4/3] w-full", compact = false, onLoad, onError }: Props) {
   // Keyed by URL, as on the shelf, so a new link pulses and fades in again.
   const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
   const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
@@ -43,8 +47,8 @@ export default function PictureBox({ src, alt, onRetry, className = "aspect-[4/3
           alt={alt}
           loading="lazy"
           decoding="async"
-          onLoad={() => setLoadedSrc(src)}
-          onError={() => setBrokenSrc(src)}
+          onLoad={() => { setLoadedSrc(src); onLoad?.(); }}
+          onError={() => { setBrokenSrc(src); onError?.(); }}
           className={`relative h-full w-full object-cover transition-opacity duration-[var(--duration-slow)] ${loaded ? "opacity-100" : "opacity-0"}`}
         />
       )}

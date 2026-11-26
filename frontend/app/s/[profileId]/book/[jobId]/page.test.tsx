@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, onTestFinished } from "vitest";
 import { imageLinksResponse } from "@/lib/imageLinksFake";
-import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent, within } from "@testing-library/react";
 import BookPage from "./page";
 
 const pushMock = vi.fn();
@@ -829,6 +829,51 @@ describe("BookPage — magic pencil on a finished page (magic pencil 10)", () =>
     await waitFor(() => expect(REFETCH).toHaveBeenCalled());
     const chosen = network.mock.calls.find(([url]) => String(url).endsWith("/pages/s0/pencil/choice"))!;
     expect(JSON.parse(String(chosen[1]!.body))).toEqual({ use_id: "u1", choice: "kept", source: AFTER });
+  });
+
+  it("shows the old and new pictures side by side with labels, and Use the old one still sends old (ticket 05)", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
+    const network = pencilNetwork([{ pencils_left: 4, disabled_reason: null, uses: [use("choice", AFTER)] }],
+      (url) => url.endsWith("/pages/s0/pencil/choice") ? Response.json({ choice: "old" }) : undefined);
+    await renderAndSwitchToPages(makeParams());
+    const old = await screen.findByRole("figure", { name: "Old" });
+    expect(within(old).getByRole("img", { name: "Old picture for page 1" })).toHaveAttribute("src", "https://cdn.test/j1/s0-1.png");
+    const fresh = screen.getByRole("figure", { name: "New" });
+    expect(await within(fresh).findByRole("img", { name: "Your changed picture for page 1" })).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Use the old picture for page 1" }));
+    await waitFor(() => expect(REFETCH).toHaveBeenCalled());
+    const chosen = network.mock.calls.find(([url]) => String(url).endsWith("/pages/s0/pencil/choice"))!;
+    expect(JSON.parse(String(chosen[1]!.body))).toEqual({ use_id: "u1", choice: "old", source: "j1/s0-pencil-u1.png" });
+  });
+
+  it("covers the page picture while the change is drawing (ticket 05)", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success", row: FEATURE_ROW }));
+    pencilNetwork([{ pencils_left: 5, disabled_reason: null, uses: [use("drawing")] }]);
+    await renderAndSwitchToPages(makeParams());
+    await screen.findByText("Changing your picture…");
+    const button = screen.getByRole("button", { name: "Show the picture for page 1 bigger" });
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(within(button).getByText("Drawing your change…")).toBeVisible();
+  });
+
+  // jsdom cannot run a framer-motion drag, so this checks where the swipe area is: framer marks the
+  // element a horizontal swipe starts on with `touch-action: pan-y` and turns off text selection there.
+  it("only the picture starts a swipe; the pencil box and other versions do not (ticket 05)", async () => {
+    mockUseJob.mockReturnValue(jobState({ bucket: "terminal-success",
+      row: { ...FEATURE_ROW, pages: [{ ...PAGES[0], other_versions: true }, PAGES[1]] } }));
+    pencilNetwork([{ pencils_left: 5, disabled_reason: null, uses: [] }],
+      (url) => url.endsWith("/pages/s0/versions/open")
+        ? Response.json({ versions: [{ version_id: "s0-attempt-0", image_path: "j1/s0-0.png" }], unavailable: 0 }) : undefined);
+    await renderAndSwitchToPages(makeParams());
+    fireEvent.click(await screen.findByRole("button", { name: "Other versions of page 1" }));
+    const versions = await screen.findByRole("button", { name: "Use other picture 1 for page 1" });
+    fireEvent.click(screen.getByRole("button", { name: "Magic pencil for page 1" }));
+    const box = screen.getByLabelText("What should change on page 1?");
+    const swipeArea = '[style*="touch-action: pan-y"]';
+    expect(picture().closest(swipeArea)).not.toBeNull();
+    expect(box.closest(swipeArea)).toBeNull();
+    expect(versions.closest(swipeArea)).toBeNull();
+    expect(box.closest('[style*="user-select: none"]')).toBeNull();
   });
 
   it("arrow keys stay in the pencil box and only a plain arrow on the page turns it", async () => {

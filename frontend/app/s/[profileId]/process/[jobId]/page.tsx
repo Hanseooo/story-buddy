@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { use, useCallback, useEffect, useRef, useState } from "react";
+import { use, useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useJob, type JobRow } from "@/lib/useJob";
@@ -10,6 +10,7 @@ import { displayTitle } from "@/lib/displayTitle";
 import FailureScreen from "@/components/FailureScreen";
 import StopStory from "@/components/StopStory";
 import StoppedStory from "@/components/StoppedStory";
+import PictureBox from "@/components/PictureBox";
 import { supabase } from "@/lib/supabaseClient";
 import { signPaths } from "@/lib/signedUrls";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
@@ -472,11 +473,6 @@ function MagicPencil({ character, tapsLeft, disabled, onSubmit }: {
         Magic pencil
       </button>
       {tapsLeft === 0 && <p className="mt-1 text-center font-kid text-sm text-foreground/70">No pencils left for this book</p>}
-      {character.pencil_refused && (
-        <p role="alert" className="mt-2 text-center font-kid text-sm text-[var(--color-destructive)]">
-          We couldn&apos;t change this picture. Try different words.
-        </p>
-      )}
       {open && tapsLeft > 0 && (
         <div
           id={panelId}
@@ -540,10 +536,21 @@ function MagicPencil({ character, tapsLeft, disabled, onSubmit }: {
   );
 }
 
-// AC-11: the new picture is shown above; the old one waits beside the choice. The go is spent either
+// A labelled picture in the keep-or-old choice.
+function OldNew({ label, children }: { label: string; children: React.ReactNode }) {
+  const id = useId();
+  return (
+    <figure aria-labelledby={id} className="flex flex-col gap-1">
+      <figcaption id={id} className="font-kid text-sm font-bold text-foreground">{label}</figcaption>
+      {children}
+    </figure>
+  );
+}
+
+// AC-11: the old and new pictures are shown side by side with the choice. The go is spent either
 // way, and the book cannot go on until the child chooses (the API rejects confirm meanwhile).
-function PencilChoice({ jobId, moderationMode, character, disabled, onChoose }: {
-  jobId: string; moderationMode?: string; character: RevealCharacter; disabled: boolean;
+function PencilChoice({ jobId, moderationMode, character, newUrl, disabled, onChoose }: {
+  jobId: string; moderationMode?: string; character: RevealCharacter; newUrl: string | undefined; disabled: boolean;
   onChoose: (choice: "kept" | "old") => void;
 }) {
   const old = character.pencil_choice!;
@@ -573,22 +580,30 @@ function PencilChoice({ jobId, moderationMode, character, disabled, onChoose }: 
       <p className="font-kid text-sm leading-relaxed text-foreground">
         Here is your changed picture of {character.name}. Keep it, or go back to the old one.
       </p>
-      {state === "error" ? (
-        <div role="alert" className="mt-2 flex flex-col items-start gap-2 font-kid text-sm">
-          <p>We couldn&apos;t load the old picture right now.</p>
-          <button
-            type="button"
-            onClick={() => { setState("loading"); setAttempt((value) => value + 1); }}
-            className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
-          >
-            Try loading {character.name}&apos;s old picture again
-          </button>
+      {/* Old and New side by side when there is room for both, stacked in a narrow card (audit B3). */}
+      <div className="@container mt-2">
+        <div className="grid grid-cols-1 gap-3 @sm:grid-cols-2">
+          <OldNew label="Old">
+            {state === "error" ? (
+              <div role="alert" className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-[8px] bg-[var(--color-muted)] p-3 text-center font-kid text-sm">
+                <p>We couldn&apos;t load the old picture right now.</p>
+                <button
+                  type="button"
+                  onClick={() => { setState("loading"); setAttempt((value) => value + 1); }}
+                  className="min-h-[44px] rounded-xl bg-[var(--color-surface)] px-4 py-2 font-bold focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3"
+                >
+                  Try loading {character.name}&apos;s old picture again
+                </button>
+              </div>
+            ) : (
+              <PictureBox src={url ?? undefined} alt={`Old picture of ${character.name}`} className="aspect-[4/3] w-full rounded-[8px]" />
+            )}
+          </OldNew>
+          <OldNew label="New">
+            <PictureBox src={newUrl} alt={`New picture of ${character.name}`} className="aspect-[4/3] w-full rounded-[8px]" />
+          </OldNew>
         </div>
-      ) : url ? (
-        <img src={url} alt={`Old picture of ${character.name}`} className="mt-2 w-24 aspect-square object-contain rounded-[8px] bg-[var(--color-muted)]" />
-      ) : (
-        <div className="mt-2 w-24 aspect-square rounded-[8px] bg-[var(--color-muted)] animate-pulse" />
-      )}
+      </div>
       <p role="status" className="font-kid text-sm text-foreground/70">{disabled ? "Changing your picture…" : ""}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button
@@ -630,6 +645,9 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
   const [selectedTrait, setSelectedTrait] = useState<SelectedTrait>(null);
   const [pendingRedrawName, setPendingRedrawName] = useState<string | null>(null);
   const [changingPicture, setChangingPicture] = useState(false);
+  // Which cards have "Change this picture" open, by char_id. Here, not in the card, because a redraw
+  // leaves the reveal and comes back.
+  const [changeOpen, setChangeOpen] = useState<Record<string, boolean>>({});
   const submissionInFlight = useRef(false);
   const characterHeadingRefs = useRef<Record<string, HTMLHeadingElement | null>>({});
   const characterCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -1045,6 +1063,7 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                   jobId={jobId}
                   moderationMode={moderationMode}
                   character={c}
+                  newUrl={signedCharUrls[c.char_id]}
                   disabled={submissionsDisabled}
                   onChoose={(choice) => {
                     setSelectedTrait(null);
@@ -1072,6 +1091,34 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                 }}
               />
 
+              {/* Outside the tools below, so a closed "Change this picture" never hides it. */}
+              {c.versions !== undefined && c.pencil_ready && c.pencil_refused && (
+                <p role="alert" className="w-full text-center font-kid text-sm text-[var(--color-destructive)]">
+                  We couldn&apos;t change this picture. Try different words.
+                </p>
+              )}
+
+              {/* Audit B9: Other versions stays one tap away; the pencil and the redraw chips wait behind
+                  one disclosure, whose open state lives on this page so it survives a redraw. */}
+              {c.versions !== undefined && (
+                <button
+                  type="button"
+                  aria-label={`Change this picture of ${c.name}`}
+                  aria-expanded={Boolean(changeOpen[c.char_id])}
+                  aria-controls={`change-tools-${c.char_id}`}
+                  disabled={submissionsDisabled}
+                  onClick={() => {
+                    if (changeOpen[c.char_id] && selectedTrait?.charId === c.char_id) setSelectedTrait(null);
+                    setChangeOpen((open) => ({ ...open, [c.char_id]: !open[c.char_id] }));
+                  }}
+                  className="min-h-[44px] w-full rounded-xl border border-[var(--color-primary)]/20 bg-background px-4 py-2 font-kid text-sm font-bold text-foreground hover:bg-[var(--color-primary)]/5 focus-visible:outline-secondary focus-visible:outline-3 focus-visible:outline-offset-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Change this picture
+                </button>
+              )}
+
+              {(c.versions === undefined || changeOpen[c.char_id]) && (
+              <div id={`change-tools-${c.char_id}`} className="flex w-full flex-col items-center gap-4">
               {c.versions !== undefined && c.pencil_ready && (
                 <MagicPencil
                   key={`pencil-${c.image_path}`}
@@ -1148,6 +1195,8 @@ export default function ProcessingPage({ params }: { params: Promise<{ profileId
                     </button>
                   </div>
                 </div>
+              )}
+              </div>
               )}
               </>)}
               {confirmError?.charId === c.char_id && (
