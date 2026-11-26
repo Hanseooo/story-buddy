@@ -191,11 +191,12 @@ QWEN_AVAILABILITY_TIMEOUT_SECONDS = 3.0
 
 class _DropQwenJudgeHost(logging.Filter):
     """AC-22: httpx logs every request URL at INFO (the worker's level), and the Qwen judge's
-    host must never reach a log line. Drops only records naming that host."""
+    host must never reach a log line. Drops only records naming that host. httpx logs the host
+    lowercased and drops a default port, so the match is on the lowercased hostname alone."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        host = urlsplit(settings.qwen_judge_base_url or "").netloc
-        return not host or host not in record.getMessage()
+        host = urlsplit(settings.qwen_judge_base_url or "").hostname
+        return not host or host not in record.getMessage().lower()
 
 
 logging.getLogger("httpx").addFilter(_DropQwenJudgeHost())

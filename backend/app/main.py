@@ -10,9 +10,8 @@ from pydantic import BaseModel, field_validator
 
 from app.config import (
     DEFAULT_JUDGE_CHOICE, JUDGE_CHOICES, MAX_PENCIL_CHARS, MAX_TITLE_CHARS, MIN_STORY_WORDS,
-    SELECTABLE_STYLE_PRESET_IDS, settings,
+    QWEN_BASE_MODEL, QWEN_FINETUNED_MODEL, SELECTABLE_STYLE_PRESET_IDS, judge_options, settings,
 )
-from app.config import QWEN_BASE_MODEL, QWEN_FINETUNED_MODEL, judge_options
 from app.moderation_policy import TEACHER_MODERATION_POLICY_VERSION
 from app.length import clamp_story, word_count
 from app.db import get_supabase_client

@@ -12,7 +12,7 @@ Run from `backend/`, where `app.config.settings` can load (it needs the usual ba
         uv run python -m scripts.qwen_judge_probe
 
 Exit codes: 0 both models listed and both answers parsed; 1 a model is missing from `/v1/models`
-or an answer did not parse; 2 no server reached (connection failure, timeout, or bad key).
+or an answer did not parse or timed out; 2 no server reached (connection failure or bad key).
 """
 
 import argparse
@@ -22,14 +22,13 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from openai import APIConnectionError, AuthenticationError, OpenAI
+from openai import APIConnectionError, APITimeoutError, AuthenticationError, OpenAI
 
+from app.config import QWEN_BASE_MODEL, QWEN_FINETUNED_MODEL
 from pipeline.consistency_check import JUDGE_PROMPT, SceneVerdict, _data_uri
 from providers import _one_answer
 
-# The two Qwen judge ids of spec SH-01. Ticket 05 adds them to `app/config.py`; read them from
-# there once they exist.
-QWEN_MODELS = ("Qwen/Qwen3.5-9B", "seed2_checkpoint140")
+QWEN_MODELS = (QWEN_BASE_MODEL, QWEN_FINETUNED_MODEL)  # spec SH-01
 
 # A synthetic validation pair from the committed research page (pair 033b8372e89e4c06,
 # character syn-025:c0, "Tito Ben", labelled Same). Never a child's picture.
@@ -58,6 +57,8 @@ def _probe(client: OpenAI, model: str, content: list) -> ModelResult:
     t0 = time.perf_counter()
     try:
         verdict = _one_answer(client, model, content, SceneVerdict, {})
+    except APITimeoutError:  # a subclass of APIConnectionError: the server is up but slow
+        return ModelResult(model, time.perf_counter() - t0, False, f"TIMEOUT after {client.timeout:g}s")
     except APIConnectionError:
         raise
     except Exception as exc:  # any other way the answer failed is "not parsed", with its reason

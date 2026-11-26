@@ -1376,3 +1376,17 @@ def test_judges_never_returns_or_logs_the_qwen_url_or_key(monkeypatch, caplog, s
     for secret in ("qwen-judge.test.invalid", QWEN_KEY):
         assert secret not in response.text
         assert secret not in caplog.text
+
+
+@pytest.mark.parametrize("url", [
+    "http://Qwen-Judge.test.invalid:18081/v1",  # httpx logs the host lowercased
+    "http://qwen-judge.test.invalid:80/v1",  # httpx logs the default port dropped
+])
+def test_judges_log_filter_matches_the_host_httpx_logs(monkeypatch, caplog, url):
+    caplog.set_level(logging.INFO)
+    _qwen_server(monkeypatch, _models("Qwen/Qwen3.5-9B", "seed2_checkpoint140"), url=url)
+
+    response = client.get("/judges")
+
+    assert [option["available"] for option in response.json()] == [True, True, True]
+    assert "qwen-judge.test.invalid" not in caplog.text.lower()

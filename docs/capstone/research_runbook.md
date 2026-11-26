@@ -386,16 +386,21 @@ answer 401 (inferred from `--api-key`'s help text, not checked on this route).
 `settings` loads:
 `QWEN_JUDGE_BASE_URL=http://<public-ip>:<public-port>/v1 QWEN_JUDGE_API_KEY=<key> uv run python -m scripts.qwen_judge_probe`.
 It sends synthetic pair `033b8372e89e4c06` (`syn-025:c0`, Tito Ben, labelled Same) once to each
-model and prints latency and parsed / not parsed. Exit 0 is GO, 1 a missing model or an unparsed
-answer, 2 no server. Save its output under `.scratch/judge-selector/`.
+model and prints latency and parsed / not parsed. Exit 0 is GO, 1 a missing model, an unparsed
+answer or a model that timed out (printed as `TIMEOUT after Ns`), 2 no server. Save its output under `.scratch/judge-selector/`.
 
 - Probe output: TODO (owner, paste here)
 - Earlier reference: the two adapter requests in `vast-53867285-inference1/inference-contract.json`
   took 21.915 and 46.647 seconds ("Full-run readiness and cost assessment" below).
 
-**Northflank env vars** (worker service, after ticket 05 ships):
+**Northflank env vars**, set on BOTH services: web (`GET /judges` runs there) and worker (the
+identity calls, after ticket 05 ships):
 - `QWEN_JUDGE_BASE_URL` = `http://<public-ip>:<public-port>/v1`
 - `QWEN_JUDGE_API_KEY` = the same value as `VLLM_API_KEY` on the instance
+
+**Deploy order.** Apply `supabase/migrations/0034_jobs_judge_choice.sql` to the hosted database
+before deploying this backend. Without the `jobs.judge_choice` column, `POST /storybooks`,
+`insert_review_job` and the worker's job select all fail.
 
 The endpoint is plain HTTP, so the key travels unencrypted. TODO (owner): accept that for a demo
 with no child users, or put TLS in front before setting the key on Northflank.
@@ -412,8 +417,9 @@ billing ends, but disk is still billed while stopped. A stopped instance may not
 restart.
 
 **Destroy.** After the defense, destroy the instance (console, or `vastai destroy instance <id>`,
-inferred). This deletes its disk and ends all billing. Unset `QWEN_JUDGE_BASE_URL` on Northflank
-first, so both Qwen options show as unavailable rather than failing per call.
+inferred). This deletes its disk and ends all billing. Unset `QWEN_JUDGE_BASE_URL` and `QWEN_JUDGE_API_KEY`
+on both Northflank services (web and worker) first, so both Qwen options show as unavailable rather
+than failing per call.
 
 ### Results figures recounted for the research page refresh (2026-11-21)
 
