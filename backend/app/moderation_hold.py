@@ -714,10 +714,10 @@ def insert_review_job(values: dict, *, title_evidence: list | None = None) -> No
         values["moderation_settings_snapshot"].update(
             theme_ids=classroom["moderation_theme_ids"], settings_version=classroom["moderation_settings_version"])
         conn.execute("""insert into jobs(id,status,current_stage,input_text,title,truncated,
-          style_preset_id,profile_id,classroom_id,moderation_mode,moderation_settings_snapshot)
-          values (%s,'queued','queued',%s,%s,%s,%s,%s,%s,'teacher_review_v1',%s)""", (
+          style_preset_id,judge_choice,profile_id,classroom_id,moderation_mode,moderation_settings_snapshot)
+          values (%s,'queued','queued',%s,%s,%s,%s,%s,%s,%s,'teacher_review_v1',%s)""", (
             values["id"], values["input_text"], "My story" if title_evidence is not None else values["title"], values["truncated"],
-            values["style_preset_id"], values["profile_id"], values["classroom_id"],
+            values["style_preset_id"], values["judge_choice"], values["profile_id"], values["classroom_id"],
             Jsonb(values["moderation_settings_snapshot"]),
         ))
         if title_evidence is not None:

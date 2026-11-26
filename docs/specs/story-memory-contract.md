@@ -319,6 +319,13 @@ roll and the unreferenced description line, filtered all-or-nothing by ADR-035's
 like `notes`, and rendered even when it contradicts the description. The reference judge never sees
 it. A character with no changes renders byte-identically, so `SCENE_PROMPT_VERSION` is unchanged.
 
+**`StoryMemory.judge_choice`** (added by `judge-selector.md` AC-11, ADR-087, 2026-11-27) is the
+same pattern: declared last, a plain `str` defaulting to `"gemma"`, no `CURRENT_SCHEMA_VERSION` bump.
+Both `run_job` start paths copy it from `jobs.judge_choice` (migration 0034), and it is fixed for the
+book (SH-06). The allowed ids are `app.config.JUDGE_CHOICES`, enforced at the API and by the 0034
+check, not by the contract, which stays importable without the app's settings. An old checkpoint
+resumes as `"gemma"`, the judge it was already using.
+
 - One version covers the whole contract, **including `FailureReason`** — an enum change is a contract change.
 
 ## 4. Failure-reason taxonomy (frozen — ADR-023 Decision 4)
