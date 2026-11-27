@@ -51,6 +51,7 @@ describe("WriteStoryPage", () => {
           text: "A dog runs in a field.",
           title: "My Book",
           style_preset_id: "gouache",
+          judge_choice: "gemma",
         }),
       })
     );
@@ -71,10 +72,7 @@ describe("WriteStoryPage", () => {
 
     await waitFor(() => expect(pushMock).toHaveBeenCalled());
 
-    const body = JSON.parse(
-      (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body
-    );
-    expect(body.style_preset_id).toBe("cel");
+    expect(postedBody().style_preset_id).toBe("cel");
   });
 
   it("shows the pixel trial preset only when NEXT_PUBLIC_ENABLE_PIXEL_STYLE is true (C3-13)", () => {
@@ -163,7 +161,7 @@ describe("WriteStoryPage — prefill and chain counter", () => {
     expect(screen.getByLabelText("story text")).toHaveValue("The orange dog walks through the grassy field past the trees and stops near the stream. The dog looks across the water and sees a bird perched on the branch of a tree.");
     expect(screen.getByLabelText("Story title")).toHaveValue("Synthetic title");
     expect(sessionStorage.getItem("sb.stopped.prof-123.stopped-job")).toBeNull();
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect((global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => String(url).endsWith("/state"))).toHaveLength(1);
     window.history.replaceState({}, "", "/");
   });
   beforeEach(() => {
@@ -280,7 +278,7 @@ describe("WriteStoryPage — the 500-word cap", () => {
     expect(submitButton()).not.toBeDisabled();
     fireEvent.click(screen.getByText("Make my book"));
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/s/prof-123/process/abc-123"));
-    expect(JSON.parse((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body).text).toBe(text);
+    expect(postedBody().text).toBe(text);
   });
 
   it("rejects 501 words with the textual Too long! state, not a colour-only cue (CC-6)", () => {
@@ -302,9 +300,125 @@ describe("WriteStoryPage — the 500-word cap", () => {
     // passes even when the guard is broken. Flush the microtask queue first.
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(storybookCalls()).toHaveLength(0);
     expect(pushMock).not.toHaveBeenCalled();
     expect(screen.getByLabelText("story text")).toHaveValue(text);
+  });
+});
+
+// judge-selector US-01. The shape `GET /judges` returns (backend/app/main.py list_judges).
+function judgesPayload(qwen: { available: boolean; reason: string | null }) {
+  return [
+    { id: "gemma", label: "Standard (Gemma)", available: true, reason: null },
+    { id: "qwen_base", label: "Qwen base", ...qwen },
+    { id: "qwen_finetuned", label: "Qwen fine-tuned", ...qwen },
+  ];
+}
+
+function mockApi(judges: () => Promise<unknown>) {
+  global.fetch = vi.fn((url: string) =>
+    url.endsWith("/judges")
+      ? judges()
+      : Promise.resolve({ ok: true, json: async () => ({ job_id: "abc-123" }) }),
+  ) as unknown as typeof fetch;
+}
+
+// The page also calls GET /judges on mount, so submit assertions look at /storybooks calls only.
+function storybookCalls() {
+  return (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) =>
+    String(url).endsWith("/storybooks"),
+  );
+}
+
+function postedBody(index = 0) {
+  return JSON.parse(storybookCalls()[index][1].body);
+}
+
+describe("WriteStoryPage — Picture checker (judge-selector US-01)", () => {
+  beforeEach(() => {
+    pushMock.mockClear();
+    sessionStorage.clear();
+  });
+
+  it("sends the chosen Qwen judge once GET /judges says Qwen is up", async () => {
+    mockApi(async () => ({ ok: true, json: async () => judgesPayload({ available: true, reason: null }) }));
+    render(<WriteStoryPage />);
+    const checker = screen.getByRole("combobox", { name: "Picture checker" });
+    expect(checker).toHaveValue("gemma");
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: "Qwen fine-tuned" })).not.toBeDisabled(),
+    );
+    fireEvent.change(checker, { target: { value: "qwen_finetuned" } });
+    fireEvent.change(screen.getByLabelText("Story title"), { target: { value: "My Book" } });
+    fireEvent.change(screen.getByLabelText("story text"), { target: { value: "A dog runs in a field." } });
+    fireEvent.click(screen.getByText("Make my book"));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalled());
+    expect(postedBody().judge_choice).toBe("qwen_finetuned");
+  });
+
+  it("says Qwen is offline and keeps Standard when GET /judges fails", async () => {
+    mockApi(() => Promise.reject(new Error("network down")));
+    render(<WriteStoryPage />);
+    expect(await screen.findByText("Qwen checker is offline. Standard is used.")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Picture checker" })).toHaveValue("gemma");
+    expect(screen.getByRole("option", { name: "Qwen base" })).toBeDisabled();
+    expect(screen.getByRole("option", { name: "Qwen fine-tuned" })).toBeDisabled();
+  });
+
+  it("shows Standard when a restored draft chose Qwen but Qwen is offline", async () => {
+    sessionStorage.setItem(
+      "sb.prefill",
+      JSON.stringify({ text: "My story about a cat.", title: "Cat Book", judge_choice: "qwen_base" }),
+    );
+    mockApi(async () => ({ ok: true, json: async () => judgesPayload({ available: false, reason: "unreachable" }) }));
+    render(<WriteStoryPage />);
+    expect(await screen.findByText("Qwen checker is offline. Standard is used.")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Picture checker" })).toHaveValue("gemma");
+  });
+
+  it("restores a draft's Qwen fine-tuned choice and sends it once Qwen is up (AC-05)", async () => {
+    sessionStorage.setItem(
+      "sb.prefill",
+      JSON.stringify({ text: "My story about a cat.", title: "Cat Book", judge_choice: "qwen_finetuned" }),
+    );
+    mockApi(async () => ({ ok: true, json: async () => judgesPayload({ available: true, reason: null }) }));
+    render(<WriteStoryPage />);
+    const checker = screen.getByRole("combobox", { name: "Picture checker" });
+    await waitFor(() => expect(checker).toHaveValue("qwen_finetuned"));
+    fireEvent.click(screen.getByText("Make my book"));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalled());
+    expect(postedBody().judge_choice).toBe("qwen_finetuned");
+  });
+
+  it("while GET /judges is pending, says Checking…, disables Qwen and sends Standard (AC-02)", async () => {
+    mockApi(() => new Promise(() => {}));
+    render(<WriteStoryPage />);
+    expect(screen.getByText("Checking…")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Qwen base" })).toBeDisabled();
+    expect(screen.getByRole("option", { name: "Qwen fine-tuned" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Story title"), { target: { value: "My Book" } });
+    fireEvent.change(screen.getByLabelText("story text"), { target: { value: "A dog runs in a field." } });
+    fireEvent.click(screen.getByText("Make my book"));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalled());
+    expect(postedBody().judge_choice).toBe("gemma");
+  });
+
+  it("shows and sends Standard for a restored Qwen draft while GET /judges is pending (AC-02, AC-05)", async () => {
+    sessionStorage.setItem(
+      "sb.prefill",
+      JSON.stringify({ text: "My story about a cat.", title: "Cat Book", judge_choice: "qwen_finetuned" }),
+    );
+    mockApi(() => new Promise(() => {}));
+    render(<WriteStoryPage />);
+    expect(screen.getByText("Checking…")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Picture checker" })).toHaveValue("gemma");
+    fireEvent.click(screen.getByText("Make my book"));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalled());
+    expect(postedBody().judge_choice).toBe("gemma");
   });
 });
 
@@ -365,7 +479,7 @@ describe("WriteStoryPage title field", () => {
     });
     fireEvent.submit(screen.getByRole("form", { name: "Write your story" }));
     expect(await screen.findByText("Give your story a title.")).toBeInTheDocument();
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(storybookCalls()).toHaveLength(0);
     expect(screen.getByLabelText("Story title")).toHaveFocus();
   });
 
@@ -380,7 +494,7 @@ describe("WriteStoryPage title field", () => {
     fireEvent.submit(screen.getByRole("form", { name: "Write your story" }));
     expect(await screen.findByText("Keep your title to 80 characters.")).toBeInTheDocument();
     expect(titleInput.value).toBe(longTitle);
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(storybookCalls()).toHaveLength(0);
     expect(titleInput).toHaveFocus();
   });
 
@@ -391,14 +505,14 @@ describe("WriteStoryPage title field", () => {
     });
     fireEvent.change(screen.getByLabelText("Story title"), { target: { value: "My Book" } });
     fireEvent.submit(screen.getByRole("form", { name: "Write your story" }));
-    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
-    const body = JSON.parse((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+    await waitFor(() => expect(storybookCalls()).toHaveLength(1));
+    const body = postedBody();
     expect(body.title).toBe("My Book");
     expect(body.text).toBe("one two three four five");
   });
 
   it("shows a checked title on 409 and resubmits with title_ack when accepted", async () => {
-    global.fetch = vi
+    const storybooks = vi
       .fn()
       .mockResolvedValueOnce({
         ok: false,
@@ -408,7 +522,10 @@ describe("WriteStoryPage title field", () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ job_id: "job-2" }),
-      }) as unknown as typeof fetch;
+      });
+    global.fetch = vi.fn((url: string) =>
+      url.endsWith("/judges") ? Promise.reject(new Error("not under test")) : storybooks(),
+    ) as unknown as typeof fetch;
     render(<WriteStoryPage />);
     fireEvent.change(screen.getByLabelText("story text"), {
       target: { value: "one two three four five" },
@@ -419,8 +536,8 @@ describe("WriteStoryPage title field", () => {
     fireEvent.submit(screen.getByRole("form", { name: "Write your story" }));
     expect(await screen.findByText(/call me at <PH_MOBILE>/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /use this title/i }));
-    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
-    const secondBody = JSON.parse((global.fetch as ReturnType<typeof vi.fn>).mock.calls[1][1].body);
+    await waitFor(() => expect(storybookCalls()).toHaveLength(2));
+    const secondBody = postedBody(1);
     expect(secondBody.title_ack).toBe("call me at <PH_MOBILE>");
     expect(secondBody.title).toBe("call me at 09171234567");
   });

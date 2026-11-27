@@ -1,3 +1,6 @@
+// judge-selector SH-01: the picture checker ids `POST /storybooks` accepts and `jobs.judge_choice` holds.
+export type JudgeChoice = "gemma" | "qwen_base" | "qwen_finetuned";
+
 export type FailureReason = 
   | "child_text" 
   | "character_safety" 

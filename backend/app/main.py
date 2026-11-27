@@ -8,7 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
-from app.config import MAX_PENCIL_CHARS, MAX_TITLE_CHARS, MIN_STORY_WORDS, SELECTABLE_STYLE_PRESET_IDS, settings
+from app.config import (
+    DEFAULT_JUDGE_CHOICE, JUDGE_CHOICES, MAX_PENCIL_CHARS, MAX_TITLE_CHARS, MIN_STORY_WORDS,
+    SELECTABLE_STYLE_PRESET_IDS, judge_options, settings,
+)
 from app.moderation_policy import TEACHER_MODERATION_POLICY_VERSION
 from app.length import clamp_story, word_count
 from app.db import get_supabase_client
@@ -87,6 +90,8 @@ class CreateStorybookRequest(BaseModel):
     text: str
     title: str
     style_preset_id: str | None = None
+    # judge-selector SH-01: a choice id, never a model id. None (old client) stores the default.
+    judge_choice: str | None = None
     # Set only on a resubmission after a 409 asked the child to confirm a redacted title.
     title_ack: str | None = None
 
@@ -117,6 +122,13 @@ class CreateStorybookRequest(BaseModel):
             return v
         if v is not None and v not in SELECTABLE_STYLE_PRESET_IDS:
             raise ValueError(f"Unknown style_preset_id: {v!r}")
+        return v
+
+    @field_validator("judge_choice")
+    @classmethod
+    def validate_judge_choice(cls, v: str | None) -> str | None:
+        if v is not None and v not in JUDGE_CHOICES:
+            raise ValueError(f"Unknown judge_choice: {v!r}")
         return v
 
 
@@ -158,6 +170,36 @@ def update_avatar(payload: AvatarRequest, user=Depends(get_current_user)) -> dic
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+def _qwen_unavailable_reason() -> str | None:
+    """SH-05: one answer for both Qwen choices. None means available."""
+    if not settings.qwen_judge_base_url:
+        return "not_configured"
+    try:
+        listed = providers.qwen_judge_models()
+    except Exception as exc:
+        # The exception text can carry the server URL (AC-22), so only its type is logged.
+        _log.warning("qwen judge availability check failed: %s", type(exc).__name__)
+        return "unreachable"
+    if not {settings.qwen_base_model, settings.qwen_finetuned_model} <= listed:
+        return "model_missing"
+    return None
+
+
+@app.get("/judges")
+def list_judges(user=Depends(get_current_user)) -> list[dict]:
+    """US-04: the three SH-01 options for the write screen. Gemma is always available."""
+    qwen_reason = _qwen_unavailable_reason()
+    return [
+        {
+            "id": choice,
+            "label": option["label"],
+            "available": choice == DEFAULT_JUDGE_CHOICE or qwen_reason is None,
+            "reason": None if choice == DEFAULT_JUDGE_CHOICE else qwen_reason,
+        }
+        for choice, option in judge_options().items()
+    ]
 
 
 @app.post("/storybooks", response_model=CreateStorybookResponse)
@@ -220,6 +262,7 @@ def create_storybook(
             "title": checked_title,
             "truncated": truncated,
             "style_preset_id": payload.style_preset_id or "gouache",
+            "judge_choice": payload.judge_choice or DEFAULT_JUDGE_CHOICE,
             "profile_id": user.id,
             "classroom_id": classroom_id,
             **({

@@ -2,3 +2,5 @@
 # zip-based wheel trips — but "usually detected" is a poor guarantee for a file whose corruption
 # would surface as an unreadable archive halfway through a Northflank build. Say it outright.
 *.whl binary
+# A shell script run on a Linux GPU host breaks on CRLF line endings.
+*.sh text eol=lf

@@ -54,6 +54,14 @@ class Settings(BaseSettings):
     # OpenAI protocol, so the swap is these two vars — no code change.
     judge_base_url: str = "https://openrouter.ai/api/v1"
     judge_api_key: str | None = None  # falls back to openrouter_api_key
+    # judge-selector §6, ADR-087: the optional Qwen identity judge on a rented vLLM server. An
+    # OpenAI-style base URL ending in /v1. Set only on Northflank while the instance runs; unset,
+    # both Qwen choices are unavailable and nothing calls out. Never log or return either value.
+    qwen_judge_base_url: str | None = None
+    qwen_judge_api_key: str | None = None
+    # judge-selector SH-01: the Qwen model ids that server serves (base and the seed-2 adapter).
+    qwen_base_model: str = "Qwen/Qwen3.5-9B"
+    qwen_finetuned_model: str = "seed2_checkpoint140"
 
     # ADR-032: Primary text guard on OpenRouter to prevent OOM.
     # Model swap is env-var change; provider swap is providers.py.
@@ -253,3 +261,29 @@ RECURSION_LIMIT = MAX_SCENES * 7 + SUPER_STEP_PRELUDE
 # One optional-text detector step, its review pause and decision continuation add
 # three steps to the earlier text-hold allowance. Baseline bounds are unchanged.
 TEACHER_REVIEW_RECURSION_LIMIT = MAX_SCENES * (7 + 8) + SUPER_STEP_PRELUDE + (2 + 3 + 1) * 4 + 4
+
+# judge-selector SH-01, ADR-087: identity-judge choice ids in display order. "gemma" is the default.
+JUDGE_CHOICES = ("gemma", "qwen_base", "qwen_finetuned")
+DEFAULT_JUDGE_CHOICE = "gemma"
+
+# Provisional, owner decision 2026-11-27: to be set from the ticket 01 live probe latency.
+# Bounds one Qwen identity call before the SH-04 Gemma fallback (judge-selector ticket 05).
+QWEN_JUDGE_TIMEOUT_SECONDS = 90
+# §4: a blackholed Qwen host would otherwise hold each call for the full 90 s before the Gemma
+# fallback, and a fallback-heavy book could pass JOB_TIMEOUT_SECONDS. Connect fails fast instead.
+QWEN_JUDGE_CONNECT_TIMEOUT_SECONDS = 5
+# judge-selector US-04: the write screen waits on the /judges model list, so it answers fast and
+# never retries. 3 s is the top of the ticket's 2-3 s suggestion; vLLM lists models from memory, so
+# a slower answer already says the server is not fit to judge.
+QWEN_AVAILABILITY_TIMEOUT_SECONDS = 3.0
+JUDGE_LABELS = dict(zip(JUDGE_CHOICES, ("Standard (Gemma)", "Qwen base", "Qwen fine-tuned"), strict=True))
+
+
+def judge_options() -> dict[str, dict[str, str]]:
+    """SH-01 id -> {label, model}, in display order. Built per call so `gemma` follows
+    `settings.vlm_judge_model` (an env change or a test override) instead of an import-time copy."""
+    models = (settings.vlm_judge_model, settings.qwen_base_model, settings.qwen_finetuned_model)
+    return {
+        choice: {"label": JUDGE_LABELS[choice], "model": model}
+        for choice, model in zip(JUDGE_CHOICES, models, strict=True)
+    }

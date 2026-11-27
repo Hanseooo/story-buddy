@@ -1,4 +1,5 @@
 import json
+import logging
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -1487,3 +1488,161 @@ def test_pdf_image_deadline_closes_slow_connections(pdf_image_server, monkeypatc
     elapsed = time.monotonic() - started
     assert elapsed < 2.0, f"image fetch exceeded its 1-second deadline: {elapsed:.2f}s"
     assert disconnected.wait(1.0), "timed-out request left its connection open"
+
+
+# --- judge-selector 05: the identity call routed by the book's judge choice ---
+
+_QWEN_URL = "http://qwen-judge.test:8000/v1"
+_QWEN_KEY = "qwen-test-key-never-logged"
+
+
+@pytest.fixture
+def qwen_server(monkeypatch):
+    monkeypatch.setattr(providers.settings, "qwen_judge_base_url", _QWEN_URL)
+    monkeypatch.setattr(providers.settings, "qwen_judge_api_key", _QWEN_KEY)
+
+
+@pytest.mark.parametrize(
+    ("choice", "model"),
+    [("qwen_finetuned", "seed2_checkpoint140"), ("qwen_base", "Qwen/Qwen3.5-9B")],
+)
+def test_a_qwen_choice_posts_to_the_qwen_server_once_with_no_provider_body(qwen_server, choice, model):
+    """AC-12, AC-13, SH-03, OD-03: vLLM rejects OpenRouter's `provider` field, and a dead server
+    must cost one bounded attempt, not `MAX_RETRIES` of them."""
+    with patch("providers.OpenAI") as mock_openai:
+        parse = mock_openai.return_value.chat.completions.parse
+        parse.return_value = _fake_completion(_Verdict(differences_observed="none", same_character=True))
+        providers.judge("compare", ["data:ref", "data:scene"], _Verdict, choice=choice)
+
+    client_kwargs = dict(mock_openai.call_args.kwargs)
+    timeout = client_kwargs.pop("timeout")
+    assert client_kwargs == {
+        "base_url": "http://qwen-judge.test:8000/v1",
+        "api_key": "qwen-test-key-never-logged",
+        "max_retries": 0,
+    }
+    # §4: a blackholed host must fail its connect in 5 s, not 90, so a fallback-heavy book
+    # stays inside JOB_TIMEOUT_SECONDS. Read/write/pool keep the 90 s answer budget.
+    assert isinstance(timeout, httpx.Timeout)
+    assert (timeout.connect, timeout.read, timeout.write, timeout.pool) == (5, 90, 90, 90)
+    kwargs = parse.call_args.kwargs
+    assert kwargs["model"] == model
+    assert kwargs["response_format"] is _Verdict
+    assert "provider" not in kwargs["extra_body"]
+
+
+def test_qwen_model_ids_are_env_overridable_settings_read_at_call_time(qwen_server, monkeypatch):
+    """AGENTS.md: model ids are Settings fields. An override after import reaches the request."""
+    monkeypatch.setattr(providers.settings, "qwen_finetuned_model", "seed3_checkpoint200")
+    with patch("providers.OpenAI") as mock_openai:
+        parse = mock_openai.return_value.chat.completions.parse
+        parse.return_value = _fake_completion(_Verdict(differences_observed="none", same_character=True))
+        providers.judge("compare", ["data:ref"], _Verdict, choice="qwen_finetuned")
+
+    assert parse.call_args.kwargs["model"] == "seed3_checkpoint200"
+
+
+def test_the_gemma_choice_sends_todays_openrouter_request(monkeypatch):
+    """AC-14: byte-identical to a call that names no choice, pinned to literals."""
+    monkeypatch.setattr(providers.settings, "vlm_judge_model", "google/gemma-3-27b-it")
+    monkeypatch.setattr(providers.settings, "judge_base_url", "https://openrouter.ai/api/v1")
+    monkeypatch.setattr(providers.settings, "judge_api_key", None)
+    monkeypatch.setattr(providers.settings, "openrouter_api_key", "or-test-key")
+    calls = []
+    for kwargs in ({"choice": "gemma"}, {}):
+        with patch("providers.OpenAI") as mock_openai:
+            parse = mock_openai.return_value.chat.completions.parse
+            parse.return_value = _fake_completion(_Caption(caption="hi"))
+            providers.judge("compare", ["data:ref"], _Caption, **kwargs)
+        calls.append((mock_openai.call_args.kwargs, parse.call_args.kwargs))
+
+    (client_kwargs, parse_kwargs), today = calls
+    assert (client_kwargs, parse_kwargs) == today
+    assert client_kwargs == {
+        "base_url": "https://openrouter.ai/api/v1",
+        "api_key": "or-test-key",
+        "timeout": 60.0,
+        "max_retries": 2,
+    }
+    assert parse_kwargs["model"] == "google/gemma-3-27b-it"
+    assert parse_kwargs["extra_body"] == {
+        "provider": {"require_parameters": True, "only": ["nebius", "parasail"]}
+    }
+
+
+def test_a_qwen_answer_that_breaks_the_schema_is_not_re_asked(qwen_server):
+    """SH-04: unparseable Qwen output is a failed call, answered by Gemma in the pipeline.
+    Re-asking Qwen here would double a slow server's cost before the fallback starts."""
+    with patch("providers.OpenAI") as mock_openai:
+        parse = mock_openai.return_value.chat.completions.parse
+        parse.side_effect = [_schema_violation(), _fake_completion(_Caption(caption="hi"))]
+        with pytest.raises(ValueError):
+            providers.judge("compare", ["data:ref"], _Caption, choice="qwen_finetuned")
+
+    assert parse.call_count == 1
+
+
+def test_the_qwen_call_is_bounded_by_its_own_timeout_not_the_shared_one(qwen_server, monkeypatch):
+    """OD-03: `_bounded` is the only total-duration bound, so the Qwen timeout must be the bound
+    `_bounded` applies. A shorter CALL_TIMEOUT_SECONDS must not cut a slow Qwen answer short,
+    and the longer default must not let a hung Qwen call outlive its own timeout."""
+    import app.config as config
+
+    def answers_after(seconds):
+        def parse(**kwargs):
+            time.sleep(seconds)
+            return _fake_completion(_Caption(caption="hi"))
+        return parse
+
+    monkeypatch.setattr(config, "QWEN_JUDGE_TIMEOUT_SECONDS", 1.0)
+    monkeypatch.setattr(providers, "CALL_TIMEOUT_SECONDS", 0.1)
+    with patch("providers.OpenAI") as mock_openai:
+        mock_openai.return_value.chat.completions.parse = answers_after(0.3)
+        assert providers.judge("compare", ["data:ref"], _Caption, choice="qwen_base").caption == "hi"
+
+    monkeypatch.setattr(config, "QWEN_JUDGE_TIMEOUT_SECONDS", 0.2)
+    monkeypatch.setattr(providers, "CALL_TIMEOUT_SECONDS", 120.0)
+    release = threading.Event()
+    with patch("providers.OpenAI") as mock_openai:
+        mock_openai.return_value.chat.completions.parse = _blocking_parse(release)
+        started = time.monotonic()
+        try:
+            with pytest.raises(TimeoutError, match="seed2_checkpoint140"):
+                providers.judge("compare", ["data:ref"], _Caption, choice="qwen_finetuned")
+            elapsed = time.monotonic() - started
+        finally:
+            release.set()
+    assert elapsed < 5, f"Qwen call was not abandoned at its own timeout: {elapsed:.1f}s"
+
+
+def test_a_qwen_choice_with_no_server_configured_raises_without_a_request(monkeypatch):
+    """The OpenAI SDK reads a `None` base URL as "use api.openai.com"; the images must never go there."""
+    monkeypatch.setattr(providers.settings, "qwen_judge_base_url", None)
+    with patch("providers.OpenAI") as mock_openai:
+        with pytest.raises(RuntimeError, match="qwen_judge_base_url"):
+            providers.judge("compare", ["data:ref"], _Caption, choice="qwen_finetuned")
+
+    mock_openai.assert_not_called()
+
+
+def test_a_failed_qwen_request_logs_neither_its_key_nor_its_host(qwen_server, caplog):
+    """AC-22 and ticket 05: the real SDK over a fake network, so httpx's own request log runs."""
+    requests = []
+    real_openai = providers.OpenAI
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(500, json={"error": "boom"})
+
+    def client(**kwargs):
+        return real_openai(**kwargs, http_client=httpx.Client(transport=httpx.MockTransport(handler)))
+
+    with patch("providers.OpenAI", side_effect=client), caplog.at_level(logging.DEBUG):
+        with pytest.raises(Exception):
+            providers.judge("compare", ["data:ref"], _Caption, choice="qwen_finetuned")
+
+    assert len(requests) == 1
+    assert requests[0].headers["authorization"] == "Bearer qwen-test-key-never-logged"
+    assert "qwen-test-key-never-logged" not in caplog.text
+    info_and_up = "\n".join(r.getMessage() for r in caplog.records if r.levelno >= logging.INFO)
+    assert "qwen-judge.test" not in info_and_up

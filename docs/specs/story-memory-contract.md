@@ -153,6 +153,7 @@ class VlmVerdict(BaseModel):
 class IdentityCheck(BaseModel):
     same_character: bool
     failure_reasons: list[FailureReason] = Field(default_factory=list)
+    judge_model: Optional[str] = None  # model id that answered this subject (judge-selector OD-02)
 
 class Attempt(BaseModel):
     image_ref: str                     # durable Storage PATH
@@ -318,6 +319,20 @@ that use's text until the child chooses again. `description` is never changed (A
 roll and the unreferenced description line, filtered all-or-nothing by ADR-035's style prohibitions
 like `notes`, and rendered even when it contradicts the description. The reference judge never sees
 it. A character with no changes renders byte-identically, so `SCENE_PROMPT_VERSION` is unchanged.
+
+**`StoryMemory.judge_choice`** (added by `judge-selector.md` AC-11, ADR-087, 2026-11-27) is the
+same pattern: declared last, a plain `str` defaulting to `"gemma"`, no `CURRENT_SCHEMA_VERSION` bump.
+Both `run_job` start paths copy it from `jobs.judge_choice` (migration 0034), and it is fixed for the
+book (SH-06). The allowed ids are `app.config.JUDGE_CHOICES`, enforced at the API and by the 0034
+check, not by the contract, which stays importable without the app's settings. An old checkpoint
+resumes as `"gemma"`, the judge it was already using.
+
+**`IdentityCheck.judge_model`** (added by `judge-selector.md` OD-02, ADR-087, 2026-11-27) records the
+model id that actually answered that subject's identity call: the chosen Qwen model, or
+`settings.vlm_judge_model` when the book chose `gemma` or a Qwen call failed and Gemma answered it
+(SH-04). `consistency_check` writes it; nothing reads it as a gate. Declared last, `Optional[str]`
+defaulting to `None`, no `CURRENT_SCHEMA_VERSION` bump. `None` means the check was recorded before the
+field existed. Fallback counts are derived from it, so there is no second record to keep in sync.
 
 - One version covers the whole contract, **including `FailureReason`** — an enum change is a contract change.
 

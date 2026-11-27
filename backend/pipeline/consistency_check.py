@@ -10,7 +10,7 @@ import logging
 
 from pydantic import BaseModel, Field
 
-from app.config import settings
+from app.config import DEFAULT_JUDGE_CHOICE, judge_options, settings
 from app.db import get_supabase_client
 from contracts.story_memory import Attempt, FailureReason, IdentityCheck, StoryMemory, VlmVerdict
 from providers import judge
@@ -181,15 +181,37 @@ def _data_uri(image: bytes) -> str:
     return "data:image/png;base64," + base64.b64encode(image).decode()
 
 
+def _identity_verdict(name: str, images: list[str], judge_choice: str) -> tuple[SceneVerdict, str]:
+    """One subject's identity verdict and the model id that answered it (judge-selector SH-04).
+
+    A Qwen choice gets one Qwen call; if it raises for any reason (connection, `_bounded`'s
+    `TimeoutError`, HTTP error, unparseable answer, no server configured), Gemma answers this
+    subject. Under `gemma` this is exactly today's single call. A Gemma failure propagates."""
+    prompt = JUDGE_PROMPT.format(name=name)
+    if judge_choice != DEFAULT_JUDGE_CHOICE:
+        try:
+            return judge(prompt, images, SceneVerdict, choice=judge_choice), judge_options()[judge_choice]["model"]
+        except Exception as exc:
+            # The type only: an HTTP error's message can carry the server's response, and the
+            # Qwen host and key never reach a log line (AC-22).
+            log.warning(
+                "consistency_check: %s identity judge failed (%s); Gemma answers %s",
+                judge_choice, type(exc).__name__, name,
+            )
+    # Outside the `except`, so a Gemma failure's traceback does not chain the Qwen error into it.
+    return judge(prompt, images, SceneVerdict), settings.vlm_judge_model
+
+
 def judge_attempt(
     image_path: str,
     subjects: list[tuple[str, str]],
     constraint_prompt: str,
-) -> tuple[list[SceneVerdict] | None, SceneConstraintVerdict | None]:
+    judge_choice: str = DEFAULT_JUDGE_CHOICE,
+) -> tuple[list[tuple[SceneVerdict, str]] | None, SceneConstraintVerdict | None]:
     """The node's ONE effect boundary (MASTER_SPEC §6). Storage downloads live INSIDE it.
 
-    `(character name, reference path)` → identity verdicts.
-    `constraint_prompt` → composition verdict.
+    `(character name, reference path)` → `(identity verdict, model id that answered)` per subject.
+    `constraint_prompt` → composition verdict. `judge_choice` routes the identity call only (SH-02).
     """
     try:
         storage = get_supabase_client().storage.from_(BUCKET)
@@ -202,15 +224,11 @@ def judge_attempt(
         )
         return None, None
 
-    identity: list[SceneVerdict] | None = []
+    identity: list[tuple[SceneVerdict, str]] | None = []
     if subjects:
         try:
             identity = [
-                judge(
-                    JUDGE_PROMPT.format(name=name),
-                    [_data_uri(storage.download(ref)), scene_uri],
-                    SceneVerdict,
-                )
+                _identity_verdict(name, [_data_uri(storage.download(ref)), scene_uri], judge_choice)
                 for name, ref in subjects
             ]
         except Exception:
@@ -311,15 +329,20 @@ def consistency_check(state: StoryMemory) -> dict:
             subjects.append((character.name, character.canonical_ref_image))
             subject_ids.append(char_id)
 
-    identity_verdicts, composition = judge_attempt(
-        attempt.image_ref, subjects, scene.prompt or attempt.prompt or ""
+    # SH-06 / AC-18: the choice is read from state on every run, reruns and resumes included.
+    identity, composition = judge_attempt(
+        attempt.image_ref, subjects, scene.prompt or attempt.prompt or "", state.judge_choice
     )
+    identity_verdicts = None if identity is None else [v for v, _ in identity]
+    answered_by = [] if identity is None else [model for _, model in identity]
 
     # Preserve the caller's association before the worst-wins fold loses it. No judge-produced ID
     # or inference from names/prose: this order is the reference image roll used for generation.
-    identity_checks = None if identity_verdicts is None else {
-        char_id: IdentityCheck(same_character=v.same_character, failure_reasons=v.failure_reasons)
-        for char_id, v in zip(subject_ids, identity_verdicts)
+    identity_checks = None if identity is None else {
+        char_id: IdentityCheck(
+            same_character=v.same_character, failure_reasons=v.failure_reasons, judge_model=model
+        )
+        for char_id, (v, model) in zip(subject_ids, identity)
     }
 
     verdict: VlmVerdict | None = None
@@ -428,7 +451,9 @@ def consistency_check(state: StoryMemory) -> dict:
         ref_prompt_versions,
         JUDGE_PROMPT_VERSION,
         SCENE_CONSTRAINT_PROMPT_VERSION,
-        settings.vlm_judge_model,
+        # The identity model(s) that answered; with no identity answer, the scene-constraint
+        # judge's model, as before judge-selector.
+        ",".join(dict.fromkeys(answered_by)) or settings.vlm_judge_model,
     )
 
     return {

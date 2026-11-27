@@ -237,6 +237,7 @@ def run_review_storybook_job(job_id: str, payload: dict | None = None, expected_
                         classroom_id=str(job["classroom_id"]), profile_id=str(job["profile_id"]),
                         input=Input(raw_text=job["input_text"], word_count=word_count(job["input_text"]), truncated=job["truncated"]),
                         style=Style(style_preset_id=chosen_id, prompt_fragment=STYLE_PRESETS[chosen_id]),
+                        judge_choice=job["judge_choice"],
                         moderation_context=ModerationContext(mode="teacher_review_v1", generation_epoch=epoch, **captured),
                     )
                 with conn.transaction():
@@ -476,7 +477,7 @@ def _finish(supabase, job_id: str, result: dict) -> None:
 
 def run_storybook_job(job_id: str) -> None:
     supabase = get_supabase_client()
-    row = supabase.table("jobs").select("input_text, style_preset_id, truncated, classroom_id, profile_id, moderation_mode").eq("id", job_id).single().execute()
+    row = supabase.table("jobs").select("input_text, style_preset_id, judge_choice, truncated, classroom_id, profile_id, moderation_mode").eq("id", job_id).single().execute()
     if row.data.get("moderation_mode") == "teacher_review_v1":
         return run_review_storybook_job(job_id)
     input_text = row.data["input_text"]
@@ -498,6 +499,7 @@ def run_storybook_job(job_id: str) -> None:
         profile_id=row.data["profile_id"],
         input=Input(raw_text=input_text, word_count=word_count(input_text), truncated=truncated),
         style=Style(style_preset_id=chosen_id, prompt_fragment=STYLE_PRESETS[chosen_id]),
+        judge_choice=row.data["judge_choice"],
     )
 
     try:

@@ -7,6 +7,10 @@ import base64
 import logging
 from unittest.mock import MagicMock, patch
 
+import httpx
+import openai
+import pytest
+
 from contracts.story_memory import (
     CURRENT_SCHEMA_VERSION,
     Attempt,
@@ -60,6 +64,11 @@ def _verdict(
         text_free=text_free,
         failure_reasons=reasons or [],
     )
+
+
+def _by_gemma(verdicts: list[SceneVerdict]) -> list[tuple[SceneVerdict, str]]:
+    """`judge_attempt`'s identity shape: each verdict with the model id that answered it."""
+    return [(v, "google/gemma-3-27b-it") for v in verdicts]
 
 
 
@@ -236,7 +245,7 @@ def test_composition_failure_does_not_erase_identity_results():
             "Exactly one character: Ana.",
         )
 
-    assert identity == [identity_verdict]
+    assert identity == [(identity_verdict, "google/gemma-3-27b-it")]
     assert composition is None
 
 
@@ -523,7 +532,8 @@ def _state_with_attempt(
 def _run(state: StoryMemory, verdicts: list[SceneVerdict] | None, composition: SceneConstraintVerdict | None = None) -> dict:
     if composition is None and verdicts is not None:
         composition = SceneConstraintVerdict(differences_observed="none", contradictions=[])
-    with patch("pipeline.consistency_check.judge_attempt", return_value=(verdicts, composition)):
+    identity = None if verdicts is None else _by_gemma(verdicts)
+    with patch("pipeline.consistency_check.judge_attempt", return_value=(identity, composition)):
         return consistency_check(state)
 
 
@@ -559,7 +569,7 @@ def test_scene_contradictions_persist_and_buy_one_retry():
     )
     with patch(
         "pipeline.consistency_check.judge_attempt",
-        return_value=([_verdict(True)], composition),
+        return_value=(_by_gemma([_verdict(True)]), composition),
     ):
         result = consistency_check(state)
 
@@ -589,7 +599,7 @@ def test_identity_failure_still_buys_retry_when_composition_is_unavailable():
         same_character=False,
         failure_reasons=[FailureReason.different_face],
     )
-    with patch("pipeline.consistency_check.judge_attempt", return_value=([failed], None)):
+    with patch("pipeline.consistency_check.judge_attempt", return_value=(_by_gemma([failed]), None)):
         result = consistency_check(state)
 
     assert result["scenes"][0].final_image_ref is None
@@ -767,10 +777,10 @@ def test_node_skips_a_char_id_absent_from_the_roster():
     )
 
     clean = SceneConstraintVerdict(differences_observed="none", contradictions=[])
-    with patch("pipeline.consistency_check.judge_attempt", return_value=([_verdict(True)], clean)) as helper:
+    with patch("pipeline.consistency_check.judge_attempt", return_value=(_by_gemma([_verdict(True)]), clean)) as helper:
         consistency_check(state)
 
-    helper.assert_called_once_with("job-1/s0-1.png", [("the dog", "job-1/ref-c0.png")], "p")
+    helper.assert_called_once_with("job-1/s0-1.png", [("the dog", "job-1/ref-c0.png")], "p", "gemma")
 
 
 def test_node_skips_a_character_carrying_no_reference():
@@ -781,10 +791,10 @@ def test_node_skips_a_character_carrying_no_reference():
     )
 
     clean = SceneConstraintVerdict(differences_observed="none", contradictions=[])
-    with patch("pipeline.consistency_check.judge_attempt", return_value=([_verdict(True)], clean)) as helper:
+    with patch("pipeline.consistency_check.judge_attempt", return_value=(_by_gemma([_verdict(True)]), clean)) as helper:
         consistency_check(state)
 
-    helper.assert_called_once_with("job-1/s0-1.png", [("the dog", "job-1/ref-c0.png")], "p")
+    helper.assert_called_once_with("job-1/s0-1.png", [("the dog", "job-1/ref-c0.png")], "p", "gemma")
 
 
 def test_node_judges_against_a_reference_whose_ref_verdict_failed():
@@ -797,10 +807,10 @@ def test_node_judges_against_a_reference_whose_ref_verdict_failed():
     )
 
     clean = SceneConstraintVerdict(differences_observed="none", contradictions=[])
-    with patch("pipeline.consistency_check.judge_attempt", return_value=([_verdict(True)], clean)) as helper:
+    with patch("pipeline.consistency_check.judge_attempt", return_value=(_by_gemma([_verdict(True)]), clean)) as helper:
         consistency_check(state)
 
-    helper.assert_called_once_with("job-1/s0-1.png", [("the dog", "job-1/ref-c0.png")], "p")
+    helper.assert_called_once_with("job-1/s0-1.png", [("the dog", "job-1/ref-c0.png")], "p", "gemma")
 
 
 def test_node_returns_only_scenes_and_never_touches_cost_or_state():
@@ -1403,3 +1413,175 @@ def test_a_structured_contradiction_renders_to_one_contract_string():
         "Bok-Bok: has a face, but the constraints require no face"
     ]
     assert attempt.passed is False
+
+
+# --- judge-selector 05: the node on real StoryMemory, `providers.OpenAI` patched ---
+
+_QWEN_URL = "http://qwen-judge.test:8000/v1"
+_OPENROUTER_URL = "https://openrouter.ai/api/v1"
+_GEMMA = "google/gemma-3-27b-it"
+
+
+@pytest.fixture
+def judge_settings(monkeypatch):
+    monkeypatch.setattr(settings, "vlm_judge_model", _GEMMA)
+    monkeypatch.setattr(settings, "judge_base_url", _OPENROUTER_URL)
+    monkeypatch.setattr(settings, "qwen_judge_base_url", _QWEN_URL)
+    monkeypatch.setattr(settings, "qwen_judge_api_key", "qwen-test-key")
+
+
+def _completion(parsed):
+    completion = MagicMock()
+    completion.choices = [MagicMock(message=MagicMock(parsed=parsed, content=""))]
+    return completion
+
+
+def _routes(qwen_parse, gemma_identity=None):
+    """A fake `OpenAI` that answers by `base_url`. Records `(base_url, model, schema)` per request.
+
+    `qwen_parse` answers every Qwen request; OpenRouter answers identity with `gemma_identity`
+    (raised when it is an exception) and the scene-constraint call with a clean verdict."""
+    sent: list[tuple[str, str, type]] = []
+
+    def openrouter(**kwargs):
+        if kwargs["response_format"] is SceneConstraintVerdict:
+            return _completion(SceneConstraintVerdict(differences_observed="none", contradictions=[]))
+        if isinstance(gemma_identity, Exception):
+            raise gemma_identity
+        return _completion(gemma_identity or _verdict(True, differences="gemma looked"))
+
+    def factory(**client_kwargs):
+        client = MagicMock()
+        answer = qwen_parse if client_kwargs["base_url"] == _QWEN_URL else openrouter
+
+        def parse(**kwargs):
+            sent.append((client_kwargs["base_url"], kwargs["model"], kwargs["response_format"]))
+            return answer(**kwargs)
+
+        client.chat.completions.parse.side_effect = parse
+        return client
+
+    return factory, sent
+
+
+def _qwen_answers(**kwargs):
+    return _completion(_verdict(True, differences="qwen looked"))
+
+
+def _check(state: StoryMemory, factory) -> dict:
+    with patch("providers.OpenAI", side_effect=factory), \
+         patch("pipeline.consistency_check.get_supabase_client", return_value=_supabase_returning_path_bytes()):
+        return consistency_check(state)
+
+
+def _qwen_state(choice: str = "qwen_finetuned") -> StoryMemory:
+    return _state_with_attempt().model_copy(update={"judge_choice": choice})
+
+
+def test_a_qwen_book_has_its_identity_answered_by_qwen_and_its_constraints_by_openrouter(judge_settings, caplog):
+    """AC-12, AC-15, OD-02: only the identity call follows the choice."""
+    factory, sent = _routes(_qwen_answers)
+    with caplog.at_level(logging.INFO, logger="pipeline.consistency_check"):
+        result = _check(_qwen_state(), factory)
+
+    attempt = result["scenes"][0].attempts[-1]
+    assert sent == [
+        (_QWEN_URL, "seed2_checkpoint140", SceneVerdict),
+        (_OPENROUTER_URL, _GEMMA, SceneConstraintVerdict),
+    ]
+    assert attempt.identity_checks["c0"].judge_model == "seed2_checkpoint140"
+    assert attempt.vlm_verdict.differences_observed == "Ana: qwen looked"
+    assert "judge_model=seed2_checkpoint140" in caplog.text
+
+
+def _connection_error(**kwargs):
+    raise openai.APIConnectionError(request=httpx.Request("POST", _QWEN_URL))
+
+
+def _timeout(**kwargs):
+    raise TimeoutError("seed2_checkpoint140 did not answer within 90s (call abandoned)")
+
+
+def _http_error(**kwargs):
+    request = httpx.Request("POST", _QWEN_URL)
+    raise openai.InternalServerError("boom", response=httpx.Response(500, request=request), body=None)
+
+
+def _unparseable(**kwargs):
+    return _completion(None)
+
+
+@pytest.mark.parametrize("qwen_parse", [_connection_error, _timeout, _http_error, _unparseable])
+def test_a_failed_qwen_call_is_answered_by_gemma_and_recorded(judge_settings, caplog, qwen_parse):
+    """AC-16, SH-04: one Qwen attempt, then Gemma answers that subject and the book continues."""
+    factory, sent = _routes(qwen_parse)
+    with caplog.at_level(logging.INFO, logger="pipeline.consistency_check"):
+        result = _check(_qwen_state(), factory)
+
+    attempt = result["scenes"][0].attempts[-1]
+    assert sent == [
+        (_QWEN_URL, "seed2_checkpoint140", SceneVerdict),
+        (_OPENROUTER_URL, _GEMMA, SceneVerdict),
+        (_OPENROUTER_URL, _GEMMA, SceneConstraintVerdict),
+    ]
+    assert attempt.identity_checks["c0"].judge_model == "google/gemma-3-27b-it"
+    assert attempt.vlm_verdict.differences_observed == "Ana: gemma looked"
+    assert attempt.passed is True
+    assert "judge_model=google/gemma-3-27b-it" in caplog.text
+
+
+def test_a_qwen_book_with_no_qwen_server_configured_is_answered_by_gemma(judge_settings, monkeypatch):
+    """§4 'server destroyed': an unset URL is a failed Qwen call, never a crash."""
+    monkeypatch.setattr(settings, "qwen_judge_base_url", None)
+    factory, sent = _routes(_qwen_answers)
+    result = _check(_qwen_state("qwen_base"), factory)
+
+    assert [route for route, _, _ in sent] == [_OPENROUTER_URL, _OPENROUTER_URL]
+    assert result["scenes"][0].attempts[-1].identity_checks["c0"].judge_model == "google/gemma-3-27b-it"
+
+
+def test_when_qwen_and_the_gemma_retry_both_fail_identity_is_unavailable(judge_settings):
+    """AC-17: today's outcome."""
+    factory, sent = _routes(_connection_error, gemma_identity=RuntimeError("openrouter 500"))
+    result = _check(_qwen_state(), factory)
+
+    attempt = result["scenes"][0].attempts[-1]
+    assert attempt.identity_checks is None
+    assert attempt.vlm_verdict is None
+    assert len(sent) == 3
+
+
+def test_a_gemma_book_gets_no_extra_identity_attempt(judge_settings):
+    """AC-14 at the node: a failed Gemma identity call is not retried, exactly as today."""
+    factory, sent = _routes(_qwen_answers, gemma_identity=RuntimeError("openrouter 500"))
+    result = _check(_state_with_attempt(), factory)
+
+    assert sent == [
+        (_OPENROUTER_URL, _GEMMA, SceneVerdict),
+        (_OPENROUTER_URL, _GEMMA, SceneConstraintVerdict),
+    ]
+    assert result["scenes"][0].attempts[-1].identity_checks is None
+
+
+def test_a_gemma_book_records_gemma_as_the_identity_judge(judge_settings):
+    factory, _ = _routes(_qwen_answers)
+    result = _check(_state_with_attempt(), factory)
+
+    assert result["scenes"][0].attempts[-1].identity_checks["c0"].judge_model == "google/gemma-3-27b-it"
+
+
+def test_a_later_attempt_resumed_from_a_checkpoint_keeps_the_books_choice(judge_settings):
+    """AC-18, SH-06: the choice rides on StoryMemory, so a checkpoint round-trip and a second
+    attempt still route to Qwen."""
+    state = _qwen_state("qwen_base")
+    scene = state.scenes[0]
+    second = scene.model_copy(update={"attempts": [*scene.attempts, Attempt(image_ref="job-1/s0-2.png", prompt="p")]})
+    resumed = StoryMemory.model_validate(
+        state.model_copy(update={"scenes": [second]}).model_dump(mode="json")
+    )
+
+    factory, sent = _routes(_qwen_answers)
+    result = _check(resumed, factory)
+
+    assert sent[0] == (_QWEN_URL, "Qwen/Qwen3.5-9B", SceneVerdict)
+    assert result["scenes"][0].attempts[-1].identity_checks["c0"].judge_model == "Qwen/Qwen3.5-9B"

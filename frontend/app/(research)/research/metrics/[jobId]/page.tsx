@@ -60,6 +60,12 @@ export default async function RunPage({ params }: { params: Promise<{ jobId: str
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-foreground/60">
           <span>{job.style_preset_id ?? "No style"}</span>
+          <span>{job.judge_label}</span>
+          {job.judge_fallback && (
+            <span>
+              Fell back to Standard: {job.judge_fallback.fell_back} of {job.judge_fallback.checks} identity checks
+            </span>
+          )}
           <span>{formattedDate}</span>
           <span className="break-all font-mono text-xs">{job.id}</span>
           {langfuseLinksOn() && <LangfuseButton url={job.langfuse_trace_url} />}

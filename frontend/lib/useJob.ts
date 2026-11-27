@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import type { JudgeChoice } from "@/lib/types/jobs";
 
 export type JobBucket =
   | "not-found"
@@ -23,6 +24,8 @@ export type JobRow = {
   input_text: string;
   title: string | null;
   style_preset_id: string | null;
+  // judge-selector SH-06: the picture checker the book was submitted with (migration 0034).
+  judge_choice?: JudgeChoice;
   approved_at: string | null;
   rejected_at: string | null;
   // `other_versions`: magic-pencil 09, a page with two kept attempts on a feature job (AC-13).
@@ -77,7 +80,7 @@ export function useJob(jobId: string): {
       // `profile_id` is who owns the book, not who is reading it: RLS lets a classmate read an
       // approved peer row whole, so every consumer of `input_text` has to be able to tell the
       // owner's own story text from someone else's (story-titles §5).
-      .select("id, status, moderation_mode, generation_epoch, current_stage, failure_reason, profile_id, input_text, title, style_preset_id, approved_at, rejected_at, pages, reveal")
+      .select("id, status, moderation_mode, generation_epoch, current_stage, failure_reason, profile_id, input_text, title, style_preset_id, judge_choice, approved_at, rejected_at, pages, reveal")
       .eq("id", jobId)
       .single();
     // PGRST116 is `.single()` matching zero rows — the book is genuinely absent, or RLS hid it
