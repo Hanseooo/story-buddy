@@ -405,6 +405,21 @@ describe("WriteStoryPage — Picture checker (judge-selector US-01)", () => {
     await waitFor(() => expect(pushMock).toHaveBeenCalled());
     expect(postedBody().judge_choice).toBe("gemma");
   });
+
+  it("shows and sends Standard for a restored Qwen draft while GET /judges is pending (AC-02, AC-05)", async () => {
+    sessionStorage.setItem(
+      "sb.prefill",
+      JSON.stringify({ text: "My story about a cat.", title: "Cat Book", judge_choice: "qwen_finetuned" }),
+    );
+    mockApi(() => new Promise(() => {}));
+    render(<WriteStoryPage />);
+    expect(screen.getByText("Checking…")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Picture checker" })).toHaveValue("gemma");
+    fireEvent.click(screen.getByText("Make my book"));
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalled());
+    expect(postedBody().judge_choice).toBe("gemma");
+  });
 });
 
 describe("WriteStoryPage title field", () => {

@@ -294,7 +294,7 @@ match AGENTS.md.)
    container `supabase_db_storybuddy-onboarding`). Covers AC-10.
 6. **Live go/no-go on the Vast instance** (AC-27). It must be done before any UI work is called done.
    One real pair per Qwen model must show a parsed `SceneVerdict`, with its latency recorded. The
-   owner judges the latency against the 60 s timeout and book length. No tolerance was agreed.
+   owner judges the latency against the Qwen timeout (`QWEN_JUDGE_TIMEOUT_SECONDS`, provisionally 90 s) and book length. No tolerance was agreed.
 7. **One E2E scenario in a real browser** (J1, plus J2 with the server stopped), driven with
    `playwright-cli`. The owner logs in.
 
