@@ -334,7 +334,8 @@ function postedBody(index = 0) {
   return JSON.parse(storybookCalls()[index][1].body);
 }
 
-describe("WriteStoryPage — Picture checker (judge-selector US-01)", () => {
+// Skipped while the picture checker is hidden for the defense demo (page.tsx). Un-skip when it is uncommented.
+describe.skip("WriteStoryPage — Picture checker (judge-selector US-01)", () => {
   beforeEach(() => {
     pushMock.mockClear();
     sessionStorage.clear();

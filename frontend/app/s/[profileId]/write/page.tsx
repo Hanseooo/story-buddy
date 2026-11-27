@@ -59,6 +59,7 @@ export default function WriteStoryPage() {
   const [stylePresetId, setStylePresetId] = useState<StylePresetId>("gouache");
   const [judgeChoice, setJudgeChoice] = useState<JudgeChoice>("gemma");
   const [qwenStatus, setQwenStatus] = useState<QwenStatus>("loading");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- picture checker hidden for the defense demo; used again when it is uncommented
   const [judgeLabels, setJudgeLabels] = useState<Partial<Record<JudgeChoice, string>>>({});
   const titleInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -129,6 +130,7 @@ export default function WriteStoryPage() {
   }, []);
   // AC-05: a Qwen choice, picked or restored from a draft, shows and sends Gemma unless Qwen is up.
   const effectiveJudge: JudgeChoice = qwenStatus === "available" ? judgeChoice : "gemma";
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- picture checker hidden for the defense demo; used again when it is uncommented
   const judgeHint = qwenStatus === "loading"
     ? "Checking…"
     : qwenStatus === "offline" ? "Qwen checker is offline. Standard is used." : "";
@@ -441,7 +443,9 @@ export default function WriteStoryPage() {
         </div>
       </motion.fieldset>
 
-      {/* Picture checker: judge-selector US-01. Native select (CLAUDE.md §7). */}
+      {/* Picture checker hidden for the defense demo (owner, 2026-11-28): Gemma judges every book.
+          Uncomment this block, and un-skip the "Picture checker" tests in page.test.tsx, to bring it back.
+      Picture checker: judge-selector US-01. Native select (CLAUDE.md §7).
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -468,6 +472,7 @@ export default function WriteStoryPage() {
           {judgeHint}
         </p>
       </motion.div>
+      */}
 
       {/* Floating Action Bar */}
       <motion.div 
